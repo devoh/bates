@@ -8,6 +8,7 @@ defmodule Conjure.Application do
 
   defp children do
     [
+      {Registry, keys: :unique, name: Conjure.ProcessRegistry},
       {DynamicSupervisor,
         strategy: :one_for_one,
         name: Conjure.ProcessSupervisor},

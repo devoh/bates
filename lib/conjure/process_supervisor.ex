@@ -16,7 +16,7 @@ defmodule Conjure.ProcessSupervisor do
     spec = ProcessExec.child_spec(process)
 
     case DynamicSupervisor.start_child(__MODULE__, spec) do
-      {:error, {:already_started, _pid}} -> ProcessExec.updated(process)
+      {:error, {:already_started, pid}} -> {:ok, pid}
       result -> result
     end
   end

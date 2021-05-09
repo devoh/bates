@@ -8,11 +8,8 @@ defmodule Conjure.ProcessExec do
 
   # public API
 
-  def start_link(%Process{} = process, opts \\ []) do
-    GenServer.start_link(__MODULE__, process, opts)
-  end
-
-  def updated(_process) do
+  def start_link(%Process{} = process) do
+    GenServer.start_link(__MODULE__, process, name: via_tuple(process))
   end
 
   # callbacks
@@ -51,10 +48,7 @@ defmodule Conjure.ProcessExec do
   end
 
   @impl GenServer
-  def handle_info(msg, state) do
-    Logger.info "MSG: #{inspect(msg)}"
-    {:noreply, state}
-  end
+  def handle_info(_msg, state), do: {:noreply, state}
 
   # helpers
 
@@ -68,5 +62,9 @@ defmodule Conjure.ProcessExec do
 
   defp parse_command(%Process{command: command, port: port}) do
     Regex.replace(@port_regex, command, port |> to_string()) |> to_charlist()
+  end
+
+  defp via_tuple(%Process{name: name}) do
+    {:via, Registry, {Conjure.ProcessRegistry, name}}
   end
 end
