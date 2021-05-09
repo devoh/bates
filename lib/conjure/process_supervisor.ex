@@ -1,7 +1,7 @@
 defmodule Conjure.ProcessSupervisor do
   use DynamicSupervisor
 
-  alias Conjure.ProcessPort
+  alias Conjure.ProcessExec
 
   def start_link(_) do
     DynamicSupervisor.start_link(__MODULE__, :ok, name: __MODULE__)
@@ -13,10 +13,10 @@ defmodule Conjure.ProcessSupervisor do
   end
 
   def add(process) do
-    spec = ProcessPort.child_spec(process)
+    spec = ProcessExec.child_spec(process)
 
     case DynamicSupervisor.start_child(__MODULE__, spec) do
-      {:error, {:already_started, _pid}} -> ProcessPort.updated(process)
+      {:error, {:already_started, _pid}} -> ProcessExec.updated(process)
       result -> result
     end
   end
