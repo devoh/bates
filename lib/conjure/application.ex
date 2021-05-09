@@ -8,6 +8,9 @@ defmodule Conjure.Application do
 
   defp children do
     [
+      {DynamicSupervisor,
+        strategy: :one_for_one,
+        name: Conjure.ProcessSupervisor},
       {Conjure.Daemon, name: Conjure.Daemon}
     ]
   end
