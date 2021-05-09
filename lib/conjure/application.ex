@@ -7,6 +7,8 @@ defmodule Conjure.Application do
   end
 
   defp children do
-    []
+    [
+      {Conjure.Daemon, name: Conjure.Daemon}
+    ]
   end
 end
