@@ -1,4 +1,5 @@
 %{
   "exec": {:hex, :exec, "1.0.1", "ca08cb6007e4066cfadac89f7b59b5f72f2d32c98b920c1828a9e471e2031e39", [:rebar3], [], "hexpm", "87c7ef2dea2bb503bb0eec8cb34776172999aecc6e12d90f7629796a7a3ccb1f"},
   "jason": {:hex, :jason, "1.2.2", "ba43e3f2709fd1aa1dce90aaabfd039d000469c05c56f0b8e31978e03fa39052", [:mix], [{:decimal, "~> 1.0 or ~> 2.0", [hex: :decimal, repo: "hexpm", optional: true]}], "hexpm", "18a228f5f0058ee183f29f9eae0805c6e59d61c3b006760668d8d18ff0d12179"},
+  "toml": {:hex, :toml, "0.6.2", "38f445df384a17e5d382befe30e3489112a48d3ba4c459e543f748c2f25dd4d1", [:mix], [], "hexpm", "d013e45126d74c0c26a38d31f5e8e9b83ea19fc752470feb9a86071ca5a672fa"},
 }
