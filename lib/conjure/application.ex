@@ -12,7 +12,7 @@ defmodule Conjure.Application do
       {DynamicSupervisor,
         strategy: :one_for_one,
         name: Conjure.ProcessSupervisor},
-      {Conjure.Daemon, name: Conjure.Daemon}
+      Conjure.Daemon
     ]
   end
 end

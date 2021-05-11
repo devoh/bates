@@ -5,8 +5,8 @@ defmodule Conjure.Daemon do
 
   # public API
 
-  def start_link(opts) do
-    GenServer.start_link(__MODULE__, @port, opts)
+  def start_link(_) do
+    GenServer.start_link(__MODULE__, @port, name: __MODULE__)
   end
 
   def next_port(server \\ __MODULE__) do
