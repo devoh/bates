@@ -4,7 +4,12 @@ defmodule Conjure.ProcessSupervisor do
   alias Conjure.ProcessExec
 
   def start_link(_) do
-    DynamicSupervisor.start_link(__MODULE__, :ok, name: __MODULE__)
+    case DynamicSupervisor.start_link(__MODULE__, :ok, name: __MODULE__) do
+      {:ok, _pid} = ok ->
+        Task.start(&load_processes/0)
+        ok
+      other -> other
+    end
   end
 
   @impl true
@@ -19,5 +24,9 @@ defmodule Conjure.ProcessSupervisor do
       {:error, {:already_started, pid}} -> {:ok, pid}
       result -> result
     end
+  end
+
+  defp load_processes do
+    Conjure.Config.processes() |> Enum.each(&add/1)
   end
 end

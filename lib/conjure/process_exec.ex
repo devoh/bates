@@ -5,6 +5,7 @@ defmodule Conjure.ProcessExec do
   alias Conjure.Process
 
   @port_regex ~r/\$PORT\b/
+  @timeout 60_000
 
   # public API
 
@@ -12,8 +13,12 @@ defmodule Conjure.ProcessExec do
     GenServer.start_link(__MODULE__, process, name: via_tuple(process))
   end
 
-  def stop(%Process{} = process) do
-    GenServer.stop(via_tuple(process))
+  def start(name) do
+    GenServer.call(via_tuple(name), :start, @timeout)
+  end
+
+  def stop(name) do
+    GenServer.stop(via_tuple(name))
   end
 
   # callbacks
@@ -28,19 +33,19 @@ defmodule Conjure.ProcessExec do
       exit_status: nil,
     }
 
-    {:ok, state, {:continue, :exec}}
+    {:ok, state}
   end
 
   @impl GenServer
-  def handle_continue(:exec, %{process: %{dir: dir} = process} = state) do
+  def handle_call(:start, _from, %{process: process} = state) do
     with command <- parse_command(process),
+         dir <- process.dir |> Path.expand() |> to_charlist,
          env <- [{'PORT', process.port |> to_charlist}],
          options <- [:stdout, :stderr, cd: dir |> to_charlist, env: env],
          {:ok, pid, _os_pid} <- :exec.run_link(command, options) do
-      {:noreply, %{state | pid: pid}}
+      {:reply, :ok, %{state | pid: pid}}
     else
-      {:not_found, command} -> {:stop, "command not found: #{command}", state}
-      reason -> {:stop, reason, state}
+      error -> {:stop, error, error, state}
     end
   end
 
@@ -68,7 +73,8 @@ defmodule Conjure.ProcessExec do
     Regex.replace(@port_regex, command, port |> to_string()) |> to_charlist()
   end
 
-  defp via_tuple(%Process{name: name}) when not is_nil(name) do
-    {:via, Registry, {Conjure.ProcessRegistry, name}}
-  end
+  defp via_tuple(%Process{name: name}) when not is_nil(name),
+    do: {:via, Registry, {Conjure.ProcessRegistry, name}}
+  defp via_tuple(name) when is_bitstring(name),
+    do: {:via, Registry, {Conjure.ProcessRegistry, name}}
 end
