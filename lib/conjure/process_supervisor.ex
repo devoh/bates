@@ -20,8 +20,4 @@ defmodule Conjure.ProcessSupervisor do
       result -> result
     end
   end
-
-  def remove(pid) do
-    DynamicSupervisor.terminate_child(__MODULE__, pid)
-  end
 end

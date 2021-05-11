@@ -1,5 +1,5 @@
 defmodule Conjure.ProcessExec do
-  use GenServer
+  use GenServer, restart: :transient
   require Logger
 
   alias Conjure.Process
@@ -10,6 +10,10 @@ defmodule Conjure.ProcessExec do
 
   def start_link(%Process{} = process) do
     GenServer.start_link(__MODULE__, process, name: via_tuple(process))
+  end
+
+  def stop(%Process{} = process) do
+    GenServer.stop(via_tuple(process))
   end
 
   # callbacks
@@ -64,7 +68,7 @@ defmodule Conjure.ProcessExec do
     Regex.replace(@port_regex, command, port |> to_string()) |> to_charlist()
   end
 
-  defp via_tuple(%Process{name: name}) do
+  defp via_tuple(%Process{name: name}) when not is_nil(name) do
     {:via, Registry, {Conjure.ProcessRegistry, name}}
   end
 end
