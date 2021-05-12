@@ -18,7 +18,7 @@ defmodule Conjure.ProcessExec do
   end
 
   def stop(name) do
-    GenServer.stop(via_tuple(name))
+    GenServer.call(via_tuple(name), :stop, @timeout)
   end
 
   def status(name) do
@@ -50,6 +50,14 @@ defmodule Conjure.ProcessExec do
       {:reply, :ok, %{state | pid: pid}}
     else
       error -> {:stop, error, error, state}
+    end
+  end
+
+  @impl GenServer
+  def handle_call(:stop, _from, %{pid: pid} = state) do
+    case :exec.stop(pid) do
+      :ok -> {:reply, :ok, %{state | pid: nil}}
+      error -> {:reply, error, state}
     end
   end
 
