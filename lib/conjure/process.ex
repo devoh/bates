@@ -48,7 +48,7 @@ defmodule Conjure.Process do
   end
 
   @impl GenServer
-  def handle_call(:up, _from, %{process: process} = state) do
+  def handle_call(:up, _from, %{process: process, pid: nil} = state) do
     with command <- parse_command(process),
          dir <- process.dir |> Path.expand() |> to_charlist,
          env <- [{'PORT', process.port |> to_charlist}],
@@ -59,8 +59,10 @@ defmodule Conjure.Process do
       error -> {:stop, error, error, state}
     end
   end
+  def handle_call(:up, _from, state), do: {:reply, :ok, state}
 
   @impl GenServer
+  def handle_call(:down, _from, %{pid: nil} = state), do: {:reply, :ok, state}
   def handle_call(:down, _from, %{pid: pid} = state) do
     case :exec.stop(pid) do
       :ok -> {:reply, :ok, %{state | pid: nil}}
@@ -104,7 +106,7 @@ defmodule Conjure.Process do
 
   defp status_name(%{pid: pid}) when not is_nil(pid), do: "up"
   defp status_name(%{exit_status: exit}) when exit in [0, nil], do: "down"
-  defp status_name(%{exit_status: exit}), do: "crashed"
+  defp status_name(_), do: "crashed"
 
   defp via_tuple(%__MODULE__{name: name}) when not is_nil(name),
     do: {:via, Registry, {Conjure.ProcessRegistry, name}}
