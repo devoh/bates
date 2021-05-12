@@ -69,8 +69,8 @@ defmodule Conjure.Process do
   end
 
   @impl GenServer
-  def handle_call(:status, _from, %{pid: pid} = state) do
-    {:reply, pid && "up" || "down", state}
+  def handle_call(:status, _from, state) do
+    {:reply, status_name(state), state}
   end
 
   @impl GenServer
@@ -78,6 +78,11 @@ defmodule Conjure.Process do
       when stream in [:stdout, :stderr] do
     log process, String.trim(data)
     {:noreply, state}
+  end
+
+  @impl GenServer
+  def handle_info({:EXIT, _pid, {:exit_status, exit_status}}, state) do
+    {:noreply, %{state | exit_status: exit_status, pid: nil}}
   end
 
   @impl GenServer
@@ -96,6 +101,10 @@ defmodule Conjure.Process do
   defp parse_command(%__MODULE__{command: command, port: port}) do
     Regex.replace(@port_regex, command, port |> to_string()) |> to_charlist()
   end
+
+  defp status_name(%{pid: pid}) when not is_nil(pid), do: "up"
+  defp status_name(%{exit_status: exit}) when exit in [0, nil], do: "down"
+  defp status_name(%{exit_status: exit}), do: "crashed"
 
   defp via_tuple(%__MODULE__{name: name}) when not is_nil(name),
     do: {:via, Registry, {Conjure.ProcessRegistry, name}}
