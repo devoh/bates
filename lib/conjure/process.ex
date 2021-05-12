@@ -3,13 +3,11 @@ defmodule Conjure.Process do
   require Logger
 
   @enforce_keys [:name, :command, :dir]
-  defstruct [
-    name: "",
-    port: 0,
-    command: "",
-    dir: "",
-    env: %{}
-  ]
+  defstruct name: "",
+            port: 0,
+            command: "",
+            dir: "",
+            env: %{}
 
   @port_regex ~r/\$PORT\b/
   @timeout 60_000
@@ -41,7 +39,7 @@ defmodule Conjure.Process do
     state = %{
       process: assign_port(process),
       pid: nil,
-      exit_status: nil,
+      exit_status: nil
     }
 
     {:ok, state}
@@ -59,10 +57,12 @@ defmodule Conjure.Process do
       error -> {:stop, error, error, state}
     end
   end
+
   def handle_call(:up, _from, state), do: {:reply, :ok, state}
 
   @impl GenServer
   def handle_call(:down, _from, %{pid: nil} = state), do: {:reply, :ok, state}
+
   def handle_call(:down, _from, %{pid: pid} = state) do
     case :exec.stop(pid) do
       :ok -> {:reply, :ok, %{state | pid: nil}}
@@ -78,7 +78,7 @@ defmodule Conjure.Process do
   @impl GenServer
   def handle_info({stream, _os_pid, data}, %{process: process} = state)
       when stream in [:stdout, :stderr] do
-    log process, String.trim(data)
+    log(process, String.trim(data))
     {:noreply, state}
   end
 
@@ -94,6 +94,7 @@ defmodule Conjure.Process do
 
   defp assign_port(%__MODULE__{port: 0} = process),
     do: %{process | port: Conjure.Daemon.next_port()}
+
   defp assign_port(process), do: process
 
   defp log(%__MODULE__{name: name}, message) do
@@ -110,6 +111,7 @@ defmodule Conjure.Process do
 
   defp via_tuple(%__MODULE__{name: name}) when not is_nil(name),
     do: {:via, Registry, {Conjure.ProcessRegistry, name}}
+
   defp via_tuple(name) when is_bitstring(name),
     do: {:via, Registry, {Conjure.ProcessRegistry, name}}
 end

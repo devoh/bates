@@ -24,7 +24,7 @@ defmodule Conjure.MixProject do
     [
       {:exec, "~> 1.0"},
       {:jason, "~> 1.2"},
-      {:toml, "~> 0.6"},
+      {:toml, "~> 0.6"}
     ]
   end
 end

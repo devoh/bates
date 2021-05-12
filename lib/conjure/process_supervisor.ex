@@ -10,14 +10,16 @@ defmodule Conjure.ProcessSupervisor do
       {:ok, _pid} = ok ->
         Task.start(&load_processes/0)
         ok
-      other -> other
+
+      other ->
+        other
     end
   end
 
   def status do
     for name <- process_names(),
-      into: %{},
-      do: {name, Process.status(name)}
+        into: %{},
+        do: {name, Process.status(name)}
   end
 
   # callbacks

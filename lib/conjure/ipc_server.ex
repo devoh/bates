@@ -1,7 +1,7 @@
 defmodule Conjure.IPCServer do
   use GenServer
 
-  @path Path.join(System.tmp_dir!, "conjure")
+  @path Path.join(System.tmp_dir!(), "conjure")
 
   # public API
 
@@ -17,7 +17,7 @@ defmodule Conjure.IPCServer do
 
     state = %{
       listen_socket: nil,
-      socket: nil,
+      socket: nil
     }
 
     opts = [:binary, ifaddr: {:local, path}, active: true, packet: :line]
@@ -25,6 +25,7 @@ defmodule Conjure.IPCServer do
     case :gen_tcp.listen(0, opts) do
       {:ok, listen_socket} ->
         {:ok, %{state | listen_socket: listen_socket}, {:continue, :accept}}
+
       {:error, reason} ->
         {:stop, reason}
     end
@@ -84,7 +85,7 @@ defmodule Conjure.IPCServer do
       %{operation: "status"} ->
         processes =
           for {name, status} <- Conjure.ProcessSupervisor.status(),
-            do: %{name: name, status: status}
+              do: %{name: name, status: status}
 
         {:ok, %{status: "success", processes: processes}}
     end
