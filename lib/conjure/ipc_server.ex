@@ -39,7 +39,7 @@ defmodule Conjure.IPCServer do
   @impl GenServer
   def handle_info({:tcp, _socket, packet}, %{socket: socket} = state) do
     with {:ok, data} <- Jason.decode(packet, keys: :atoms!),
-         {:ok, response} = dispatch(data) do
+         {:ok, response} <- dispatch(data) do
       :gen_tcp.send(socket, packet(response))
     else
       {:error, response} ->
