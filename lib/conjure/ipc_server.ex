@@ -68,14 +68,14 @@ defmodule Conjure.IPCServer do
   def dispatch(data) do
     case data do
       %{operation: "up", name: name} ->
-        Conjure.ProcessExec.up(name)
+        Conjure.Process.up(name)
         |> case do
           :ok -> {:ok, %{status: "success", name: name}}
           _ -> {:error, %{status: "failure", name: name}}
         end
 
       %{operation: "down", name: name} ->
-        Conjure.ProcessExec.down(name)
+        Conjure.Process.down(name)
         |> case do
           :ok -> {:ok, %{status: "success", name: name}}
           _ -> {:error, %{status: "failure", name: name}}

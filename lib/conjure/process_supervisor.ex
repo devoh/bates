@@ -1,7 +1,7 @@
 defmodule Conjure.ProcessSupervisor do
   use DynamicSupervisor
 
-  alias Conjure.ProcessExec
+  alias Conjure.Process
 
   # public API
 
@@ -17,7 +17,7 @@ defmodule Conjure.ProcessSupervisor do
   def status do
     for name <- process_names(),
       into: %{},
-      do: {name, ProcessExec.status(name)}
+      do: {name, Process.status(name)}
   end
 
   # callbacks
@@ -38,7 +38,7 @@ defmodule Conjure.ProcessSupervisor do
   end
 
   defp start_child(process) do
-    spec = ProcessExec.child_spec(process)
+    spec = Process.child_spec(process)
 
     case DynamicSupervisor.start_child(__MODULE__, spec) do
       {:error, {:already_started, pid}} -> {:ok, pid}
