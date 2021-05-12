@@ -29,20 +29,20 @@ defmodule Conjure.ProcessSupervisor do
 
   # helpers
 
-  defp add(process) do
+  defp load_processes do
+    Conjure.Config.processes() |> Enum.each(&start_child/1)
+  end
+
+  defp process_names do
+    Registry.select(Conjure.ProcessRegistry, [{{:"$1", :_, :_}, [], [:"$1"]}])
+  end
+
+  defp start_child(process) do
     spec = ProcessExec.child_spec(process)
 
     case DynamicSupervisor.start_child(__MODULE__, spec) do
       {:error, {:already_started, pid}} -> {:ok, pid}
       result -> result
     end
-  end
-
-  defp load_processes do
-    Conjure.Config.processes() |> Enum.each(&add/1)
-  end
-
-  defp process_names do
-    Registry.select(Conjure.ProcessRegistry, [{{:"$1", :_, :_}, [], [:"$1"]}])
   end
 end
