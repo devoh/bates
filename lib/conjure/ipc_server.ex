@@ -39,11 +39,11 @@ defmodule Conjure.IPCServer do
   @impl GenServer
   def handle_info({:tcp, _socket, packet}, %{socket: socket} = state) do
     with {:ok, data} <- Jason.decode(packet, keys: :atoms!),
-         {:ok, name} = dispatch(data) do
-      :gen_tcp.send(socket, packet(%{status: "success", name: name}))
+         {:ok, response} = dispatch(data) do
+      :gen_tcp.send(socket, packet(response))
     else
-      {:error, _error} ->
-        :gen_tcp.send(socket, packet(%{status: "failure"}))
+      {:error, response} ->
+        :gen_tcp.send(socket, packet(response))
     end
 
     {:noreply, state}
@@ -67,22 +67,26 @@ defmodule Conjure.IPCServer do
 
   def dispatch(data) do
     case data do
-      %{operation: "add", process: process} ->
-        struct(Conjure.Process, process)
-        |> Conjure.ProcessSupervisor.add()
+      %{operation: "start", name: name} ->
+        Conjure.ProcessExec.start(name)
         |> case do
-          {:ok, _pid} -> {:ok, process.name}
-          _ -> :error
+          :ok -> {:ok, %{status: "success", name: name}}
+          _ -> {:error, %{status: "failure", name: name}}
         end
 
-      %{operation: "remove", process: process} ->
-        struct(Conjure.Process, process)
-        |> Conjure.ProcessExec.stop()
-        |> IO.inspect(label: "stop")
+      %{operation: "stop", name: name} ->
+        Conjure.ProcessExec.stop(name)
         |> case do
-          :ok -> {:ok, process.name}
-          _ -> :error
+          :ok -> {:ok, %{status: "success", name: name}}
+          _ -> {:error, %{status: "failure", name: name}}
         end
+
+      %{operation: "status"} ->
+        processes =
+          for {name, status} <- Conjure.ProcessSupervisor.status(),
+            do: %{name: name, status: status}
+
+        {:ok, %{status: "success", processes: processes}}
     end
   end
 
