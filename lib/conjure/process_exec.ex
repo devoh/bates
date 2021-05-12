@@ -13,12 +13,12 @@ defmodule Conjure.ProcessExec do
     GenServer.start_link(__MODULE__, process, name: via_tuple(process))
   end
 
-  def start(name) do
-    GenServer.call(via_tuple(name), :start, @timeout)
+  def up(name) do
+    GenServer.call(via_tuple(name), :up, @timeout)
   end
 
-  def stop(name) do
-    GenServer.call(via_tuple(name), :stop, @timeout)
+  def down(name) do
+    GenServer.call(via_tuple(name), :down, @timeout)
   end
 
   def status(name) do
@@ -41,7 +41,7 @@ defmodule Conjure.ProcessExec do
   end
 
   @impl GenServer
-  def handle_call(:start, _from, %{process: process} = state) do
+  def handle_call(:up, _from, %{process: process} = state) do
     with command <- parse_command(process),
          dir <- process.dir |> Path.expand() |> to_charlist,
          env <- [{'PORT', process.port |> to_charlist}],
@@ -54,7 +54,7 @@ defmodule Conjure.ProcessExec do
   end
 
   @impl GenServer
-  def handle_call(:stop, _from, %{pid: pid} = state) do
+  def handle_call(:down, _from, %{pid: pid} = state) do
     case :exec.stop(pid) do
       :ok -> {:reply, :ok, %{state | pid: nil}}
       error -> {:reply, error, state}
@@ -63,7 +63,7 @@ defmodule Conjure.ProcessExec do
 
   @impl GenServer
   def handle_call(:status, _from, %{pid: pid} = state) do
-    {:reply, pid && "running" || "stopped", state}
+    {:reply, pid && "up" || "down", state}
   end
 
   @impl GenServer
