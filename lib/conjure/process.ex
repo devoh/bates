@@ -26,6 +26,10 @@ defmodule Conjure.Process do
     GenServer.call(via_tuple(name), :down, @timeout)
   end
 
+  def port(name) do
+    GenServer.call(via_tuple(name), :port)
+  end
+
   def status(name) do
     GenServer.call(via_tuple(name), :status)
   end
@@ -34,7 +38,7 @@ defmodule Conjure.Process do
 
   @impl GenServer
   def init(%__MODULE__{} = process) do
-    Elixir.Process.flag(:trap_exit, true)
+    Process.flag(:trap_exit, true)
 
     state = %{
       process: assign_port(process),
@@ -48,26 +52,33 @@ defmodule Conjure.Process do
   @impl GenServer
   def handle_call(:up, _from, %{process: process, pid: nil} = state) do
     with command <- parse_command(process),
-         dir <- process.dir |> Path.expand() |> to_charlist,
-         env <- [{'PORT', process.port |> to_charlist}],
-         options <- [:stdout, :stderr, cd: dir |> to_charlist, env: env],
-         {:ok, pid, _os_pid} <- :exec.run_link(command, options) do
+         dir <- process.dir |> Path.expand() |> to_charlist(),
+         env <- env_with_port(process),
+         opts <- [:stdout, :stderr, cd: to_charlist(dir), env: env],
+         {:ok, pid, _os_pid} <- :exec.run_link(command, opts) do
       {:reply, :ok, %{state | pid: pid}}
     else
       error -> {:stop, error, error, state}
     end
   end
 
+  @impl GenServer
   def handle_call(:up, _from, state), do: {:reply, :ok, state}
 
   @impl GenServer
   def handle_call(:down, _from, %{pid: nil} = state), do: {:reply, :ok, state}
 
+  @impl GenServer
   def handle_call(:down, _from, %{pid: pid} = state) do
     case :exec.stop(pid) do
       :ok -> {:reply, :ok, %{state | pid: nil}}
       error -> {:reply, error, state}
     end
+  end
+
+  @impl GenServer
+  def handle_call(:port, _from, %{process: %{port: port}} = state) do
+    {:reply, {:ok, port}, state}
   end
 
   @impl GenServer
@@ -87,15 +98,18 @@ defmodule Conjure.Process do
     {:noreply, %{state | exit_status: exit_status, pid: nil}}
   end
 
-  @impl GenServer
-  def handle_info(_msg, state), do: {:noreply, state}
-
   # helpers
 
   defp assign_port(%__MODULE__{port: 0} = process),
     do: %{process | port: Conjure.PortNumber.next()}
 
   defp assign_port(process), do: process
+
+  defp env_with_port(%{env: env, port: port}) do
+    for {key, value} <- Map.put(env, "PORT", port),
+        into: [],
+        do: {to_charlist(key), to_charlist(value)}
+  end
 
   defp log(%__MODULE__{name: name}, message) do
     Logger.info("[#{name}] #{message}")
