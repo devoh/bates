@@ -9,7 +9,7 @@ defmodule Conjure.Application do
   defp children do
     [
       {Registry, keys: :unique, name: Conjure.ProcessRegistry},
-      Conjure.Daemon,
+      {Conjure.Daemon, name: Conjure.Daemon},
       Conjure.IPCServer,
       Conjure.ProcessSupervisor
     ]

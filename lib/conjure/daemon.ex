@@ -1,27 +1,13 @@
 defmodule Conjure.Daemon do
-  use GenServer
+  use Agent
 
   @port 4200
 
-  # public API
-
-  def start_link(_) do
-    GenServer.start_link(__MODULE__, @port, name: __MODULE__)
+  def start_link(opts) do
+    Agent.start_link(fn -> @port end, opts)
   end
 
-  def next_port(server \\ __MODULE__) do
-    GenServer.call(server, :next_port)
-  end
-
-  # callbacks
-
-  @impl GenServer
-  def init(port) do
-    {:ok, %{port: port}}
-  end
-
-  @impl GenServer
-  def handle_call(:next_port, _from, %{port: port} = state) do
-    {:reply, port, %{state | port: port + 1}}
+  def next_port(agent \\ __MODULE__) do
+    Agent.get_and_update(agent, fn state -> { state, state + 1 } end)
   end
 end
