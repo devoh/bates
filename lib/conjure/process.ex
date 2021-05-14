@@ -93,7 +93,7 @@ defmodule Conjure.Process do
   # helpers
 
   defp assign_port(%__MODULE__{port: 0} = process),
-    do: %{process | port: Conjure.Daemon.next_port()}
+    do: %{process | port: Conjure.PortNumber.next()}
 
   defp assign_port(process), do: process
 
