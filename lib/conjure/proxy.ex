@@ -3,7 +3,7 @@ defmodule Conjure.Proxy do
 
   alias Conjure.{HTTP, Request}
 
-  @port 8080
+  @port 42001
   @timeout 500
 
   @host "Host"

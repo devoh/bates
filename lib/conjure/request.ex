@@ -9,6 +9,7 @@ defmodule Conjure.Request do
             headers: %{},
             body: ""
 
+  @tld ".test"
   @content_length :"Content-Length"
 
   # public API
@@ -22,7 +23,7 @@ defmodule Conjure.Request do
   @impl GenServer
   def init({host, to_socket, %__MODULE__{} = request}) do
     state = %{
-      host: host,
+      name: process_name_from_host(host),
       request: request,
       length: nil,
       from_socket: nil,
@@ -35,11 +36,11 @@ defmodule Conjure.Request do
   @impl GenServer
   def handle_continue(
         :forward,
-        %{host: host, request: request, to_socket: to_socket} = state
+        %{name: name, request: request, to_socket: to_socket} = state
       ) do
-    with {:ok, port} = Process.port(host),
-         opts <- [:binary, active: false, packet: :raw],
-         {:ok, from_socket} <- :gen_tcp.connect('localhost', port, opts) do
+    with {:ok, port} = Process.port(name),
+         opts <- [:binary, active: false],
+         {:ok, from_socket} <- :gen_tcp.connect('127.0.0.1', port, opts) do
       :gen_tcp.send(from_socket, HTTP.request(request))
 
       {:noreply,
@@ -121,6 +122,10 @@ defmodule Conjure.Request do
       {:ok, :http_eoh, body} ->
         {:ok, headers, body}
     end
+  end
+
+  defp process_name_from_host(host) do
+    String.trim_trailing(host, @tld)
   end
 
   defp send_packet(packet, state) do
