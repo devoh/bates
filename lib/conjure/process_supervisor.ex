@@ -16,10 +16,14 @@ defmodule Conjure.ProcessSupervisor do
     end
   end
 
+  def hostnames do
+    process_names() |> Enum.map(&hostname/1)
+  end
+
   def status do
     for name <- process_names(),
         into: %{},
-        do: {name, Process.status(name)}
+        do: {hostname(name), Process.status(name)}
   end
 
   # callbacks
@@ -31,12 +35,10 @@ defmodule Conjure.ProcessSupervisor do
 
   # helpers
 
+  defp hostname(name), do: name <> ".test"
+
   defp load_processes do
     Conjure.Config.processes() |> Enum.each(&start_child/1)
-  end
-
-  defp process_names do
-    Registry.select(Conjure.ProcessRegistry, [{{:"$1", :_, :_}, [], [:"$1"]}])
   end
 
   defp start_child(process) do
@@ -46,5 +48,9 @@ defmodule Conjure.ProcessSupervisor do
       {:error, {:already_started, pid}} -> {:ok, pid}
       result -> result
     end
+  end
+
+  def process_names do
+    Registry.select(Conjure.ProcessRegistry, [{{:"$1", :_, :_}, [], [:"$1"]}])
   end
 end

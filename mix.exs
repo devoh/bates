@@ -22,6 +22,7 @@ defmodule Conjure.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
+      {:dns, "~> 2.2"},
       {:exec, "~> 1.0"},
       {:jason, "~> 1.2"},
       {:toml, "~> 0.6"}
