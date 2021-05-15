@@ -59,7 +59,7 @@ defmodule Conjure.Proxy do
         :forward,
         %{host: host, request: request, socket: socket} = state
       ) do
-    {:ok, _pid} = Request.start_link({host, socket, request})
+    {:ok, _pid} = Request.start({host, socket, request})
     {:noreply, %{state | host: nil, request: nil}, {:continue, :accept}}
   end
 
