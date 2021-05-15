@@ -43,7 +43,9 @@ defmodule Conjure.DNSServer do
         case query.type do
           :a ->
             if known?(query.domain), do: {127, 0, 0, 1}
-          _ -> nil
+
+          _ ->
+            nil
         end
 
       if result do

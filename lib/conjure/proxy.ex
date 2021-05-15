@@ -45,7 +45,8 @@ defmodule Conjure.Proxy do
     {:ok, socket} = :gen_tcp.accept(listen_socket)
     :ok = :inet.setopts(socket, packet: :http_bin)
 
-    {:noreply, %{state | socket: socket, request: %Request{}}, {:continue, :receive}}
+    {:noreply, %{state | socket: socket, request: %Request{}},
+     {:continue, :receive}}
   end
 
   @impl GenServer
@@ -77,7 +78,8 @@ defmodule Conjure.Proxy do
         {:http, _socket, {:http_header, _, _, @host = header, host}},
         state
       ) do
-    {:noreply, %{state | host: host} |> put_header(header, host), {:continue, :receive}}
+    {:noreply, %{state | host: host} |> put_header(header, host),
+     {:continue, :receive}}
   end
 
   @impl GenServer
@@ -95,7 +97,8 @@ defmodule Conjure.Proxy do
         {:http, _socket, {:http_header, _, _, @expect, expect}},
         state
       ) do
-    {:noreply, %{state | continue: expect == "100-continue"}, {:continue, :receive}}
+    {:noreply, %{state | continue: expect == "100-continue"},
+     {:continue, :receive}}
   end
 
   @impl GenServer
@@ -118,7 +121,8 @@ defmodule Conjure.Proxy do
   def handle_info({:http, socket, :http_eoh}, %{continue: false} = state) do
     {:ok, request} = read_request_body(socket, state)
 
-    {:noreply, %{state | content_length: nil, request: request}, {:continue, :forward}}
+    {:noreply, %{state | content_length: nil, request: request},
+     {:continue, :forward}}
   end
 
   @impl GenServer
@@ -126,7 +130,8 @@ defmodule Conjure.Proxy do
     :ok = :gen_tcp.send(socket, HTTP.head(100))
     {:ok, request} = read_request_body(socket, state)
 
-    {:noreply, %{state | content_length: nil, continue: false, request: request},
+    {:noreply,
+     %{state | content_length: nil, continue: false, request: request},
      {:continue, :forward}}
   end
 

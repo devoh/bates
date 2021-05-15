@@ -27,7 +27,7 @@ defmodule Conjure.Request do
       request: request,
       length: nil,
       from_socket: nil,
-      to_socket: to_socket,
+      to_socket: to_socket
     }
 
     {:ok, state, {:continue, :forward}}
@@ -43,8 +43,7 @@ defmodule Conjure.Request do
          {:ok, from_socket} <- :gen_tcp.connect('127.0.0.1', port, opts) do
       :gen_tcp.send(from_socket, HTTP.request(request))
 
-      {:noreply,
-       %{state | from_socket: from_socket, to_socket: to_socket},
+      {:noreply, %{state | from_socket: from_socket, to_socket: to_socket},
        {:continue, :receive}}
     else
       # ignore connection errors when server is down
@@ -69,7 +68,10 @@ defmodule Conjure.Request do
   end
 
   @impl GenServer
-  def handle_info({:tcp, _socket, packet}, %{length: nil, to_socket: to_socket} = state) do
+  def handle_info(
+        {:tcp, _socket, packet},
+        %{length: nil, to_socket: to_socket} = state
+      ) do
     case decode_response(packet) do
       {:ok, headers, body} ->
         length = headers |> Keyword.get(@content_length) |> String.to_integer()
@@ -133,7 +135,11 @@ defmodule Conjure.Request do
     send_packet(packet, size, state)
   end
 
-  defp send_packet(packet, size, %{length: length, to_socket: to_socket} = state) do
+  defp send_packet(
+         packet,
+         size,
+         %{length: length, to_socket: to_socket} = state
+       ) do
     :ok = :gen_tcp.send(to_socket, packet)
 
     if size < length do
