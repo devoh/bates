@@ -10,7 +10,9 @@ defmodule Conjure.Request do
             body: ""
 
   @tld ".test"
-  @content_length :"Content-Length"
+
+  @content_length "Content-Length"
+  @transfer_encoding "Transfer-Encoding"
 
   # public API
 
@@ -25,6 +27,7 @@ defmodule Conjure.Request do
     state = %{
       name: process_name_from_host(host),
       request: request,
+      encoding: nil,
       length: nil,
       from_socket: nil,
       to_socket: to_socket
@@ -39,7 +42,7 @@ defmodule Conjure.Request do
         %{name: name, request: request, to_socket: to_socket} = state
       ) do
     with {:ok, port} = Process.port(name),
-         opts <- [:binary, active: false],
+         opts <- [:binary, active: false, packet: :http_bin],
          {:ok, from_socket} <- :gen_tcp.connect('127.0.0.1', port, opts) do
       :gen_tcp.send(from_socket, HTTP.request(request))
 
@@ -69,23 +72,83 @@ defmodule Conjure.Request do
 
   @impl GenServer
   def handle_info(
-        {:tcp, _socket, packet},
-        %{length: nil, to_socket: to_socket} = state
+        {:http, _, {:http_response, version, code, text}},
+        %{to_socket: to_socket} = state
       ) do
-    case decode_response(packet) do
-      {:ok, headers, body} ->
-        length = headers |> Keyword.get(@content_length) |> String.to_integer()
-        send_packet(packet, String.length(body), %{state | length: length})
+    version = version |> Tuple.to_list() |> Enum.join(".")
 
-      {:error, error} ->
-        :ok = :gen_tcp.shutdown(to_socket, :write)
-        {:stop, {:shutdown, error}, state}
+    :ok = :gen_tcp.send(to_socket, "HTTP/#{version} #{code} #{text}\r\n")
+
+    {:noreply, state, {:continue, :receive}}
+  end
+
+  def handle_info(
+        {:http, _, {:http_header, _, _, header, value}},
+        %{to_socket: to_socket} = state
+      ) do
+    :ok = :gen_tcp.send(to_socket, "#{header}: #{value}\r\n")
+
+    state =
+      case header do
+        @content_length -> %{state | length: String.to_integer(value)}
+        @transfer_encoding -> %{state | encoding: value}
+        _ -> state
+      end
+
+    {:noreply, state, {:continue, :receive}}
+  end
+
+  def handle_info(
+        {:http, socket, :http_eoh},
+        %{encoding: encoding, to_socket: to_socket} = state
+      ) do
+    :ok = :gen_tcp.send(to_socket, "\r\n")
+
+    case encoding do
+      "chunked" -> :inet.setopts(socket, packet: :line)
+      _ -> :inet.setopts(socket, packet: :raw)
+    end
+
+    {:noreply, state, {:continue, :receive}}
+  end
+
+  @impl GenServer
+  def handle_info(
+        {:tcp, socket, packet},
+        %{encoding: "chunked", to_socket: to_socket} = state
+      ) do
+    :ok = :gen_tcp.send(to_socket, packet)
+
+    length = packet |> String.trim_trailing("\r\n") |> String.to_integer(16)
+
+    :inet.setopts(socket, packet: :raw)
+    {:ok, packet} = :gen_tcp.recv(socket, length + 2)
+    :ok = :gen_tcp.send(to_socket, packet)
+
+    case length do
+      0 ->
+        {:stop, {:shutdown, :normal}, state}
+
+      _ ->
+        :inet.setopts(socket, packet: :line)
+        {:noreply, state, {:continue, :receive}}
     end
   end
 
   @impl GenServer
-  def handle_info({:tcp, _socket, packet}, state) do
-    send_packet(packet, state)
+  def handle_info(
+        {:tcp, _, packet},
+        %{length: length, to_socket: to_socket} = state
+      ) do
+    :ok = :gen_tcp.send(to_socket, packet)
+
+    size = String.length(packet)
+
+    if size < length do
+      {:noreply, %{state | length: length - size}, {:continue, :receive}}
+    else
+      {:stop, {:shutdown, :normal}, state}
+    end
   end
 
   @impl GenServer
@@ -106,47 +169,7 @@ defmodule Conjure.Request do
 
   # helpers
 
-  defp decode_response(packet) do
-    case :erlang.decode_packet(:http_bin, packet, []) do
-      {:ok, {:http_response, _version, _status, _message}, rest} ->
-        decode_headers(rest)
-
-      {:error, error} ->
-        {:error, error}
-    end
-  end
-
-  defp decode_headers(packet, headers \\ []) do
-    case :erlang.decode_packet(:httph_bin, packet, []) do
-      {:ok, {:http_header, _len, field, _res, value}, rest} ->
-        decode_headers(rest, [{field, value} | headers])
-
-      {:ok, :http_eoh, body} ->
-        {:ok, headers, body}
-    end
-  end
-
   defp process_name_from_host(host) do
     String.trim_trailing(host, @tld)
-  end
-
-  defp send_packet(packet, state) do
-    size = String.length(packet)
-    send_packet(packet, size, state)
-  end
-
-  defp send_packet(
-         packet,
-         size,
-         %{length: length, to_socket: to_socket} = state
-       ) do
-    :ok = :gen_tcp.send(to_socket, packet)
-
-    if size < length do
-      {:noreply, %{state | length: length - size}, {:continue, :receive}}
-    else
-      :ok = :gen_tcp.shutdown(to_socket, :write)
-      {:stop, {:shutdown, :normal}, state}
-    end
   end
 end

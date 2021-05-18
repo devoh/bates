@@ -137,7 +137,6 @@ defmodule Conjure.Proxy do
 
   @impl GenServer
   def handle_info({:tcp_closed, _socket}, state) do
-    IO.puts("CLOSED")
     {:noreply, state, {:continue, :accept}}
   end
 
