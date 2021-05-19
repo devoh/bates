@@ -72,21 +72,19 @@ defmodule Conjure.Request do
 
   @impl GenServer
   def handle_info(
-        {:http, _, {:http_response, version, code, text}},
+        {:http, _, {:http_response, _, _, _} = data},
         %{to_socket: to_socket} = state
       ) do
-    version = version |> Tuple.to_list() |> Enum.join(".")
-
-    :ok = :gen_tcp.send(to_socket, "HTTP/#{version} #{code} #{text}\r\n")
+    :ok = :gen_tcp.send(to_socket, encode(data))
 
     {:noreply, state, {:continue, :receive}}
   end
 
   def handle_info(
-        {:http, _, {:http_header, _, _, header, value}},
+        {:http, _, {:http_header, _, _, header, value} = data},
         %{to_socket: to_socket} = state
       ) do
-    :ok = :gen_tcp.send(to_socket, "#{header}: #{value}\r\n")
+    :ok = :gen_tcp.send(to_socket, encode(data))
 
     state =
       case header do
@@ -99,10 +97,10 @@ defmodule Conjure.Request do
   end
 
   def handle_info(
-        {:http, socket, :http_eoh},
+        {:http, socket, :http_eoh = data},
         %{encoding: encoding, to_socket: to_socket} = state
       ) do
-    :ok = :gen_tcp.send(to_socket, "\r\n")
+    :ok = :gen_tcp.send(to_socket, encode(data))
 
     case encoding do
       "chunked" -> :inet.setopts(socket, packet: :line)
@@ -121,8 +119,9 @@ defmodule Conjure.Request do
 
     length = packet |> String.trim_trailing("\r\n") |> String.to_integer(16)
 
+    # read and forward chunk
     :inet.setopts(socket, packet: :raw)
-    {:ok, packet} = :gen_tcp.recv(socket, length + 2)
+    {:ok, packet} = :gen_tcp.recv(socket, length + 2) # include \r\n
     :ok = :gen_tcp.send(to_socket, packet)
 
     case length do
@@ -130,6 +129,7 @@ defmodule Conjure.Request do
         {:stop, {:shutdown, :normal}, state}
 
       _ ->
+        # prepare to receive next chunk
         :inet.setopts(socket, packet: :line)
         {:noreply, state, {:continue, :receive}}
     end
@@ -153,6 +153,7 @@ defmodule Conjure.Request do
 
   @impl GenServer
   def handle_info({:tcp_closed, _socket}, %{to_socket: to_socket} = state) do
+    # respond with 502 if no data has been forwarded yet
     if to_socket |> :erlang.port_info() |> Keyword.get(:output) == 0,
       do: :ok = :gen_tcp.send(to_socket, HTTP.head(502))
 
@@ -168,6 +169,19 @@ defmodule Conjure.Request do
   end
 
   # helpers
+
+  def encode({:http_response, version, code, text}) do
+    version = version |> Tuple.to_list() |> Enum.join(".")
+    "HTTP/#{version} #{code} #{text}\r\n"
+  end
+
+  def encode({:http_header, _, _, header, value}) do
+    "#{header}: #{value}\r\n"
+  end
+
+  def encode(:http_eoh) do
+    "\r\n"
+  end
 
   defp process_name_from_host(host) do
     String.trim_trailing(host, @tld)
