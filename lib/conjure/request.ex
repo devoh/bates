@@ -12,6 +12,7 @@ defmodule Conjure.Request do
   @tld ".test"
 
   @content_length "Content-Length"
+  @trailer "Trailer"
   @transfer_encoding "Transfer-Encoding"
 
   # public API
@@ -29,6 +30,7 @@ defmodule Conjure.Request do
       request: request,
       encoding: nil,
       length: nil,
+      trailer: false,
       from_socket: nil,
       to_socket: to_socket
     }
@@ -89,11 +91,20 @@ defmodule Conjure.Request do
     state =
       case header do
         @content_length -> %{state | length: String.to_integer(value)}
+        @trailer -> %{state | trailer: :pending}
         @transfer_encoding -> %{state | encoding: value}
         _ -> state
       end
 
     {:noreply, state, {:continue, :receive}}
+  end
+
+  def handle_info(
+        {:http, _, :http_eoh = data},
+      %{to_socket: to_socket, trailer: :read} = state
+      ) do
+    :ok = :gen_tcp.send(to_socket, encode(data))
+    {:stop, {:shutdown, :normal}, state}
   end
 
   def handle_info(
@@ -113,7 +124,7 @@ defmodule Conjure.Request do
   @impl GenServer
   def handle_info(
         {:tcp, socket, packet},
-        %{encoding: "chunked", to_socket: to_socket} = state
+        %{encoding: "chunked", trailer: trailer, to_socket: to_socket} = state
       ) do
     :ok = :gen_tcp.send(to_socket, packet)
 
@@ -126,7 +137,12 @@ defmodule Conjure.Request do
 
     case length do
       0 ->
-        {:stop, {:shutdown, :normal}, state}
+        if trailer do
+          :inet.setopts(socket, packet: :httph_bin)
+          {:noreply, %{state | trailer: :read}, {:continue, :receive}}
+        else
+          {:stop, {:shutdown, :normal}, state}
+        end
 
       _ ->
         # prepare to receive next chunk
