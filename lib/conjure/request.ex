@@ -11,9 +11,9 @@ defmodule Conjure.Request do
 
   @tld ".test"
 
-  @content_length "Content-Length"
-  @trailer "Trailer"
-  @transfer_encoding "Transfer-Encoding"
+  @content_length "content-length"
+  @trailer "trailer"
+  @transfer_encoding "transfer-encoding"
 
   # public API
 
@@ -89,7 +89,7 @@ defmodule Conjure.Request do
     :ok = :gen_tcp.send(to_socket, encode(data))
 
     state =
-      case header do
+      case String.downcase(header) do
         @content_length -> %{state | length: String.to_integer(value)}
         @trailer -> %{state | trailer: :pending}
         @transfer_encoding -> %{state | encoding: value}
