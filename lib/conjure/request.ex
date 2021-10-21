@@ -77,16 +77,15 @@ defmodule Conjure.Request do
 
   @impl GenServer
   def handle_continue(
-        :open_websocket,
-        %{from_socket: from_socket, to_socket: to_socket, websocket: true} = state
-      ) do
-    :ok = :inet.setopts(to_socket, active: true, packet: 0, nodelay: true)
-    :ok = :inet.setopts(from_socket, active: true, packet: 0, nodelay: true)
+    :open_websocket,
+    %{from_socket: from_socket, to_socket: to_socket} = state
+  ) do
+    opts = [active: true, packet: 0, nodelay: true]
 
-    :ok = websocket_loop(to_socket, from_socket)
+    :ok = :inet.setopts(to_socket, opts)
+    :ok = :inet.setopts(from_socket, opts)
 
-    :ok = :gen_tcp.close(to_socket)
-    {:stop, {:shutdown, :normal}, state}
+    {:noreply, state}
   end
 
   @impl GenServer
@@ -188,6 +187,19 @@ defmodule Conjure.Request do
 
   @impl GenServer
   def handle_info(
+        {:tcp, socket, packet},
+        %{from_socket: from_socket, to_socket: to_socket, websocket: true} = state
+      ) do
+    case socket do
+      ^from_socket -> :ok = :gen_tcp.send(to_socket, packet)
+      ^to_socket -> :ok = :gen_tcp.send(from_socket, packet)
+    end
+
+    {:noreply, state}
+  end
+
+  @impl GenServer
+  def handle_info(
         {:tcp, _, packet},
         %{length: length, to_socket: to_socket} = state
       ) do
@@ -204,14 +216,25 @@ defmodule Conjure.Request do
   end
 
   @impl GenServer
-  def handle_info({:tcp_closed, _socket}, %{to_socket: to_socket} = state) do
-    # respond with 502 if no data has been forwarded yet
-    if to_socket |> :erlang.port_info() |> Keyword.get(:output) == 0,
-      do: :ok = :gen_tcp.send(to_socket, HTTP.head(502))
-
+  def handle_info({:tcp_closed, to_socket}, %{to_socket: to_socket} = state) do
     case :gen_tcp.shutdown(to_socket, :write) do
       :ok -> {:stop, {:shutdown, :closed}, state}
-      {:error, :enotconn} -> {:stop, {:shutdown, :disconnected}, state}
+      {:error, reason} -> {:stop, {:shutdown, reason}, state}
+    end
+  end
+
+  @impl GenServer
+  def handle_info(
+    {:tcp_closed, from_socket},
+    %{from_socket: from_socket, to_socket: to_socket} = state
+  ) do
+    # respond with 502 if no data has been forwarded yet
+    if to_socket |> :erlang.port_info() |> Keyword.get(:output) == 0,
+      do: :ok = :gen_tcp.send(from_socket, HTTP.head(502))
+
+    case :gen_tcp.shutdown(from_socket, :write) do
+      :ok -> {:stop, {:shutdown, :closed}, state}
+      {:error, reason} -> {:stop, {:shutdown, reason}, state}
     end
   end
 
@@ -238,35 +261,5 @@ defmodule Conjure.Request do
 
   defp process_name_from_host(host) do
     String.trim_trailing(host, @tld)
-  end
-
-  defp websocket_loop(to_socket, from_socket) do
-    receive do
-      # downstream
-      {:tcp, ^to_socket, data} ->
-        :gen_tcp.send(from_socket, data)
-        websocket_loop(to_socket, from_socket)
-      {:tcp_error, ^to_socket, reason} ->
-        IO.inspect(reason, label: "Error occurred on downstream socket")
-        :ok
-      {:tcp_closed, ^to_socket} ->
-        IO.puts("Downstream socket closed")
-        :ok
-
-      # upstream
-      {:tcp, ^from_socket, data} ->
-        :gen_tcp.send(to_socket, data)
-        websocket_loop(to_socket, from_socket)
-      {:tcp_error, ^from_socket, reason} ->
-        IO.inspect(reason, label: "Error occured on upstream socket")
-        :ok
-      {:tcp_closed, ^from_socket} ->
-        IO.puts('Upstream socket closed')
-        :ok
-
-      other ->
-        IO.inspect(other, label: "Invalid message")
-        websocket_loop(to_socket, from_socket)
-    end
   end
 end
