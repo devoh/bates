@@ -62,6 +62,7 @@ defmodule Conjure.Proxy do
       ) do
     {:ok, pid} = Request.start({host, socket, request})
     :ok = :gen_tcp.controlling_process(socket, pid)
+    GenServer.cast(pid, :start)
     {:noreply, %{state | host: nil, request: nil}, {:continue, :accept}}
   end
 

@@ -37,12 +37,12 @@ defmodule Conjure.Request do
       websocket: false
     }
 
-    {:ok, state, {:continue, :forward}}
+    {:ok, state}
   end
 
   @impl GenServer
-  def handle_continue(
-        :forward,
+  def handle_cast(
+        :start,
         %{name: name, request: request, to_socket: to_socket} = state
       ) do
     with {:ok, port} = Process.port(name),
