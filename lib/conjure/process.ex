@@ -94,6 +94,11 @@ defmodule Conjure.Process do
   end
 
   @impl GenServer
+  def handle_info({:EXIT, _pid, :normal = exit_status}, state) do
+    {:noreply, %{state | exit_status: exit_status, pid: nil}}
+  end
+
+  @impl GenServer
   def handle_info({:EXIT, _pid, {:exit_status, exit_status}}, state) do
     {:noreply, %{state | exit_status: exit_status, pid: nil}}
   end
