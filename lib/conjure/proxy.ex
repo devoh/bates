@@ -60,7 +60,8 @@ defmodule Conjure.Proxy do
         :forward,
         %{host: host, request: request, socket: socket} = state
       ) do
-    {:ok, _pid} = Request.start({host, socket, request})
+    {:ok, pid} = Request.start({host, socket, request})
+    :ok = :gen_tcp.controlling_process(socket, pid)
     {:noreply, %{state | host: nil, request: nil}, {:continue, :accept}}
   end
 
