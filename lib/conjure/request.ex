@@ -14,6 +14,7 @@ defmodule Conjure.Request do
   @content_length "content-length"
   @trailer "trailer"
   @transfer_encoding "transfer-encoding"
+  @upgrade "upgrade"
 
   # public API
 
@@ -32,7 +33,8 @@ defmodule Conjure.Request do
       length: nil,
       trailer: false,
       from_socket: nil,
-      to_socket: to_socket
+      to_socket: to_socket,
+      websocket: false
     }
 
     {:ok, state, {:continue, :forward}}
@@ -67,9 +69,24 @@ defmodule Conjure.Request do
     end
   end
 
+  @impl GenServer
   def handle_continue(:receive, %{from_socket: from_socket} = state) do
     :ok = :inet.setopts(from_socket, active: :once)
     {:noreply, state}
+  end
+
+  @impl GenServer
+  def handle_continue(
+        :open_websocket,
+        %{from_socket: from_socket, to_socket: to_socket, websocket: true} = state
+      ) do
+    :ok = :inet.setopts(to_socket, active: true, packet: 0, nodelay: true)
+    :ok = :inet.setopts(from_socket, active: true, packet: 0, nodelay: true)
+
+    :ok = websocket_loop(to_socket, from_socket)
+
+    :ok = :gen_tcp.close(to_socket)
+    {:stop, {:shutdown, :normal}, state}
   end
 
   @impl GenServer
@@ -82,6 +99,7 @@ defmodule Conjure.Request do
     {:noreply, state, {:continue, :receive}}
   end
 
+  @impl GenServer
   def handle_info(
         {:http, _, {:http_header, _, _, header, value} = data},
         %{to_socket: to_socket} = state
@@ -93,12 +111,15 @@ defmodule Conjure.Request do
         @content_length -> %{state | length: String.to_integer(value)}
         @trailer -> %{state | trailer: :pending}
         @transfer_encoding -> %{state | encoding: value}
+        @upgrade ->
+          %{state | websocket: String.downcase(value) == "websocket"}
         _ -> state
       end
 
     {:noreply, state, {:continue, :receive}}
   end
 
+  @impl GenServer
   def handle_info(
         {:http, _, :http_eoh = data},
       %{to_socket: to_socket, trailer: :read} = state
@@ -107,6 +128,17 @@ defmodule Conjure.Request do
     {:stop, {:shutdown, :normal}, state}
   end
 
+  @impl GenServer
+  def handle_info(
+        {:http, _socket, :http_eoh = data},
+        %{to_socket: to_socket, websocket: true} = state
+      ) do
+    :ok = :gen_tcp.send(to_socket, encode(data))
+
+    {:noreply, state, {:continue, :open_websocket}}
+  end
+
+  @impl GenServer
   def handle_info(
         {:http, socket, :http_eoh = data},
         %{encoding: encoding, to_socket: to_socket} = state
@@ -114,8 +146,8 @@ defmodule Conjure.Request do
     :ok = :gen_tcp.send(to_socket, encode(data))
 
     case encoding do
-      "chunked" -> :inet.setopts(socket, packet: :line)
-      _ -> :inet.setopts(socket, packet: :raw)
+      "chunked" -> :ok = :inet.setopts(socket, packet: :line)
+      _ -> :ok = :inet.setopts(socket, packet: :raw)
     end
 
     {:noreply, state, {:continue, :receive}}
@@ -128,7 +160,10 @@ defmodule Conjure.Request do
       ) do
     :ok = :gen_tcp.send(to_socket, packet)
 
-    length = packet |> String.trim_trailing("\r\n") |> String.to_integer(16)
+    length =
+      packet
+      |> String.trim_trailing("\r\n")
+      |> String.to_integer(16)
 
     # read and forward chunk
     :inet.setopts(socket, packet: :raw)
@@ -138,7 +173,7 @@ defmodule Conjure.Request do
     case length do
       0 ->
         if trailer do
-          :inet.setopts(socket, packet: :httph_bin)
+          :ok = :inet.setopts(socket, packet: :httph_bin)
           {:noreply, %{state | trailer: :read}, {:continue, :receive}}
         else
           {:stop, {:shutdown, :normal}, state}
@@ -146,7 +181,7 @@ defmodule Conjure.Request do
 
       _ ->
         # prepare to receive next chunk
-        :inet.setopts(socket, packet: :line)
+        :ok = :inet.setopts(socket, packet: :line)
         {:noreply, state, {:continue, :receive}}
     end
   end
@@ -174,9 +209,10 @@ defmodule Conjure.Request do
     if to_socket |> :erlang.port_info() |> Keyword.get(:output) == 0,
       do: :ok = :gen_tcp.send(to_socket, HTTP.head(502))
 
-    :ok = :gen_tcp.shutdown(to_socket, :write)
-
-    {:stop, {:shutdown, :closed}, state}
+    case :gen_tcp.shutdown(to_socket, :write) do
+      :ok -> {:stop, {:shutdown, :closed}, state}
+      {:error, :enotconn} -> {:stop, {:shutdown, :disconnected}, state}
+    end
   end
 
   @impl GenServer
@@ -202,5 +238,35 @@ defmodule Conjure.Request do
 
   defp process_name_from_host(host) do
     String.trim_trailing(host, @tld)
+  end
+
+  defp websocket_loop(to_socket, from_socket) do
+    receive do
+      # downstream
+      {:tcp, ^to_socket, data} ->
+        :gen_tcp.send(from_socket, data)
+        websocket_loop(to_socket, from_socket)
+      {:tcp_error, ^to_socket, reason} ->
+        IO.inspect(reason, label: "Error occurred on downstream socket")
+        :ok
+      {:tcp_closed, ^to_socket} ->
+        IO.puts("Downstream socket closed")
+        :ok
+
+      # upstream
+      {:tcp, ^from_socket, data} ->
+        :gen_tcp.send(to_socket, data)
+        websocket_loop(to_socket, from_socket)
+      {:tcp_error, ^from_socket, reason} ->
+        IO.inspect(reason, label: "Error occured on upstream socket")
+        :ok
+      {:tcp_closed, ^from_socket} ->
+        IO.puts('Upstream socket closed')
+        :ok
+
+      other ->
+        IO.inspect(other, label: "Invalid message")
+        websocket_loop(to_socket, from_socket)
+    end
   end
 end
