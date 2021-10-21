@@ -163,6 +163,7 @@ defmodule Conjure.Request do
     if size < length do
       {:noreply, %{state | length: length - size}, {:continue, :receive}}
     else
+      :ok = :gen_tcp.shutdown(to_socket, :write)
       {:stop, {:shutdown, :normal}, state}
     end
   end
