@@ -1,20 +1,22 @@
 # Conjure
 
-A server process manager for local development.
+Local multi-application development server.
 
-## Configuration
+## Repo Structure
 
-The configuration file is defined in [TOML][] format.
-
-[toml]: https://toml.io
-
-```toml
-[test_server]
-env = { SECRET = "Shh…" }
-dir = "/apps/test_server"
-command = "bundle exec rackup -p $PORT"
+```
+source/          Elixir application (code, tests, config)
+specs/           Domain specs (what the system is and why)
+workflow/        Proposals, plans, and blueprints (CDD pipeline)
+playbook/        Coding conventions and code review checklist
+research/        Distilled external knowledge
+transcripts/     Cleaned call transcripts and meeting notes
+experiments/     Prototypes and POCs
+docs/            External-facing content
 ```
 
-The command will have the `$PORT` placeholder replaced with a dynamically
-assigned port at startup. A port may be manually specified via the `port` key,
-instead.
+## Methodology
+
+This repo follows [Context-Driven Development](CDD.md). Every decision,
+conversation, and research finding is written down in the repo. Agents and
+humans navigate the same context.
