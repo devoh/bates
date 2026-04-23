@@ -51,16 +51,21 @@ conjure.test {
 }
 
 myapp.test {
-  reverse_proxy 127.0.0.1:<port> {
-    @fallback {
-      status 502
-    }
-    handle_response @fallback {
+  handle_errors {
+    @502 expression `{err.status_code} == 502`
+    handle @502 {
       reverse_proxy 127.0.0.1:<control-interface-port>
     }
   }
+  reverse_proxy 127.0.0.1:<port>
 }
 ```
+
+**Important:** `handle_errors` is required, not `handle_response`.
+When an upstream is unreachable (connection refused), Caddy generates a
+502 internally — this does NOT pass through `handle_response` (which
+only fires on actual upstream responses). `handle_errors` catches
+Caddy's internal error responses. Verified with Caddy v2.9.1.
 
 Each routable service gets the same block structure. The worker pattern
 (no hostname, no route) gets nothing. `conjure.test` routes directly
