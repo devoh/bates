@@ -85,6 +85,15 @@ The on-demand startup flow (app not running):
 6. The loading page (a LiveView) receives boot progress via PubSub and
    redirects when the app is up.
 
+### CLI
+
+The command-line interface for launching and interacting with Conjure.
+`conjure start` runs the server in the foreground. Control commands
+(`status`, `up`, `down`, `restart`) communicate with the running server
+via the JSON API.
+
+See [CLI](cli.md).
+
 ## Setup
 
 `conjure setup` performs one-time system configuration that requires
