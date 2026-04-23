@@ -21,7 +21,8 @@ No custom DNS server. No dynamic resolution.
 
 - **Automatic HTTPS.** Caddy runs a local CA, issues certificates for
   `.test` hostnames automatically, and installs the root certificate into
-  the system trust store. No manual certificate setup.
+  the system trust store. On first run, Caddy prompts for a password to
+  modify the trust store — this is a one-time step.
 - **HTTP/2** for all HTTPS connections.
 - **WebSocket proxying** — transparent, no special configuration.
 - **Concurrent connections** — handles many simultaneous requests.
