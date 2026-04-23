@@ -10,10 +10,7 @@ defmodule Conjure.Application do
     [
       {Registry, keys: :unique, name: Conjure.ProcessRegistry},
       {Conjure.PortNumber, name: Conjure.PortNumber},
-      Conjure.DNSServer,
-      Conjure.IPCServer,
-      Conjure.ProcessSupervisor,
-      Conjure.Proxy
+      Conjure.ProcessSupervisor
     ]
   end
 end

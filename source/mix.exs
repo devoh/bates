@@ -5,7 +5,7 @@ defmodule Conjure.MixProject do
     [
       app: :conjure,
       version: "0.1.0",
-      elixir: "~> 1.11",
+      elixir: "~> 1.14",
       start_permanent: Mix.env() == :prod,
       deps: deps()
     ]
@@ -22,8 +22,7 @@ defmodule Conjure.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:dns, "~> 2.2"},
-      {:exec, "~> 1.0"},
+      {:erlexec, "~> 2.3"},
       {:jason, "~> 1.2"},
       {:toml, "~> 0.6"}
     ]
