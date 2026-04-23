@@ -82,6 +82,21 @@ The on-demand startup flow (app not running):
 5. The control interface starts the app and serves a loading page.
 6. The loading page polls for readiness and redirects when the app is up.
 
+## Setup
+
+`conjure setup` performs one-time system configuration that requires
+elevated permissions:
+
+1. Creates `/etc/resolver/test` to route all `*.test` DNS lookups to
+   `127.0.0.1` (requires `sudo`).
+2. Runs Caddy's certificate trust step to install the local CA root
+   certificate into the macOS system trust store (Caddy prompts for a
+   password).
+
+Both steps are idempotent — running `conjure setup` again is safe. Conjure
+should detect when setup hasn't been run and tell the user what to do,
+rather than failing silently or elevating automatically.
+
 ## Configuration
 
 Applications are defined in a `config.toml` file. Each top-level TOML table
