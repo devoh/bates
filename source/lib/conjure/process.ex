@@ -11,6 +11,7 @@ defmodule Conjure.Process do
 
   @port_regex ~r/\$PORT\b/
   @timeout 60_000
+  @max_log_lines 100
 
   # public API
 
@@ -43,7 +44,9 @@ defmodule Conjure.Process do
     state = %{
       process: assign_port(process),
       pid: nil,
-      exit_status: nil
+      exit_status: nil,
+      log_buffer: :queue.new(),
+      log_count: 0
     }
 
     {:ok, state}
@@ -56,7 +59,9 @@ defmodule Conjure.Process do
          env <- env_with_port(process),
          opts <- [:stdout, :stderr, cd: to_charlist(root), env: env],
          {:ok, pid, _os_pid} <- :exec.run_link(command, opts) do
-      {:reply, :ok, %{state | pid: pid}}
+      new_state = %{state | pid: pid}
+      broadcast(process.name, {:status, "up"})
+      {:reply, :ok, new_state}
     else
       error -> {:stop, error, error, state}
     end
@@ -69,10 +74,14 @@ defmodule Conjure.Process do
   def handle_call(:down, _from, %{pid: nil} = state), do: {:reply, :ok, state}
 
   @impl GenServer
-  def handle_call(:down, _from, %{pid: pid} = state) do
+  def handle_call(:down, _from, %{process: process, pid: pid} = state) do
     case :exec.stop(pid) do
-      :ok -> {:reply, :ok, %{state | pid: nil}}
-      error -> {:reply, error, state}
+      :ok ->
+        broadcast(process.name, {:status, "down"})
+        {:reply, :ok, %{state | pid: nil}}
+
+      error ->
+        {:reply, error, state}
     end
   end
 
@@ -89,18 +98,23 @@ defmodule Conjure.Process do
   @impl GenServer
   def handle_info({stream, _os_pid, data}, %{process: process} = state)
       when stream in [:stdout, :stderr] do
-    log(process, String.trim(data))
-    {:noreply, state}
+    message = String.trim(data)
+    log(process, message)
+    {:noreply, buffer_log(state, message)}
   end
 
   @impl GenServer
-  def handle_info({:EXIT, _pid, :normal = exit_status}, state) do
+  def handle_info({:EXIT, _pid, :normal = exit_status}, %{process: process} = state) do
+    broadcast(process.name, {:status, "down"})
     {:noreply, %{state | exit_status: exit_status, pid: nil}}
   end
 
   @impl GenServer
-  def handle_info({:EXIT, _pid, {:exit_status, exit_status}}, state) do
-    {:noreply, %{state | exit_status: exit_status, pid: nil}}
+  def handle_info({:EXIT, _pid, {:exit_status, exit_status}}, %{process: process} = state) do
+    new_state = %{state | exit_status: exit_status, pid: nil}
+    log_output = drain_log_buffer(new_state)
+    broadcast(process.name, {:status, "crashed", log_output})
+    {:noreply, new_state}
   end
 
   # helpers
@@ -109,6 +123,23 @@ defmodule Conjure.Process do
     do: %{process | port: Conjure.PortNumber.next()}
 
   defp assign_port(process), do: process
+
+  defp broadcast(name, message) do
+    Phoenix.PubSub.broadcast(Conjure.PubSub, "process:#{name}", message)
+  end
+
+  defp buffer_log(%{log_buffer: buffer, log_count: count} = state, message) do
+    if count >= @max_log_lines do
+      {_, trimmed} = :queue.out(buffer)
+      %{state | log_buffer: :queue.in(message, trimmed)}
+    else
+      %{state | log_buffer: :queue.in(message, buffer), log_count: count + 1}
+    end
+  end
+
+  defp drain_log_buffer(%{log_buffer: buffer}) do
+    :queue.to_list(buffer) |> Enum.join("\n")
+  end
 
   defp env_with_port(%{environment: environment, port: port}) do
     for {key, value} <- Map.put(environment, "PORT", port),
