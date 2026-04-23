@@ -12,9 +12,10 @@ control interface for visibility and control.
 
 The core of the system. Each application defined in the TOML configuration
 becomes a supervised OTP process. Processes have a lifecycle (down, up,
-crashed) and are assigned unique ports from a monotonically increasing
-counter starting at 4200. All processes start in the `down` state and are
-started on demand.
+crashed) and are assigned dynamically detected ports. All processes start
+in the `down` state and are started on demand. Middleware transforms
+service configuration into process invocations at init time, adding
+prologue commands and environment variables.
 
 See [Process Management](process-management.md).
 
@@ -53,7 +54,8 @@ See [Control Interface](control-interface.md).
                                ▼            ▼
                            Application  Control Interface
                            process      starts the app,
-                           (port 4200+) serves loading page
+                           (dynamic     serves loading page
+                            port)
                                │            │
                                ▼            ▼
                            ProcessSupervisor
@@ -100,8 +102,9 @@ rather than failing silently or elevating automatically.
 ## Configuration
 
 Applications are defined in a `config.toml` file. Each top-level TOML table
-is an application. The table name becomes the application name (and thus the
-hostname: `name.test`).
+is an application. The table name becomes the application name, which is
+used in the control interface and as the default hostname when a service
+sets `hostname = true`.
 
 An application can define multiple services, or use a single-command
 shorthand:
@@ -112,6 +115,7 @@ root = "~/Code/myapp"
 
 [myapp.services.web]
 command = "bin/rails server"
+hostname = true
 
 [myapp.services.worker]
 command = "bundle exec sidekiq"
@@ -130,7 +134,7 @@ reference.
 |------|---------|
 | 443 | Caddy HTTPS (user-facing) |
 | 80 | Caddy HTTP (redirects to HTTPS) |
-| 4200+ | Application processes (internal, not exposed directly) |
+| dynamic | Application processes (internal, not exposed directly) |
 
 ## Key Terminology
 
@@ -138,7 +142,7 @@ reference.
 |------|---------|
 | **Application** | A group of related services that run together, identified by name |
 | **Service** | A single OS process within an application (web, worker, etc.) |
-| **Application name** | The TOML table name; doubles as the hostname prefix (`name` → `name.test`) |
-| **Port number** | Auto-assigned starting at 4200, or manually specified in config |
+| **Application name** | The TOML table name; identifies the application in the control interface and serves as the default hostname |
+| **Port number** | Dynamically detected or manually specified in config |
 | **Route** | A Caddy routing rule mapping a `.test` hostname to an application port with a fallback |
 | **Fallback** | When an app isn't running, Caddy routes the request to the control interface instead |

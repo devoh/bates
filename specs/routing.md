@@ -48,7 +48,7 @@ issue — Caddy receives its full configuration on launch.
 ### Generated Caddyfile
 
 Conjure generates a Caddyfile with one block per routable service (any
-service with a `domain`), plus one for `conjure.test`. Given this config:
+service with a `hostname`), plus one for `conjure.test`. Given this config:
 
 ```toml
 [myapp]
@@ -56,11 +56,11 @@ root = "~/Code/myapp"
 
 [myapp.services.web]
 command = "bin/rails server"
-domain = "myapp"
+hostname = true
 
 [myapp.services.vite]
 command = "bin/vite dev"
-domain = "vite.myapp"
+hostname = "vite.myapp"
 
 [myapp.services.worker]
 command = "bundle exec sidekiq"
@@ -96,7 +96,7 @@ vite.myapp.test {
 }
 ```
 
-The worker service has no `domain`, so it gets no route. The pattern is
+The worker service has no `hostname`, so it gets no route. The pattern is
 the same for every routable service — only the hostname and port change.
 
 ## Static Routes with Fallback
@@ -118,8 +118,10 @@ application (all services, not just the one that was requested). See
 The `conjure.test` route points directly to the control interface with no
 fallback — it is always handled by Conjure.
 
-Because port assignments are stable across service stop/start cycles, the
-routes never need updating.
+Port assignments are stable across service stop/start cycles within a
+Conjure session, so routes never need updating at runtime. Ports are
+dynamically assigned at init time and may differ across Conjure restarts,
+but the Caddyfile is regenerated on each start.
 
 ## How It Connects
 
