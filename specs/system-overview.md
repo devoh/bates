@@ -100,15 +100,29 @@ rather than failing silently or elevating automatically.
 ## Configuration
 
 Applications are defined in a `config.toml` file. Each top-level TOML table
-is an application. The table name becomes the process name (and thus the
+is an application. The table name becomes the application name (and thus the
 hostname: `name.test`).
 
-Required keys per application: `command` (the shell command to run) and `dir`
-(working directory). Optional: `port` (override auto-assigned port) and `env`
-(map of environment variables).
+An application can define multiple services, or use a single-command
+shorthand:
 
-The `$PORT` variable in commands is replaced with the assigned port number at
-startup.
+```toml
+[myapp]
+root = "~/Code/myapp"
+
+[myapp.services.web]
+command = "bin/rails server"
+
+[myapp.services.worker]
+command = "bundle exec sidekiq"
+
+[api]
+root = "~/Code/api"
+command = "bin/server"
+```
+
+See [Process Management](process-management.md) for the full configuration
+reference.
 
 ## Ports
 
@@ -122,8 +136,9 @@ startup.
 
 | Term | Meaning |
 |------|---------|
-| **Process** | A managed OS process for one application, wrapped in an OTP GenServer |
-| **Process name** | The TOML table name; doubles as the hostname prefix (`name` → `name.test`) |
+| **Application** | A group of related services that run together, identified by name |
+| **Service** | A single OS process within an application (web, worker, etc.) |
+| **Application name** | The TOML table name; doubles as the hostname prefix (`name` → `name.test`) |
 | **Port number** | Auto-assigned starting at 4200, or manually specified in config |
 | **Route** | A Caddy routing rule mapping a `.test` hostname to an application port with a fallback |
 | **Fallback** | When an app isn't running, Caddy routes the request to the control interface instead |

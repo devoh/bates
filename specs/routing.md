@@ -47,7 +47,26 @@ issue — Caddy receives its full configuration on launch.
 
 ### Generated Caddyfile
 
-Conjure generates a Caddyfile like:
+Conjure generates a Caddyfile with one block per routable service (any
+service with a `domain`), plus one for `conjure.test`. Given this config:
+
+```toml
+[myapp]
+root = "~/Code/myapp"
+
+[myapp.services.web]
+command = "bin/rails server"
+domain = "myapp"
+
+[myapp.services.vite]
+command = "bin/vite dev"
+domain = "vite.myapp"
+
+[myapp.services.worker]
+command = "bundle exec sidekiq"
+```
+
+Conjure generates:
 
 ```
 conjure.test {
@@ -65,7 +84,7 @@ myapp.test {
   }
 }
 
-api.test {
+vite.myapp.test {
   reverse_proxy 127.0.0.1:<port> {
     @fallback {
       status 502
@@ -77,36 +96,37 @@ api.test {
 }
 ```
 
-One block per configured application, plus one for `conjure.test`. The
-pattern is the same for every app — only the hostname and port change.
+The worker service has no `domain`, so it gets no route. The pattern is
+the same for every routable service — only the hostname and port change.
 
 ## Static Routes with Fallback
 
 All routes are defined in the generated Caddyfile. Routes are never changed
 at runtime.
 
-Each application route has two upstreams in priority order:
+Each routable service gets a route with two upstreams in priority order:
 
-1. **Primary:** the application's assigned port (`127.0.0.1:<port>`).
+1. **Primary:** the service's assigned port (`127.0.0.1:<port>`).
 2. **Fallback:** the control interface.
 
-When the application is running, the primary upstream handles the request
-directly. When the application is down, the TCP connection is refused
-immediately and Caddy falls back to the control interface, which triggers
-on-demand startup. See [Control Interface](control-interface.md).
+When the service is running, the primary upstream handles the request
+directly. When it's down, the TCP connection is refused immediately and
+Caddy falls back to the control interface, which starts the entire
+application (all services, not just the one that was requested). See
+[Control Interface](control-interface.md).
 
 The `conjure.test` route points directly to the control interface with no
 fallback — it is always handled by Conjure.
 
-Because port assignments are stable across process stop/start cycles, the
+Because port assignments are stable across service stop/start cycles, the
 routes never need updating.
 
 ## How It Connects
 
 - **Conjure** starts Caddy as a child process, generating the Caddyfile
   from the TOML configuration and piping it to stdin.
-- **Control interface** is the fallback for all application routes, handling
+- **Control interface** is the fallback for all service routes, handling
   on-demand startup when an app is down.
-- **Process management** is independent of routing. Starting or stopping a
-  process does not change any Caddy configuration — the fallback mechanism
+- **Process management** is independent of routing. Starting or stopping
+  services does not change any Caddy configuration — the fallback mechanism
   handles both states transparently.
