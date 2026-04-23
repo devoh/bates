@@ -82,7 +82,8 @@ The on-demand startup flow (app not running):
 3. Caddy tries the primary upstream — connection refused (app is down).
 4. Caddy falls back to the control interface.
 5. The control interface starts the app and serves a loading page.
-6. The loading page polls for readiness and redirects when the app is up.
+6. The loading page (a LiveView) receives boot progress via PubSub and
+   redirects when the app is up.
 
 ## Setup
 

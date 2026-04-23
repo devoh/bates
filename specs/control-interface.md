@@ -10,13 +10,17 @@ A human-friendly web page at `conjure.test` that shows the state of all
 configured applications. The dashboard is the default view when visiting
 `conjure.test` in a browser.
 
+Implemented as a Phoenix LiveView. The LiveView subscribes to process
+state changes via PubSub, so the dashboard updates in real time without
+polling or client-side JavaScript.
+
 ### What It Shows
 
 For each application:
 
 - **Name** — the process name from the TOML configuration.
 - **Hostname** — the `.test` URL (clickable link to the app).
-- **Status** — up, down, or crashed.
+- **Status** — up, down, or crashed. Updates live as state changes.
 - **Port** — the assigned port number.
 
 ### Controls
@@ -28,20 +32,26 @@ Each application has controls to:
 - **Restart** — stop then start.
 
 Controls should reflect current state: a running app shows stop and restart,
-a stopped app shows start, a crashed app shows start.
+a stopped app shows start, a crashed app shows start. Controls update
+immediately as state transitions occur.
 
 ## Loading Page
 
 When a request arrives for an application that isn't running, Caddy's
 fallback routes it here. The control interface identifies the target app
-from the request's `Host` header and:
+from the request's `Host` header.
+
+Implemented as a Phoenix LiveView. The LiveView subscribes to the
+target process's state changes via PubSub, providing real-time boot
+progress without polling.
+
+The flow:
 
 1. Triggers `Process.up/1` to start the application.
-2. Serves a loading page showing the app name and boot status.
-3. The loading page polls a readiness endpoint until the app is accepting
-   connections on its assigned port.
-4. On success: redirects to the original URL.
-5. On failure: displays the error with recent log output from the process.
+2. Shows the app name and boot status, updating live as the process
+   starts.
+3. On ready (TCP port accepts connections): redirects to the original URL.
+4. On crash: displays the error with recent log output.
 
 ### Crash Display
 
@@ -103,16 +113,6 @@ POST conjure.test/processes/<name>/restart
 → 422  {"name": "myapp", "error": "..."}
 ```
 
-**Check readiness (used by the loading page):**
-
-```
-GET conjure.test/processes/<name>/ready
-
-→ 200  {"name": "myapp", "ready": true}
-→ 200  {"name": "myapp", "ready": false, "status": "booting"}
-→ 200  {"name": "myapp", "ready": false, "status": "crashed", "log": "..."}
-```
-
 ### Content Negotiation
 
 The dashboard and API share the same hostname. Routing between them:
@@ -131,3 +131,8 @@ lands here instead. See [Routing](routing.md).
 The control interface delegates to the process management layer:
 `Process.up/1`, `Process.down/1`, `ProcessSupervisor.status/0`. It reads
 process log output for crash display.
+
+Both the dashboard and loading page are LiveViews that subscribe to
+process state changes via Phoenix PubSub. Process GenServers broadcast
+state transitions (down → up, up → crashed, etc.), and connected
+LiveViews receive those events and re-render immediately.
