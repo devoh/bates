@@ -128,11 +128,11 @@ All application routes use the control interface as a fallback upstream —
 when an app isn't listening, Caddy's connection is refused and the request
 lands here instead. See [Routing](routing.md).
 
-The control interface delegates to the process management layer:
-`Process.up/1`, `Process.down/1`, `ProcessSupervisor.status/0`. It reads
-process log output for crash display.
+The control interface delegates to the process management layer for
+starting, stopping, and querying application state. It reads process
+log output for crash display.
 
 Both the dashboard and loading page are LiveViews that subscribe to
-process state changes via Phoenix PubSub. Process GenServers broadcast
+process state changes via PubSub. Application processes broadcast
 state transitions (down → up, up → crashed, etc.), and connected
 LiveViews receive those events and re-render immediately.

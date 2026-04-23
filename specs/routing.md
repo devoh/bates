@@ -36,68 +36,18 @@ No custom DNS server. No dynamic resolution.
 
 ## Caddy Lifecycle
 
-Conjure generates a Caddyfile in memory from the TOML configuration and
-starts Caddy with `caddy run --adapter caddyfile -c -`, piping the config
-to stdin. No config file is written to disk.
+Conjure generates a Caddyfile from the TOML configuration and pipes it
+to Caddy on startup. No config file is written to disk.
 
-If Caddy crashes, OTP restarts the process and pipes a freshly generated
-Caddyfile to it. The config is generated from the TOML configuration each
-time, so it always reflects the current state. There is no startup ordering
-issue — Caddy receives its full configuration on launch.
+If Caddy crashes, Conjure restarts it and pipes a freshly generated
+Caddyfile. The config is generated from the TOML configuration each
+time, so it always reflects the current state.
 
-### Generated Caddyfile
+### Route Generation
 
-Conjure generates a Caddyfile with one block per routable service (any
-service with a `hostname`), plus one for `conjure.test`. Given this config:
-
-```toml
-[myapp]
-root = "~/Code/myapp"
-
-[myapp.services.web]
-command = "bin/rails server"
-hostname = true
-
-[myapp.services.vite]
-command = "bin/vite dev"
-hostname = "vite.myapp"
-
-[myapp.services.worker]
-command = "bundle exec sidekiq"
-```
-
-Conjure generates:
-
-```
-conjure.test {
-  reverse_proxy 127.0.0.1:<control-interface-port>
-}
-
-myapp.test {
-  reverse_proxy 127.0.0.1:<port> {
-    @fallback {
-      status 502
-    }
-    handle_response @fallback {
-      reverse_proxy 127.0.0.1:<control-interface-port>
-    }
-  }
-}
-
-vite.myapp.test {
-  reverse_proxy 127.0.0.1:<port> {
-    @fallback {
-      status 502
-    }
-    handle_response @fallback {
-      reverse_proxy 127.0.0.1:<control-interface-port>
-    }
-  }
-}
-```
-
-The worker service has no `hostname`, so it gets no route. The pattern is
-the same for every routable service — only the hostname and port change.
+Conjure generates one route per routable service (any service with a
+`hostname`), plus one for `conjure.test`. Services without a `hostname`
+get no route.
 
 ## Static Routes with Fallback
 
@@ -125,8 +75,8 @@ but the Caddyfile is regenerated on each start.
 
 ## How It Connects
 
-- **Conjure** starts Caddy as a child process, generating the Caddyfile
-  from the TOML configuration and piping it to stdin.
+- **Conjure** starts Caddy as a child process, generating the routing
+  configuration from the TOML configuration.
 - **Control interface** is the fallback for all service routes, handling
   on-demand startup when an app is down.
 - **Process management** is independent of routing. Starting or stopping

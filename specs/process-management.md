@@ -91,8 +91,8 @@ Each service has three states:
 
 Transitions:
 
-- `down` → `up`: The `up` command starts the OS process via `erlexec`.
-- `up` → `down`: The `down` command sends a stop signal via `erlexec`.
+- `down` → `up`: The `up` command starts the OS process.
+- `up` → `down`: The `down` command sends a stop signal.
 - `up` → `down`: The OS process exits cleanly (status 0).
 - `up` → `crashed`: The OS process exits with a non-zero status.
 - Calling `up` on an already-running service is a no-op.
@@ -132,14 +132,14 @@ they are dynamically assigned rather than deterministic.
 
 ## Supervision
 
-ProcessSupervisor is a DynamicSupervisor. On startup, it reads the TOML
-configuration and starts a child for each application. Each application
-supervises its own services. Starting children is done asynchronously so
-the supervisor can finish initialization without blocking.
+On startup, Conjure reads the TOML configuration and creates a
+supervised process for each application. Each application supervises
+its own services. Applications start asynchronously so initialization
+doesn't block.
 
-All applications are registered in a Registry keyed by application name.
-This enables lookup by name from any part of the system (routing, control
-interface) without holding direct process references.
+Applications are registered by name, enabling lookup from any part of
+the system (routing, control interface) without direct process
+references.
 
 ## Middleware
 
@@ -215,9 +215,9 @@ source /opt/homebrew/opt/asdf/libexec/asdf.sh
 exec bin/rails server
 ```
 
-OS processes are managed through `erlexec`, which provides:
+OS processes require:
 
-- Linked execution (the GenServer is notified on exit).
+- Linked execution (Conjure is notified on exit).
 - stdout/stderr capture.
 - Signal-based stop (graceful shutdown).
 - Working directory configuration (from the application's `root`).
