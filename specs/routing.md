@@ -32,12 +32,57 @@ No custom DNS server. No dynamic resolution.
 |------|---------|
 | 443 | HTTPS (user-facing, all `.test` traffic) |
 | 80 | HTTP (redirects to HTTPS) |
-| 2019 | Caddy admin API (localhost only) |
+
+## Caddy Lifecycle
+
+Conjure generates a Caddyfile in memory from the TOML configuration and
+starts Caddy with `caddy run --adapter caddyfile -c -`, piping the config
+to stdin. No config file is written to disk.
+
+If Caddy crashes, OTP restarts the process and pipes a freshly generated
+Caddyfile to it. The config is generated from the TOML configuration each
+time, so it always reflects the current state. There is no startup ordering
+issue — Caddy receives its full configuration on launch.
+
+### Generated Caddyfile
+
+Conjure generates a Caddyfile like:
+
+```
+conjure.test {
+  reverse_proxy 127.0.0.1:<control-interface-port>
+}
+
+myapp.test {
+  reverse_proxy 127.0.0.1:<port> {
+    @fallback {
+      status 502
+    }
+    handle_response @fallback {
+      reverse_proxy 127.0.0.1:<control-interface-port>
+    }
+  }
+}
+
+api.test {
+  reverse_proxy 127.0.0.1:<port> {
+    @fallback {
+      status 502
+    }
+    handle_response @fallback {
+      reverse_proxy 127.0.0.1:<control-interface-port>
+    }
+  }
+}
+```
+
+One block per configured application, plus one for `conjure.test`. The
+pattern is the same for every app — only the hostname and port change.
 
 ## Static Routes with Fallback
 
-All routes are registered at Caddy startup based on the TOML configuration.
-Routes are never added or removed at runtime.
+All routes are defined in the generated Caddyfile. Routes are never changed
+at runtime.
 
 Each application route has two upstreams in priority order:
 
@@ -52,37 +97,13 @@ on-demand startup. See [Control Interface](control-interface.md).
 The `conjure.test` route points directly to the control interface with no
 fallback — it is always handled by Conjure.
 
-### Route Registration
-
-On startup, Conjure registers all routes via Caddy's admin API on
-`localhost:2019`:
-
-```
-POST localhost:2019/config/apps/http/servers/srv0/routes
-{
-  "@id": "<name>",
-  "match": [{"host": ["<name>.test"]}],
-  "handle": [{
-    "handler": "reverse_proxy",
-    "upstreams": [{"dial": "127.0.0.1:<port>"}],
-    "handle_errors": [{
-      "handler": "reverse_proxy",
-      "upstreams": [{"dial": "127.0.0.1:<control-interface-port>"}]
-    }]
-  }]
-}
-```
-
-The `@id` field allows direct access to individual routes by process name.
-
-Routes are registered once and persist for the lifetime of the Caddy
-process. Because port assignments are stable across process stop/start
-cycles, the routes never need updating.
+Because port assignments are stable across process stop/start cycles, the
+routes never need updating.
 
 ## How It Connects
 
-- **Conjure** starts Caddy as a child process and registers all routes at
-  startup using port numbers from the TOML configuration.
+- **Conjure** starts Caddy as a child process, generating the Caddyfile
+  from the TOML configuration and piping it to stdin.
 - **Control interface** is the fallback for all application routes, handling
   on-demand startup when an app is down.
 - **Process management** is independent of routing. Starting or stopping a

@@ -101,7 +101,6 @@ startup.
 |------|---------|
 | 443 | Caddy HTTPS (user-facing) |
 | 80 | Caddy HTTP (redirects to HTTPS) |
-| 2019 | Caddy admin API (localhost only) |
 | 4200+ | Application processes (internal, not exposed directly) |
 
 ## Key Terminology
