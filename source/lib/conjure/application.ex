@@ -10,7 +10,9 @@ defmodule Conjure.Application do
     [
       {Registry, keys: :unique, name: Conjure.ProcessRegistry},
       {Conjure.PortNumber, name: Conjure.PortNumber},
-      Conjure.ProcessSupervisor
+      {Phoenix.PubSub, name: Conjure.PubSub},
+      Conjure.ProcessSupervisor,
+      ConjureWeb.Endpoint
     ]
   end
 end
