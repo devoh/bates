@@ -1,2 +1,8 @@
+# Claude Code
+.claude/activity/
+.claude/scheduled_tasks.lock
+.claude/execution-status.json
+.claude/worktrees/
+
 # Agent execution log
 execution.log
