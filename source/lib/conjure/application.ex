@@ -12,7 +12,8 @@ defmodule Conjure.Application do
       {Conjure.PortNumber, name: Conjure.PortNumber},
       {Phoenix.PubSub, name: Conjure.PubSub},
       Conjure.ProcessSupervisor,
-      ConjureWeb.Endpoint
+      ConjureWeb.Endpoint,
+      Conjure.Caddy
     ]
   end
 end
