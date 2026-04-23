@@ -7,8 +7,8 @@ defmodule Conjure.PortNumberTest do
   end
 
   test "next port", %{daemon: daemon} do
-    assert Conjure.PortNumber.next_port(daemon) == 4200
-    assert Conjure.PortNumber.next_port(daemon) == 4201
-    assert Conjure.PortNumber.next_port(daemon) == 4202
+    assert Conjure.PortNumber.next(daemon) == 4200
+    assert Conjure.PortNumber.next(daemon) == 4201
+    assert Conjure.PortNumber.next(daemon) == 4202
   end
 end

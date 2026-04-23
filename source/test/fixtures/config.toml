@@ -1,0 +1,3 @@
+[testapp]
+command = "elixir test/support/test_server.ex"
+root = "."
