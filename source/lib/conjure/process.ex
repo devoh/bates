@@ -2,12 +2,12 @@ defmodule Conjure.Process do
   use GenServer, restart: :transient
   require Logger
 
-  @enforce_keys [:name, :command, :dir]
+  @enforce_keys [:name, :command, :root]
   defstruct name: "",
             port: 0,
             command: "",
-            dir: "",
-            env: %{}
+            root: "",
+            environment: %{}
 
   @port_regex ~r/\$PORT\b/
   @timeout 60_000
@@ -52,9 +52,9 @@ defmodule Conjure.Process do
   @impl GenServer
   def handle_call(:up, _from, %{process: process, pid: nil} = state) do
     with command <- parse_command(process),
-         dir <- process.dir |> Path.expand() |> to_charlist(),
+         root <- process.root |> Path.expand() |> to_charlist(),
          env <- env_with_port(process),
-         opts <- [:stdout, :stderr, cd: to_charlist(dir), env: env],
+         opts <- [:stdout, :stderr, cd: to_charlist(root), env: env],
          {:ok, pid, _os_pid} <- :exec.run_link(command, opts) do
       {:reply, :ok, %{state | pid: pid}}
     else
@@ -110,8 +110,8 @@ defmodule Conjure.Process do
 
   defp assign_port(process), do: process
 
-  defp env_with_port(%{env: env, port: port}) do
-    for {key, value} <- Map.put(env, "PORT", port),
+  defp env_with_port(%{environment: environment, port: port}) do
+    for {key, value} <- Map.put(environment, "PORT", port),
         into: [],
         do: {to_charlist(key), to_charlist(value)}
   end
