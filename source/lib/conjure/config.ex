@@ -7,6 +7,9 @@ defmodule Conjure.Config do
       config
       |> Enum.map(&build_process/1)
       |> Enum.map(&struct(Conjure.Process, &1))
+    else
+      {:error, :enoent} -> []
+      {:error, _} = error -> error
     end
   end
 
