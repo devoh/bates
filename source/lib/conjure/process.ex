@@ -12,8 +12,8 @@ defmodule Conjure.Process do
   @port_regex ~r/\$PORT\b/
   @timeout 60_000
   @max_log_lines 100
-  @poll_interval 200
-  @readiness_timeout 60_000
+  @poll_interval Application.compile_env(:conjure, :poll_interval, 200)
+  @readiness_timeout Application.compile_env(:conjure, :readiness_timeout, 60_000)
 
   # public API
 

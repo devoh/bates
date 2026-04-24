@@ -6,4 +6,8 @@ config :conjure, ConjureWeb.Endpoint,
     "8d92b2f472c7deb4054a5fa64b1f1d32572f9a1495cb6e7bdbd34837fa3352d1fe70201c37ded9d7a7e7f95d67780e2877e515839f46c51fbc5a87f9f000f67e",
   server: false
 
+config :conjure,
+  poll_interval: 50,
+  readiness_timeout: 2_000
+
 config :logger, level: :warning
