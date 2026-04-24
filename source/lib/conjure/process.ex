@@ -12,6 +12,8 @@ defmodule Conjure.Process do
   @port_regex ~r/\$PORT\b/
   @timeout 60_000
   @max_log_lines 100
+  @poll_interval 200
+  @readiness_timeout 60_000
 
   # public API
 
@@ -63,7 +65,16 @@ defmodule Conjure.Process do
          {:ok, pid, _os_pid} <- :exec.run_link(command, opts) do
       new_state = %{state | pid: pid, ready: false}
       broadcast(process.name, {:status, "starting"})
-      {:reply, :ok, new_state}
+
+      if process.port == 0 do
+        new_state = %{new_state | ready: true}
+        broadcast(process.name, {:status, "up"})
+        {:reply, :ok, new_state}
+      else
+        Process.send_after(self(), :check_ready, @poll_interval)
+        started_at = System.monotonic_time(:millisecond)
+        {:reply, :ok, %{new_state | started_at: started_at}}
+      end
     else
       error -> {:stop, error, error, state}
     end
@@ -104,6 +115,34 @@ defmodule Conjure.Process do
     log(process, message)
     {:noreply, buffer_log(state, message)}
   end
+
+  @impl GenServer
+  def handle_info(:check_ready, %{pid: pid, ready: false, process: process} = state)
+      when not is_nil(pid) do
+    case :gen_tcp.connect(~c"127.0.0.1", process.port, [], 100) do
+      {:ok, socket} ->
+        :gen_tcp.close(socket)
+        new_state = %{state | ready: true}
+        broadcast(process.name, {:status, "up"})
+        {:noreply, new_state}
+
+      {:error, _} ->
+        elapsed = System.monotonic_time(:millisecond) - state.started_at
+
+        if elapsed >= @readiness_timeout do
+          :exec.stop(pid)
+          message = "Timed out waiting for port #{process.port}"
+          broadcast(process.name, {:status, "crashed", message})
+          {:noreply, %{state | pid: nil, ready: false, started_at: nil}}
+        else
+          Process.send_after(self(), :check_ready, @poll_interval)
+          {:noreply, state}
+        end
+    end
+  end
+
+  @impl GenServer
+  def handle_info(:check_ready, state), do: {:noreply, state}
 
   @impl GenServer
   def handle_info({:EXIT, _pid, :normal = exit_status}, %{process: process} = state) do
