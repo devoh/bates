@@ -7,13 +7,7 @@ defmodule Conjure.ProcessReadinessTest do
   end
 
   test "status is 'starting' immediately after up/1" do
-    process = %Conjure.Process{
-      name: "testapp",
-      command: "sleep 999",
-      root: ".",
-      port: 19876
-    }
-
+    process = %Conjure.Process{name: "testapp", command: "sleep 999", root: ".", port: 19876}
     start_supervised!({Conjure.Process, process})
     :ok = Conjure.Process.up("testapp")
 
@@ -39,13 +33,7 @@ defmodule Conjure.ProcessReadinessTest do
 
   test "transitions to 'crashed' on readiness timeout" do
     # Use a port that nothing will listen on
-    process = %Conjure.Process{
-      name: "testapp",
-      command: "sleep 999",
-      root: ".",
-      port: 19877
-    }
-
+    process = %Conjure.Process{name: "testapp", command: "sleep 999", root: ".", port: 19877}
     start_supervised!({Conjure.Process, process})
     :ok = Conjure.Process.up("testapp")
 
@@ -54,16 +42,11 @@ defmodule Conjure.ProcessReadinessTest do
     # Test config sets readiness_timeout to 2_000ms
     assert_receive {:status, "crashed", message}, 5_000
     assert message =~ "Timed out waiting for port"
+    assert Conjure.Process.status("testapp") == "crashed"
   end
 
   test "down works while in 'starting' state" do
-    process = %Conjure.Process{
-      name: "testapp",
-      command: "sleep 999",
-      root: ".",
-      port: 19878
-    }
-
+    process = %Conjure.Process{name: "testapp", command: "sleep 999", root: ".", port: 19878}
     start_supervised!({Conjure.Process, process})
     :ok = Conjure.Process.up("testapp")
 

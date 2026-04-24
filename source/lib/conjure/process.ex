@@ -133,7 +133,7 @@ defmodule Conjure.Process do
           :exec.stop(pid)
           message = "Timed out waiting for port #{process.port}"
           broadcast(process.name, {:status, "crashed", message})
-          {:noreply, %{state | pid: nil, ready: false, started_at: nil}}
+          {:noreply, %{state | pid: nil, ready: false, started_at: nil, exit_status: :timeout}}
         else
           Process.send_after(self(), :check_ready, @poll_interval)
           {:noreply, state}
