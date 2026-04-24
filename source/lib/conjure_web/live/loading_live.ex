@@ -7,7 +7,12 @@ defmodule ConjureWeb.LoadingLive do
   def mount(%{"app_name" => app_name}, _session, socket) do
     if connected?(socket) do
       Phoenix.PubSub.subscribe(Conjure.PubSub, "process:#{app_name}")
-      Process.up(app_name)
+
+      try do
+        Process.up(app_name)
+      catch
+        :exit, _ -> :ok
+      end
     end
 
     status =
@@ -17,12 +22,13 @@ defmodule ConjureWeb.LoadingLive do
         :exit, _ -> "unknown"
       end
 
-    {:ok,
-     assign(socket,
-       app_name: app_name,
-       status: status,
-       error: nil
-     )}
+    socket = assign(socket, app_name: app_name, status: status, error: nil)
+
+    if connected?(socket) and status == "up" do
+      {:ok, redirect(socket, external: "https://#{app_name}.test")}
+    else
+      {:ok, socket}
+    end
   end
 
   @impl true
