@@ -44,6 +44,8 @@ defmodule Conjure.Process do
     state = %{
       process: assign_port(process),
       pid: nil,
+      ready: false,
+      started_at: nil,
       exit_status: nil,
       log_buffer: :queue.new(),
       log_count: 0
@@ -59,8 +61,8 @@ defmodule Conjure.Process do
          env <- env_with_port(process),
          opts <- [:stdout, :stderr, cd: to_charlist(root), env: env],
          {:ok, pid, _os_pid} <- :exec.run_link(command, opts) do
-      new_state = %{state | pid: pid}
-      broadcast(process.name, {:status, "up"})
+      new_state = %{state | pid: pid, ready: false}
+      broadcast(process.name, {:status, "starting"})
       {:reply, :ok, new_state}
     else
       error -> {:stop, error, error, state}
@@ -78,7 +80,7 @@ defmodule Conjure.Process do
     case :exec.stop(pid) do
       :ok ->
         broadcast(process.name, {:status, "down"})
-        {:reply, :ok, %{state | pid: nil}}
+        {:reply, :ok, %{state | pid: nil, ready: false, started_at: nil}}
 
       error ->
         {:reply, error, state}
@@ -155,7 +157,8 @@ defmodule Conjure.Process do
     Regex.replace(@port_regex, command, port |> to_string()) |> to_charlist()
   end
 
-  defp status_name(%{pid: pid}) when not is_nil(pid), do: "up"
+  defp status_name(%{pid: pid, ready: true}) when not is_nil(pid), do: "up"
+  defp status_name(%{pid: pid, ready: false}) when not is_nil(pid), do: "starting"
   defp status_name(%{exit_status: exit}) when exit in [0, nil], do: "down"
   defp status_name(_), do: "crashed"
 
