@@ -47,11 +47,14 @@ progress without polling.
 
 The flow:
 
-1. Triggers `Process.up/1` to start the application.
-2. Shows the app name and boot status, updating live as the process
-   starts.
-3. On ready (TCP port accepts connections): redirects to the original URL.
-4. On crash: displays the error with recent log output.
+1. Subscribes to PubSub for the target process, then triggers
+   `Process.up/1` to start the application.
+2. Checks the process status. If already up, redirects immediately
+   without waiting for a PubSub message.
+3. Otherwise, shows the app name and boot status, updating live as
+   the process starts.
+4. On ready (TCP port accepts connections): redirects to the original URL.
+5. On crash: displays the error with recent log output.
 
 ### Crash Display
 

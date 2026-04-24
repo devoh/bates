@@ -47,10 +47,12 @@ pattern:
 
 ```
 conjure.test {
+  tls internal
   reverse_proxy 127.0.0.1:<control-interface-port>
 }
 
 myapp.test {
+  tls internal
   handle_errors {
     @502 expression `{err.status_code} == 502`
     handle @502 {

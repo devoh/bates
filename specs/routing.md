@@ -12,7 +12,6 @@ is a one-time system configuration, not managed by Conjure:
 ```
 # /etc/resolver/test
 nameserver 127.0.0.1
-port 443
 ```
 
 No custom DNS server. No dynamic resolution.
@@ -22,7 +21,9 @@ No custom DNS server. No dynamic resolution.
 - **Automatic HTTPS.** Caddy runs a local CA, issues certificates for
   `.test` hostnames automatically, and installs the root certificate into
   the system trust store. On first run, Caddy prompts for a password to
-  modify the trust store — this is a one-time step.
+  modify the trust store — this is a one-time step. Because `.test` is
+  not a public TLD, each site block must use `tls internal` to tell
+  Caddy to use its local CA rather than attempting ACME.
 - **HTTP/2** for all HTTPS connections.
 - **WebSocket proxying** — transparent, no special configuration.
 - **Concurrent connections** — handles many simultaneous requests.
