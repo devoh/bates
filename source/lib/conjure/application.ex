@@ -9,7 +9,6 @@ defmodule Conjure.Application do
   defp children do
     [
       {Registry, keys: :unique, name: Conjure.ProcessRegistry},
-      {Conjure.PortNumber, name: Conjure.PortNumber},
       {Phoenix.PubSub, name: Conjure.PubSub},
       Conjure.ProcessSupervisor,
       ConjureWeb.Endpoint,

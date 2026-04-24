@@ -1,14 +1,14 @@
 defmodule Conjure.PortNumberTest do
   use ExUnit.Case, async: true
 
-  setup do
-    daemon = start_supervised!(Conjure.PortNumber)
-    %{daemon: daemon}
+  test "returns a valid port number" do
+    port = Conjure.PortNumber.next()
+    assert is_integer(port)
+    assert port > 0
   end
 
-  test "next port", %{daemon: daemon} do
-    assert Conjure.PortNumber.next(daemon) == 4200
-    assert Conjure.PortNumber.next(daemon) == 4201
-    assert Conjure.PortNumber.next(daemon) == 4202
+  test "returns unique ports" do
+    ports = for _ <- 1..3, do: Conjure.PortNumber.next()
+    assert length(Enum.uniq(ports)) == 3
   end
 end
