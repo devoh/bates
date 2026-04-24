@@ -100,6 +100,7 @@ defmodule Conjure.Caddy do
   defp control_block(control_port) do
     """
     conjure.test {
+      tls internal
       reverse_proxy 127.0.0.1:#{control_port}
     }\
     """
@@ -108,6 +109,7 @@ defmodule Conjure.Caddy do
   defp app_block(name, port, control_port) do
     """
     #{name}.test {
+      tls internal
       handle_errors {
         @502 expression `{err.status_code} == 502`
         handle @502 {
