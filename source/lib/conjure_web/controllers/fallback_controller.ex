@@ -2,10 +2,10 @@ defmodule ConjureWeb.FallbackController do
   use ConjureWeb, :controller
 
   def index(conn, _params) do
-    host = get_req_header(conn, "host") |> List.first("")
-    app_name = host |> String.replace(~r/\.test(:\d+)?$/, "")
+    control_host = ConjureWeb.Endpoint.config(:url)[:host]
 
-    if app_name != "" and app_name != host do
+    if conn.host != control_host do
+      app_name = conn.host |> String.replace(~r/\.test$/, "")
       redirect(conn, to: "/loading/#{app_name}")
     else
       conn
