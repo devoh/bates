@@ -49,12 +49,15 @@ The flow:
 
 1. Subscribes to PubSub for the target process, then triggers
    `Process.up/1` to start the application.
-2. Checks the process status. If already up, redirects immediately
-   without waiting for a PubSub message.
-3. Otherwise, shows the app name and boot status, updating live as
-   the process starts.
-4. On ready (TCP port accepts connections): redirects to the original URL.
-5. On crash: displays the error with recent log output.
+2. Checks the process status. If already `up` (TCP readiness check has
+   passed), redirects immediately without waiting for a PubSub message.
+3. Otherwise, shows the app name and boot status (typically `starting`),
+   updating live as the process starts.
+4. The process GenServer polls the assigned port via TCP connect. When
+   the connection succeeds, it broadcasts `{:status, "up"}` via PubSub.
+5. On receiving `{:status, "up"}`: redirects to the original URL.
+6. On crash or readiness timeout: displays the error with recent log
+   output.
 
 ### Crash Display
 

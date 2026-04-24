@@ -81,17 +81,21 @@ This is equivalent to defining a single service with `port = "auto"` and
 
 ## Service Lifecycle
 
-Each service has three states:
+Each service has four states:
 
 | State | Meaning |
 |-------|---------|
 | **down** | Registered but not running. No OS process exists. |
-| **up** | Running. An OS process is alive and linked. |
-| **crashed** | The OS process exited with a non-zero status. |
+| **starting** | OS process spawned but not yet accepting connections. TCP readiness polling is in progress. |
+| **up** | Running and ready. The OS process is alive and accepting TCP connections on its assigned port. |
+| **crashed** | The OS process exited with a non-zero status, or the readiness check timed out. |
 
 Transitions:
 
-- `down` → `up`: The `up` command starts the OS process.
+- `down` → `starting`: The `up` command spawns the OS process.
+- `starting` → `up`: The TCP readiness check succeeds (port accepts connections).
+- `starting` → `crashed`: The readiness check times out (60 seconds) or the OS process exits during startup.
+- `starting` → `down`: The `down` command stops the OS process during startup.
 - `up` → `down`: The `down` command sends a stop signal.
 - `up` → `down`: The OS process exits cleanly (status 0).
 - `up` → `crashed`: The OS process exits with a non-zero status.
@@ -224,13 +228,19 @@ OS processes require:
 
 ## Readiness
 
-A service with a port is considered ready when a TCP connection to its
-assigned port succeeds. Conjure polls the port after starting the service.
-This is used by the on-demand startup flow — the control interface's
-loading page waits for the TCP check to pass before redirecting.
+After spawning the OS process, Conjure polls `127.0.0.1:<port>` via TCP
+connect every 200ms. When the connection succeeds, the service transitions
+from `starting` to `up` and a PubSub broadcast fires. If 60 seconds elapse
+without a successful connection, the OS process is stopped and the service
+transitions to `crashed` with a timeout message.
+
+The loading page subscribes to PubSub and redirects only when it receives
+the `up` broadcast, ensuring the application is actually accepting
+connections before the user is sent there.
 
 Services without a port have no readiness check. They are considered ready
-immediately after the OS process starts.
+immediately after the OS process starts (transition directly from `starting`
+to `up` with no polling).
 
 ## Logging
 

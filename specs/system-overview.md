@@ -11,9 +11,11 @@ control interface for visibility and control.
 ### Process Management
 
 The core of the system. Each application defined in the TOML configuration
-becomes a supervised OTP process. Processes have a lifecycle (down, up,
-crashed) and are assigned dynamically detected ports. All processes start
-in the `down` state and are started on demand. Middleware transforms
+becomes a supervised OTP process. Processes have a lifecycle (down, starting,
+up, crashed) and are assigned dynamically detected ports. All processes start
+in the `down` state and are started on demand. After spawning, a process
+enters the `starting` state while TCP readiness polling confirms the
+application is accepting connections. Middleware transforms
 service configuration into process invocations at init time, adding
 prologue commands and environment variables.
 
@@ -82,8 +84,11 @@ The on-demand startup flow (app not running):
 3. Caddy tries the primary upstream — connection refused (app is down).
 4. Caddy falls back to the control interface.
 5. The control interface starts the app and serves a loading page.
-6. The loading page (a LiveView) receives boot progress via PubSub and
-   redirects when the app is up.
+6. The process GenServer spawns the OS process and enters the `starting`
+   state. It polls `127.0.0.1:<port>` via TCP connect every 200ms.
+7. The loading page (a LiveView) receives boot progress via PubSub.
+   When the TCP readiness check succeeds, the process broadcasts `up`
+   and the loading page redirects.
 
 ### CLI
 
