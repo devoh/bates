@@ -145,8 +145,10 @@ defmodule Conjure.Process do
   def handle_info(:check_ready, state), do: {:noreply, state}
 
   @impl GenServer
-  def handle_info({:EXIT, _pid, _reason}, %{pid: nil} = state) do
-    # Process was already stopped via down/1; ignore the late EXIT message.
+  def handle_info({:EXIT, exit_pid, _reason}, %{pid: pid} = state)
+      when exit_pid != pid do
+    # EXIT from a previous OS process (already stopped via down/1 or
+    # replaced by a restart). Ignore it.
     {:noreply, state}
   end
 
