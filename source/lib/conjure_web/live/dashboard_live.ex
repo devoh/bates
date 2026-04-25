@@ -48,19 +48,8 @@ defmodule ConjureWeb.DashboardLive do
 
   defp build_process_list do
     for name <- ProcessSupervisor.process_names() |> Enum.sort() do
-      status =
-        try do
-          AppProcess.status(name)
-        catch
-          :exit, _ -> "unknown"
-        end
-
-      {:ok, port} =
-        try do
-          AppProcess.port(name)
-        catch
-          :exit, _ -> {:ok, nil}
-        end
+      status = AppProcess.status(name)
+      {:ok, port} = AppProcess.port(name)
 
       %{name: name, hostname: "#{name}.test", status: status, port: port}
     end
