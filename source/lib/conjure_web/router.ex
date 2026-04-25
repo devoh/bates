@@ -25,6 +25,7 @@ defmodule ConjureWeb.Router do
   scope "/", ConjureWeb do
     pipe_through :browser
 
+    live "/", DashboardLive
     live "/loading/:app_name", LoadingLive
     get "/*path", FallbackController, :index
   end
