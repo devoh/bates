@@ -88,14 +88,18 @@ defmodule Conjure.Process do
 
   @impl GenServer
   def handle_call(:down, _from, %{process: process, pid: pid} = state) do
-    case :exec.stop(pid) do
-      :ok ->
-        broadcast(process.name, {:status, "down"})
-        {:reply, :ok, %{state | pid: nil, ready: false, started_at: nil, exit_status: nil}}
+    :exec.kill(pid, :sigkill)
 
-      error ->
-        {:reply, error, state}
+    ref = Process.monitor(pid)
+
+    receive do
+      {:DOWN, ^ref, :process, ^pid, _reason} -> :ok
+    after
+      5_000 -> :ok
     end
+
+    broadcast(process.name, {:status, "down"})
+    {:reply, :ok, %{state | pid: nil, ready: false, started_at: nil, exit_status: nil}}
   end
 
   @impl GenServer
@@ -147,8 +151,6 @@ defmodule Conjure.Process do
   @impl GenServer
   def handle_info({:EXIT, exit_pid, _reason}, %{pid: pid} = state)
       when exit_pid != pid do
-    # EXIT from a previous OS process (already stopped via down/1 or
-    # replaced by a restart). Ignore it.
     {:noreply, state}
   end
 

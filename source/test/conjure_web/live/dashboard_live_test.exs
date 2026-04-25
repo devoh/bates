@@ -15,6 +15,16 @@ defmodule ConjureWeb.DashboardLiveTest do
   end
 
   test "renders empty state when no processes configured", %{conn: conn} do
+    for name <- Conjure.ProcessSupervisor.process_names() do
+      case GenServer.whereis({:via, Registry, {Conjure.ProcessRegistry, name}}) do
+        pid when is_pid(pid) ->
+          DynamicSupervisor.terminate_child(Conjure.ProcessSupervisor, pid)
+
+        nil ->
+          :ok
+      end
+    end
+
     {:ok, _live, html} = live(conn, "/")
 
     assert html =~ "No applications configured"
@@ -108,5 +118,43 @@ defmodule ConjureWeb.DashboardLiveTest do
     live |> element("button", "Stop") |> render_click()
 
     assert_eventually(fn -> AppProcess.status("myapp") == "down" end)
+  end
+
+  test "restart transitions back to up, not crashed", %{conn: conn} do
+    process = %AppProcess{
+      name: "myapp",
+      command: "elixir test/support/test_server.ex",
+      root: "."
+    }
+
+    start_supervised!({AppProcess, process})
+    :ok = AppProcess.up("myapp")
+    assert_eventually(fn -> AppProcess.status("myapp") == "up" end)
+
+    {:ok, live, _html} = live(conn, "/")
+
+    live |> element(~s(button[phx-value-name="myapp"]), "Restart") |> render_click()
+
+    # Should transition through starting back to up, never landing on crashed
+    assert_eventually(fn -> AppProcess.status("myapp") == "up" end)
+    refute AppProcess.status("myapp") == "crashed"
+  end
+
+  test "restart transitions through down and starting to up", %{conn: _conn} do
+    process = %AppProcess{
+      name: "myapp",
+      command: "elixir test/support/test_server.ex",
+      root: "."
+    }
+
+    start_supervised!({AppProcess, process})
+    :ok = AppProcess.up("myapp")
+    assert_eventually(fn -> AppProcess.status("myapp") == "up" end)
+
+    :ok = AppProcess.down("myapp")
+    assert AppProcess.status("myapp") == "down"
+
+    :ok = AppProcess.up("myapp")
+    assert_eventually(fn -> AppProcess.status("myapp") == "up" end)
   end
 end
