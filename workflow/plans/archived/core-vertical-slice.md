@@ -13,6 +13,7 @@ application.
 | 2026-04-23 | Plan created from accepted proposal. |
 | 2026-04-23 | Audit: bump Elixir constraint to `~> 1.14` in Phase 1. Clarify Caddy stdin delivery in Phase 5 (shell redirect via temp file). Add Phoenix config details to Phase 3. Add spec reconciliation phase (Phase 7). |
 | 2026-04-23 | Phase 1: switch dep from `:exec` 1.0.1 to `:erlexec` 2.3.0. Phase 5: use `send/2` + `:eof` for stdin piping (no temp files). See `experiments/2026-04-23-erlexec-stdin-piping/FINDINGS.md`. |
+| 2026-04-25 | Archived. All acceptance criteria met. Added execution notes documenting deviations and post-plan work. |
 
 ## Why This Matters
 
@@ -23,35 +24,35 @@ built. This plan proves the new architecture works end to end.
 
 ## Acceptance Criteria
 
-- [ ] `mix deps.get && mix compile` succeeds with Phoenix and LiveView
+- [x] `mix deps.get && mix compile` succeeds with Phoenix and LiveView
       dependencies added, `:dns` dependency removed
-- [ ] Deleted files: `dns_server.ex`, `proxy.ex`, `request.ex`,
+- [x] Deleted files: `dns_server.ex`, `proxy.ex`, `request.ex`,
       `http.ex`, `ipc_server.ex`
-- [ ] Config field `dir` renamed to `root` in `process.ex` and
+- [x] Config field `dir` renamed to `root` in `process.ex` and
       `config.ex`; `env` renamed to `environment`
-- [ ] A Caddyfile is generated from the TOML config with one route per
+- [x] A Caddyfile is generated from the TOML config with one route per
       app using `handle_errors` for fallback, plus a `bates.test`
       route
-- [ ] Caddy starts as a supervised child process with the generated
+- [x] Caddy starts as a supervised child process with the generated
       config piped to stdin
-- [ ] Startup checks for `caddy` in `$PATH`,
+- [x] Startup checks for `caddy` in `$PATH`,
       `/etc/resolver/test` existence, and Caddy trust store
-- [ ] Phoenix serves on an internal port; Caddy proxies `bates.test`
+- [x] Phoenix serves on an internal port; Caddy proxies `bates.test`
       to it
-- [ ] Visiting `myapp.test` when the app is down triggers
+- [x] Visiting `myapp.test` when the app is down triggers
       `handle_errors` fallback → Phoenix serves a loading page
-- [ ] The loading page opens a LiveView WebSocket to `bates.test`
+- [x] The loading page opens a LiveView WebSocket to `bates.test`
       with the app name as a param
-- [ ] The LiveView subscribes to PubSub for the target app and
+- [x] The LiveView subscribes to PubSub for the target app and
       redirects when the app is ready
-- [ ] Process GenServer broadcasts state transitions via PubSub
-- [ ] JSON API endpoints work: `GET /status`, `POST /processes/:name/start`,
+- [x] Process GenServer broadcasts state transitions via PubSub
+- [x] JSON API endpoints work: `GET /status`, `POST /processes/:name/start`,
       `POST /processes/:name/stop`
-- [ ] An Elixir test app exists in the repo that binds to `$PORT` and
+- [x] An Elixir test app exists in the repo that binds to `$PORT` and
       responds with 200
-- [ ] The broken `port_number_test.exs` is fixed
-- [ ] README documents manual setup steps (resolver file, Caddy trust)
-- [ ] `mix test` passes
+- [x] The broken `port_number_test.exs` is fixed
+- [x] README documents manual setup steps (resolver file, Caddy trust)
+- [x] `mix test` passes
 
 ## Phases
 
@@ -338,3 +339,38 @@ within the plan phases.
 ### Blockers
 
 None identified. All original blockers resolved.
+
+## Execution Notes
+
+### Deviations
+
+- Plan called for `test/fixtures/config.toml` as a test fixture.
+  Instead, `config.toml` lives at the project root and is loaded by
+  `ProcessSupervisor` at application start. Tests use
+  `start_supervised!` directly rather than relying on a fixture file.
+- Plan specified `:plug_cowboy` as the HTTP adapter. Implementation
+  uses `:bandit` instead (the Phoenix 1.7+ default).
+- Phase 7 (spec reconciliation) was partially done during execution
+  but completed more thoroughly as part of the subsequent dashboard
+  plan, which updated `specs/control-interface.md`, `specs/routing.md`,
+  and `specs/system-overview.md`.
+- The test server uses raw `:gen_tcp` rather than Plug, as noted in
+  Phase 6 as an alternative.
+
+### Post-Plan Work
+
+After this plan was executed, two additional plans built on it:
+
+- **Readiness checks** — added `starting` state, TCP readiness
+  polling, and timeout-to-crashed transition.
+- **Dashboard** — added a LiveView dashboard at the root route,
+  an `AppRedirect` plug, and real-time controls.
+
+The app was subsequently renamed from Conjure to Bates.
+
+### Execution Stats
+
+| Metric | Value |
+|--------|-------|
+| Executed | 2026-04-23 |
+| Archived | 2026-04-25 |
