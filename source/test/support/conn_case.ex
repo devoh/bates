@@ -6,6 +6,7 @@ defmodule ConjureWeb.ConnCase do
       import Plug.Conn
       import Phoenix.ConnTest
       import Phoenix.LiveViewTest
+      import Conjure.TestHelpers
 
       @endpoint ConjureWeb.Endpoint
     end
