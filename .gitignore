@@ -3,6 +3,7 @@
 .claude/scheduled_tasks.lock
 .claude/execution-status.json
 .claude/worktrees/
+.claude/*-prompt.md
 
 # Agent execution log
 execution.log
