@@ -7,8 +7,10 @@ defmodule ConjureWeb.Plugs.AppRedirect do
   def call(conn, _opts) do
     control_host = ConjureWeb.Endpoint.config(:url)[:host]
 
-    if conn.host != control_host and String.ends_with?(conn.host, ".test") do
-      app_name = conn.host |> String.replace(~r/\.test$/, "")
+    already_loading = match?(["loading" | _], conn.path_info)
+
+    if conn.host != control_host and String.ends_with?(conn.host, ".test") and not already_loading do
+      app_name = conn.host |> String.trim_trailing(".test") |> String.split(".") |> List.first()
 
       conn
       |> redirect(to: "/loading/#{app_name}")
