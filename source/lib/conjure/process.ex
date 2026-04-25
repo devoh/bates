@@ -91,7 +91,7 @@ defmodule Conjure.Process do
     case :exec.stop(pid) do
       :ok ->
         broadcast(process.name, {:status, "down"})
-        {:reply, :ok, %{state | pid: nil, ready: false, started_at: nil}}
+        {:reply, :ok, %{state | pid: nil, ready: false, started_at: nil, exit_status: nil}}
 
       error ->
         {:reply, error, state}
@@ -143,6 +143,12 @@ defmodule Conjure.Process do
 
   @impl GenServer
   def handle_info(:check_ready, state), do: {:noreply, state}
+
+  @impl GenServer
+  def handle_info({:EXIT, _pid, _reason}, %{pid: nil} = state) do
+    # Process was already stopped via down/1; ignore the late EXIT message.
+    {:noreply, state}
+  end
 
   @impl GenServer
   def handle_info({:EXIT, _pid, :normal = exit_status}, %{process: process} = state) do
