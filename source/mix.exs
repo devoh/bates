@@ -1,9 +1,9 @@
-defmodule Conjure.MixProject do
+defmodule Bates.MixProject do
   use Mix.Project
 
   def project do
     [
-      app: :conjure,
+      app: :bates,
       version: "0.1.0",
       elixir: "~> 1.14",
       elixirc_paths: elixirc_paths(Mix.env()),
@@ -16,7 +16,7 @@ defmodule Conjure.MixProject do
   def application do
     [
       extra_applications: [:logger],
-      mod: {Conjure.Application, []}
+      mod: {Bates.Application, []}
     ]
   end
 

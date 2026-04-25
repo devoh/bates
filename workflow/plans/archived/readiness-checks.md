@@ -59,7 +59,7 @@ from "ready." Update `status_name/1` to return `"starting"` when
 `pid` is set but `ready` is false.
 
 **Files to update:**
-- `source/lib/conjure/process.ex` — Add `ready: false` to the state
+- `source/lib/bates/process.ex` — Add `ready: false` to the state
   map in `init/1`. Update `status_name/1` to check `ready`:
   - `pid` is set and `ready` is true → `"up"`
   - `pid` is set and `ready` is false → `"starting"`
@@ -84,7 +84,7 @@ After spawning the OS process, schedule a readiness poll. On each
 tick, attempt a TCP connect. On success, transition to "up."
 
 **Files to update:**
-- `source/lib/conjure/process.ex` — Add module attributes for poll
+- `source/lib/bates/process.ex` — Add module attributes for poll
   interval (`@poll_interval 200`) and readiness timeout
   (`@readiness_timeout 60_000`).
 
@@ -117,7 +117,7 @@ Update existing tests to account for the new "starting" state and
 add tests for the readiness polling behavior.
 
 **Files to update:**
-- `source/test/conjure_web/live/loading_live_test.exs` — The
+- `source/test/bates_web/live/loading_live_test.exs` — The
   "redirects when process starts during mount" test will change
   behavior: `Process.up` no longer triggers an immediate "up"
   broadcast, so the LiveView won't redirect during mount. Instead
@@ -133,7 +133,7 @@ add tests for the readiness polling behavior.
   still work as-is (it sends a manual PubSub broadcast).
 
 **Files to create:**
-- `source/test/conjure/process_readiness_test.exs` — Test the
+- `source/test/bates/process_readiness_test.exs` — Test the
   readiness polling:
   - Process status is "starting" immediately after `up/1`
   - Process transitions to "up" when the port is listening
@@ -201,9 +201,9 @@ describes the implemented behavior.
   changes needed.
 
 **Existing test files:**
-- `test/conjure_web/live/loading_live_test.exs` — 3 tests, 2 need
+- `test/bates_web/live/loading_live_test.exs` — 3 tests, 2 need
   updating
-- `test/conjure/port_number_test.exs` — unaffected
+- `test/bates/port_number_test.exs` — unaffected
 - `test/support/conn_case.ex` — unaffected
 - `test/support/test_server.ex` — useful for readiness tests (it
   binds to `$PORT` and accepts connections)

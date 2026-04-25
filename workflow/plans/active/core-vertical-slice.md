@@ -30,17 +30,17 @@ built. This plan proves the new architecture works end to end.
 - [ ] Config field `dir` renamed to `root` in `process.ex` and
       `config.ex`; `env` renamed to `environment`
 - [ ] A Caddyfile is generated from the TOML config with one route per
-      app using `handle_errors` for fallback, plus a `conjure.test`
+      app using `handle_errors` for fallback, plus a `bates.test`
       route
 - [ ] Caddy starts as a supervised child process with the generated
       config piped to stdin
 - [ ] Startup checks for `caddy` in `$PATH`,
       `/etc/resolver/test` existence, and Caddy trust store
-- [ ] Phoenix serves on an internal port; Caddy proxies `conjure.test`
+- [ ] Phoenix serves on an internal port; Caddy proxies `bates.test`
       to it
 - [ ] Visiting `myapp.test` when the app is down triggers
       `handle_errors` fallback → Phoenix serves a loading page
-- [ ] The loading page opens a LiveView WebSocket to `conjure.test`
+- [ ] The loading page opens a LiveView WebSocket to `bates.test`
       with the app name as a param
 - [ ] The LiveView subscribes to PubSub for the target app and
       redirects when the app is ready
@@ -61,23 +61,23 @@ Remove the files and references that Caddy and Phoenix replace. Get
 back to a clean, compiling state before adding new code.
 
 **Files to delete:**
-- `source/lib/conjure/dns_server.ex`
-- `source/lib/conjure/proxy.ex`
-- `source/lib/conjure/request.ex`
-- `source/lib/conjure/http.ex`
-- `source/lib/conjure/ipc_server.ex`
+- `source/lib/bates/dns_server.ex`
+- `source/lib/bates/proxy.ex`
+- `source/lib/bates/request.ex`
+- `source/lib/bates/http.ex`
+- `source/lib/bates/ipc_server.ex`
 
 **Files to update:**
-- `source/lib/conjure/application.ex` — Remove `Conjure.DNSServer`,
-  `Conjure.IPCServer`, and `Conjure.Proxy` from the children list.
+- `source/lib/bates/application.ex` — Remove `Bates.DNSServer`,
+  `Bates.IPCServer`, and `Bates.Proxy` from the children list.
   Keep `Registry`, `PortNumber`, and `ProcessSupervisor`.
 - `source/mix.exs` — Remove `:dns` dependency. Change `:exec` to
   `:erlexec` (`{:erlexec, "~> 2.3"}` — same API, current package,
   adds `:eof` support for stdin piping). Bump Elixir version
   constraint from `~> 1.11` to `~> 1.14` (required for Phoenix 1.7+;
   Elixir 1.19.5 is installed).
-- `source/test/conjure_test.exs` — Remove the placeholder `hello`
-  test (the `hello/0` function it tests lives in `conjure.ex` which
+- `source/test/bates_test.exs` — Remove the placeholder `hello`
+  test (the `hello/0` function it tests lives in `bates.ex` which
   is also placeholder code — remove that too).
 
 **Verify:** `mix compile` succeeds. `mix test` passes (only the port
@@ -89,11 +89,11 @@ Update the config format to match the specs: `dir` → `root`,
 `env` → `environment`.
 
 **Files to update:**
-- `source/lib/conjure/process.ex` — Rename struct fields: `dir` →
+- `source/lib/bates/process.ex` — Rename struct fields: `dir` →
   `root`, `env` → `environment`. Update `@enforce_keys` to include
   `:root` instead of `:dir`. Update all references in `handle_call`
   and helper functions (`process.dir` → `process.root`, etc.).
-- `source/lib/conjure/config.ex` — No code changes needed (it
+- `source/lib/bates/config.ex` — No code changes needed (it
   converts TOML keys to atoms dynamically), but any test configs
   should use the new field names.
 
@@ -109,33 +109,33 @@ No Caddy yet — Phoenix serves directly for development testing.
 - `source/mix.exs` — Add `:phoenix`, `:phoenix_live_view`,
   `:phoenix_html`, `:phoenix_pubsub`, `:plug_cowboy`, and
   `:jason` (already present) dependencies.
-- `source/lib/conjure/application.ex` — Add Phoenix PubSub and the
+- `source/lib/bates/application.ex` — Add Phoenix PubSub and the
   Phoenix Endpoint to the supervision tree.
 
 **Files to create:**
-- `source/lib/conjure_web/endpoint.ex` — Phoenix Endpoint
+- `source/lib/bates_web/endpoint.ex` — Phoenix Endpoint
   configuration. Serves on an internal port (e.g., 4080). Includes
   LiveView socket configuration.
-- `source/lib/conjure_web/router.ex` — Phoenix Router. Routes:
+- `source/lib/bates_web/router.ex` — Phoenix Router. Routes:
   - `GET /status` → JSON status endpoint
   - `POST /processes/:name/start` → start endpoint
   - `POST /processes/:name/stop` → stop endpoint
   - `GET /loading/:app_name` → loading page LiveView
   - Fallback route that reads `Host` header, identifies the app, and
     redirects to `/loading/:app_name`
-- `source/lib/conjure_web/controllers/process_controller.ex` — JSON
+- `source/lib/bates_web/controllers/process_controller.ex` — JSON
   API controller for status/start/stop.
-- `source/lib/conjure_web/live/loading_live.ex` — Loading page
+- `source/lib/bates_web/live/loading_live.ex` — Loading page
   LiveView. Receives app name as param. Subscribes to PubSub topic
   `process:<app_name>`. On ready state, redirects to the app's URL.
   On crash, displays error and log output.
-- `source/lib/conjure_web/layouts/root.html.heex` — Minimal HTML
+- `source/lib/bates_web/layouts/root.html.heex` — Minimal HTML
   layout for LiveView. Configures the LiveSocket JavaScript to
-  connect to `conjure.test` (or the current host for development
+  connect to `bates.test` (or the current host for development
   without Caddy).
-- `source/lib/conjure_web/layouts.ex` — Layout module.
+- `source/lib/bates_web/layouts.ex` — Layout module.
 - `source/assets/js/app.js` — LiveView JavaScript client setup.
-  Configures `LiveSocket` with the `conjure.test` WebSocket URL.
+  Configures `LiveSocket` with the `bates.test` WebSocket URL.
 - `source/config/config.exs` — Phoenix configuration: endpoint URL
   host, PubSub adapter (PG2), JSON library (Jason), LiveView
   `signing_salt` (generate via `mix phx.gen.secret 32` or hardcode a
@@ -153,7 +153,7 @@ Add state transition broadcasts so LiveViews can subscribe to process
 events.
 
 **Files to update:**
-- `source/lib/conjure/process.ex` — After each state transition
+- `source/lib/bates/process.ex` — After each state transition
   (up, down, crashed), broadcast via Phoenix PubSub on topic
   `process:<name>`. Broadcast the new status and, on crash, include
   recent log output. Import or alias `Phoenix.PubSub`.
@@ -166,11 +166,11 @@ with a test subscriber.
 Generate a Caddyfile and manage Caddy as a supervised child process.
 
 **Files to create:**
-- `source/lib/conjure/caddy.ex` — GenServer that:
+- `source/lib/bates/caddy.ex` — GenServer that:
   1. On init, checks for `caddy` binary in `$PATH`.
   2. Checks for `/etc/resolver/test`.
   3. Generates a Caddyfile from `ProcessSupervisor` state: one
-     `handle_errors` block per app, plus `conjure.test` routing to
+     `handle_errors` block per app, plus `bates.test` routing to
      the Phoenix endpoint port.
   4. Starts Caddy via erlexec with `:stdin` option, sends the
      Caddyfile via `:exec.send/2`, then closes stdin with
@@ -179,12 +179,12 @@ Generate a Caddyfile and manage Caddy as a supervised child process.
   5. On crash, restarts with a fresh Caddyfile.
 
 **Files to update:**
-- `source/lib/conjure/application.ex` — Add `Conjure.Caddy` to the
+- `source/lib/bates/application.ex` — Add `Bates.Caddy` to the
   supervision tree after `ProcessSupervisor` and the Phoenix Endpoint
   (Caddy needs to know the Phoenix port and the app ports).
 
 **Verify:** Caddy starts and logs indicate it's listening on 443/80.
-`curl -k https://conjure.test/status` returns JSON through Caddy.
+`curl -k https://bates.test/status` returns JSON through Caddy.
 Visiting an app hostname when the app is down falls back to the
 control interface.
 
@@ -201,8 +201,8 @@ document setup.
   the test server.
 
 **Files to update:**
-- `source/test/conjure/port_number_test.exs` — Fix the broken call:
-  `Conjure.PortNumber.next_port(daemon)` → `Conjure.PortNumber.next()`.
+- `source/test/bates/port_number_test.exs` — Fix the broken call:
+  `Bates.PortNumber.next_port(daemon)` → `Bates.PortNumber.next()`.
   The function is module-level, not per-pid.
 
 **Files to create or update:**
@@ -213,7 +213,7 @@ document setup.
      127.0.0.1" > /etc/resolver/test'`)
   3. Trust Caddy's CA (`caddy trust`)
 
-**Verify:** `mix test` passes. Manual end-to-end test: start Conjure
+**Verify:** `mix test` passes. Manual end-to-end test: start Bates
 with the test config, visit `testserver.test` in a browser, observe
 the loading page, then the app response.
 
@@ -250,7 +250,7 @@ current implementation. No stale references to removed infrastructure.
 - No multi-service, no middleware, no `hostname` field
 - No dashboard (only loading page)
 - No CLI
-- No `conjure setup` command
+- No `bates setup` command
 - Config file read from current directory
 
 ## Where to Start
@@ -266,20 +266,20 @@ current implementation. No stale references to removed infrastructure.
 - `Process.handle_call(:up, ...)` → `:exec.run_link/2` → OS process
 
 **Files that should NOT change (verify after):**
-- `source/lib/conjure/port_number.ex` — keeps monotonic allocation
-- `source/lib/conjure/process_supervisor.ex` — keeps DynamicSupervisor
+- `source/lib/bates/port_number.ex` — keeps monotonic allocation
+- `source/lib/bates/process_supervisor.ex` — keeps DynamicSupervisor
   structure (may need minor additions for port lookups by Caddy
   generator, but core structure stays)
 
 **Existing test files:**
-- `source/test/conjure/port_number_test.exs` — fix broken function
+- `source/test/bates/port_number_test.exs` — fix broken function
   call
-- `source/test/conjure_test.exs` — delete (tests placeholder code)
+- `source/test/bates_test.exs` — delete (tests placeholder code)
 - `source/test/test_helper.exs` — keep as-is
 
 **Key implementation notes (from sandbox):**
 - Caddyfile uses `handle_errors` not `handle_response` for fallback
-- LiveView WebSocket connects to `conjure.test`, app name as param
+- LiveView WebSocket connects to `bates.test`, app name as param
 - Caddy invocation: `caddy run --adapter caddyfile -c -`
 - Caddy stdin delivery: shell redirect from temp file (see experiment)
 - See `specs/sandbox/implementation-notes.md` for details

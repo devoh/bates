@@ -46,7 +46,7 @@ Given services with hostnames, the generated Caddyfile follows this
 pattern:
 
 ```
-conjure.test {
+bates.test {
   tls internal
   reverse_proxy 127.0.0.1:<control-interface-port>
 }
@@ -70,7 +70,7 @@ only fires on actual upstream responses). `handle_errors` catches
 Caddy's internal error responses. Verified with Caddy v2.9.1.
 
 Each routable service gets the same block structure. The worker pattern
-(no hostname, no route) gets nothing. `conjure.test` routes directly
+(no hostname, no route) gets nothing. `bates.test` routes directly
 to the control interface with no fallback.
 
 ## Control Interface Functions

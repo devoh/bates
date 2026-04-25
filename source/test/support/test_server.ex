@@ -1,7 +1,7 @@
-defmodule Conjure.TestServer do
+defmodule Bates.TestServer do
   @moduledoc """
   A minimal TCP server that binds to `$PORT` and responds with HTTP 200 OK.
-  Used for manual end-to-end testing of the Conjure infrastructure.
+  Used for manual end-to-end testing of the Bates infrastructure.
 
   Start with: `elixir test/support/test_server.ex`
   """
@@ -44,5 +44,5 @@ end
 
 if System.get_env("PORT") do
   port = System.get_env("PORT") |> String.to_integer()
-  Conjure.TestServer.start(port)
+  Bates.TestServer.start(port)
 end

@@ -7,7 +7,7 @@
 
 ## Summary
 
-Replace Conjure's custom DNS server, HTTP reverse proxy, and IPC control
+Replace Bates's custom DNS server, HTTP reverse proxy, and IPC control
 interface with Caddy, Phoenix LiveView, and the macOS resolver. Validate
 the new architecture end to end with a single-service application: read
 the TOML config, start one process with a dynamic port, proxy HTTPS
@@ -18,7 +18,7 @@ startup.
 
 ## Problem
 
-Conjure has a working core — process management, TOML config loading,
+Bates has a working core — process management, TOML config loading,
 port allocation — but the infrastructure around it (custom DNS server,
 hand-rolled TCP reverse proxy, Unix socket IPC) doesn't match the
 target architecture described in the specs. The specs call for Caddy
@@ -47,12 +47,12 @@ pattern.
 
 ### LiveView WebSocket routing
 
-The LiveView WebSocket connects to `conjure.test`, not the app's
+The LiveView WebSocket connects to `bates.test`, not the app's
 hostname. The initial page load hits `myapp.test` → Caddy fallback →
 Phoenix serves the loading page HTML with the app name embedded as a
 LiveView param. The LiveView JavaScript then opens its WebSocket to
-`conjure.test` directly (no fallback path needed for WebSockets).
-Phoenix only needs to handle `conjure.test` for LiveView connections.
+`bates.test` directly (no fallback path needed for WebSockets).
+Phoenix only needs to handle `bates.test` for LiveView connections.
 
 ### Caddy binary
 
@@ -82,7 +82,7 @@ directory for now.
 ### Setup workflow
 
 Document manual setup steps in the README (create
-`/etc/resolver/test`, run `caddy trust`). The `conjure setup` command
+`/etc/resolver/test`, run `caddy trust`). The `bates setup` command
 comes with the CLI proposal.
 
 ### Port allocation
@@ -108,38 +108,38 @@ stabilizes.
 
 ### What exists and stays
 
-- **`source/lib/conjure/process.ex`** — GenServer per application.
+- **`source/lib/bates/process.ex`** — GenServer per application.
   Manages OS process lifecycle (up/down/crashed) via `erlexec`. Has
   port assignment, environment variable passthrough, stdout/stderr
   logging. This is the core and it works.
 
-- **`source/lib/conjure/process_supervisor.ex`** — DynamicSupervisor.
+- **`source/lib/bates/process_supervisor.ex`** — DynamicSupervisor.
   Loads processes from TOML config, starts Process children, provides
   status and hostname lookups.
 
-- **`source/lib/conjure/config.ex`** — Reads and parses `config.toml`,
+- **`source/lib/bates/config.ex`** — Reads and parses `config.toml`,
   builds Process structs from TOML sections.
 
-- **`source/lib/conjure/port_number.ex`** — Agent-based port allocator,
+- **`source/lib/bates/port_number.ex`** — Agent-based port allocator,
   monotonically incrementing from 4200.
 
 ### What gets replaced
 
-- **`source/lib/conjure/dns_server.ex`** — Custom UDP DNS server on
+- **`source/lib/bates/dns_server.ex`** — Custom UDP DNS server on
   port 42000. Replaced by macOS `/etc/resolver/test` pointing to
   `127.0.0.1`.
 
-- **`source/lib/conjure/proxy.ex`** — Hand-rolled TCP reverse proxy on
+- **`source/lib/bates/proxy.ex`** — Hand-rolled TCP reverse proxy on
   port 42001 using `:gen_tcp`. Replaced by Caddy with generated
   Caddyfile.
 
-- **`source/lib/conjure/request.ex`** — Per-request TCP forwarder with
+- **`source/lib/bates/request.ex`** — Per-request TCP forwarder with
   chunked encoding support. Replaced by Caddy.
 
-- **`source/lib/conjure/http.ex`** — HTTP response formatting helpers
+- **`source/lib/bates/http.ex`** — HTTP response formatting helpers
   for the custom proxy. Replaced by Caddy.
 
-- **`source/lib/conjure/ipc_server.ex`** — Unix socket IPC with JSON
+- **`source/lib/bates/ipc_server.ex`** — Unix socket IPC with JSON
   commands (up/down/status). Replaced by Phoenix JSON API and LiveView.
 
 ### What doesn't exist yet
@@ -147,16 +147,16 @@ stabilizes.
 - No Phoenix dependency, no web framework at all.
 - No Caddy integration (no Caddyfile generation, no process management
   for Caddy itself).
-- No CLI (no `conjure start`, `conjure setup`, etc.).
+- No CLI (no `bates start`, `bates setup`, etc.).
 - No LiveView (no dashboard, no loading page).
 
 ### What needs updating
 
-- **`source/lib/conjure/application.ex`** — Supervision tree currently
+- **`source/lib/bates/application.ex`** — Supervision tree currently
   starts the DNS server, IPC server, and proxy. Needs to start Caddy
   and Phoenix instead.
 
-- **`source/lib/conjure/config.ex`** — Field names need updating:
+- **`source/lib/bates/config.ex`** — Field names need updating:
   `dir` → `root`, `env` → `environment`.
 
 - **`source/mix.exs`** — Dependencies include `:dns` (no longer
@@ -186,7 +186,7 @@ starts Caddy, and waits. When a browser hits `myapp.test`:
    control interface.
 4. The control interface identifies the app from the `Host` header,
    starts it, and serves a loading page with the app name embedded.
-5. The loading page opens a LiveView WebSocket to `conjure.test` with
+5. The loading page opens a LiveView WebSocket to `bates.test` with
    the app name as a param. The LiveView subscribes to that app's
    state via PubSub.
 6. When the app is ready (port accepting connections), the LiveView
@@ -198,15 +198,15 @@ starts Caddy, and waits. When a browser hits `myapp.test`:
 from the loaded config and starts Caddy as a child process, piping the
 config to stdin. If Caddy crashes, it restarts with a fresh Caddyfile.
 One route per configured app (using `handle_errors` for the fallback),
-plus `conjure.test` for the control interface. Checks for the `caddy`
+plus `bates.test` for the control interface. Checks for the `caddy`
 binary on startup.
 
 **Phoenix control interface.** Add Phoenix as a dependency. The control
 interface serves on an internal port (not exposed to users directly —
-Caddy proxies `conjure.test` to it). Three pieces for this proposal:
+Caddy proxies `bates.test` to it). Three pieces for this proposal:
 
 - A loading page (LiveView) that subscribes to process state via
-  PubSub. The WebSocket connects to `conjure.test`; the app name is
+  PubSub. The WebSocket connects to `bates.test`; the app name is
   passed as a param from the initial fallback page load. Shows the
   app name and status, redirects on ready.
 - A fallback page handler that reads the `Host` header to identify
@@ -255,7 +255,7 @@ callbacks.
 
 - **Add:** Phoenix, Phoenix LiveView, Caddy process management,
   Caddyfile generation (using `handle_errors` for fallback), loading
-  page LiveView (WebSocket via `conjure.test`), fallback page handler,
+  page LiveView (WebSocket via `bates.test`), fallback page handler,
   JSON API (status/start/stop), PubSub broadcasting from Process
   GenServer, Elixir test app, manual setup docs in README.
 - **Remove:** DNS server, HTTP proxy, request forwarder, HTTP helpers,
@@ -266,7 +266,7 @@ callbacks.
 - **Keep:** Process GenServer, ProcessSupervisor, Config (structure),
   PortNumber (monotonic), `$PORT` substitution.
 - **Defer:** Dashboard, CLI, multi-service, middleware, `hostname`
-  field, dynamic port detection, `conjure setup` command, config file
+  field, dynamic port detection, `bates setup` command, config file
   path change, automated integration tests.
 
 ---

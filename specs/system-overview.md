@@ -1,9 +1,9 @@
 # System Overview
 
-Conjure is a local development server that runs multiple web applications
+Bates is a local development server that runs multiple web applications
 simultaneously on macOS. All `*.test` hostnames resolve to localhost via the
 macOS resolver. Caddy terminates SSL and reverse-proxies requests to the
-correct application. Conjure manages application processes and provides a
+correct application. Bates manages application processes and provides a
 control interface for visibility and control.
 
 ## Domains
@@ -33,7 +33,7 @@ See [Routing](routing.md).
 ### Control Interface
 
 A dashboard, JSON API, and loading page served on the reserved hostname
-`conjure.test`. Provides a browser-friendly view of application status,
+`bates.test`. Provides a browser-friendly view of application status,
 controls for start/stop/restart, and on-demand startup with boot progress
 for applications that aren't running yet.
 
@@ -92,8 +92,8 @@ The on-demand startup flow (app not running):
 
 ### CLI
 
-The command-line interface for launching and interacting with Conjure.
-`conjure start` runs the server in the foreground. Control commands
+The command-line interface for launching and interacting with Bates.
+`bates start` runs the server in the foreground. Control commands
 (`status`, `up`, `down`, `restart`) communicate with the running server
 via the JSON API.
 
@@ -101,7 +101,7 @@ See [CLI](cli.md).
 
 ## Setup
 
-`conjure setup` performs one-time system configuration that requires
+`bates setup` performs one-time system configuration that requires
 elevated permissions:
 
 1. Creates `/etc/resolver/test` to route all `*.test` DNS lookups to
@@ -110,7 +110,7 @@ elevated permissions:
    certificate into the macOS system trust store (Caddy prompts for a
    password).
 
-Both steps are idempotent — running `conjure setup` again is safe. Conjure
+Both steps are idempotent — running `bates setup` again is safe. Bates
 should detect when setup hasn't been run and tell the user what to do,
 rather than failing silently or elevating automatically.
 

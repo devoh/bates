@@ -1,0 +1,2 @@
+defmodule Bates do
+end

@@ -1,13 +1,13 @@
 # Routing
 
-Caddy runs as a managed child process in Conjure's supervision tree. It
+Caddy runs as a managed child process in Bates's supervision tree. It
 terminates SSL, handles HTTP/2 and WebSockets, and reverse-proxies requests
 to application processes based on hostname.
 
 ## DNS Resolution
 
 All `*.test` hostnames resolve to `127.0.0.1` via the macOS resolver. This
-is a one-time system configuration, not managed by Conjure:
+is a one-time system configuration, not managed by Bates:
 
 ```
 # /etc/resolver/test
@@ -37,17 +37,17 @@ No custom DNS server. No dynamic resolution.
 
 ## Caddy Lifecycle
 
-Conjure generates a Caddyfile from the TOML configuration and pipes it
+Bates generates a Caddyfile from the TOML configuration and pipes it
 to Caddy on startup. No config file is written to disk.
 
-If Caddy crashes, Conjure restarts it and pipes a freshly generated
+If Caddy crashes, Bates restarts it and pipes a freshly generated
 Caddyfile. The config is generated from the TOML configuration each
 time, so it always reflects the current state.
 
 ### Route Generation
 
-Conjure generates one route per routable service (any service with a
-`hostname`), plus one for `conjure.test`. Services without a `hostname`
+Bates generates one route per routable service (any service with a
+`hostname`), plus one for `bates.test`. Services without a `hostname`
 get no route.
 
 ## Static Routes with Fallback
@@ -66,29 +66,29 @@ Caddy falls back to the control interface, which starts the entire
 application (all services, not just the one that was requested). See
 [Control Interface](control-interface.md).
 
-The `conjure.test` route points directly to the control interface with no
-fallback — it is always handled by Conjure.
+The `bates.test` route points directly to the control interface with no
+fallback — it is always handled by Bates.
 
 Port assignments are stable across service stop/start cycles within a
-Conjure session, so routes never need updating at runtime. Ports are
-dynamically assigned at init time and may differ across Conjure restarts,
+Bates session, so routes never need updating at runtime. Ports are
+dynamically assigned at init time and may differ across Bates restarts,
 but the Caddyfile is regenerated on each start.
 
 ## Control Interface Routing
 
 Within the Phoenix application, an `AppRedirect` plug in the browser
 pipeline handles app-domain requests before they reach any route. When
-a request arrives with a `.test` hostname other than `conjure.test`, the
+a request arrives with a `.test` hostname other than `bates.test`, the
 plug redirects to the loading page (`/loading/<name>`). This happens at
 the pipeline level, before route matching.
 
-Requests to `conjure.test` pass through the plug unchanged and are
+Requests to `bates.test` pass through the plug unchanged and are
 handled by the normal route table: the dashboard at `/`, the loading
 page at `/loading/:app_name`, and a catch-all fallback returning 404.
 
 ## How It Connects
 
-- **Conjure** starts Caddy as a child process, generating the routing
+- **Bates** starts Caddy as a child process, generating the routing
   configuration from the TOML configuration.
 - **Control interface** is the fallback for all service routes, handling
   on-demand startup when an app is down.

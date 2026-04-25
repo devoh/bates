@@ -1,4 +1,4 @@
-defmodule ConjureWeb.ConnCase do
+defmodule BatesWeb.ConnCase do
   use ExUnit.CaseTemplate
 
   using do
@@ -6,9 +6,9 @@ defmodule ConjureWeb.ConnCase do
       import Plug.Conn
       import Phoenix.ConnTest
       import Phoenix.LiveViewTest
-      import Conjure.TestHelpers
+      import Bates.TestHelpers
 
-      @endpoint ConjureWeb.Endpoint
+      @endpoint BatesWeb.Endpoint
     end
   end
 

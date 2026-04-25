@@ -1,13 +1,13 @@
 # Reverse Proxy
 
-Evaluation of off-the-shelf reverse proxies to replace Conjure's custom HTTP
+Evaluation of off-the-shelf reverse proxies to replace Bates's custom HTTP
 proxy. The custom proxy handles request parsing, forwarding, and response
 streaming manually but does not support SSL, WebSockets, HTTP/2, or
 concurrent connections. An off-the-shelf proxy gets all of these for free.
 
 ## Decision
 
-Use Caddy. Conjure manages it as a child process and configures it
+Use Caddy. Bates manages it as a child process and configures it
 dynamically via its REST API.
 
 ## Why Caddy
@@ -20,7 +20,7 @@ local CA and installs the root certificate into the system trust store. No
 `mkcert`, no manual CA setup, no certificate files.
 
 This is the single biggest reason to use Caddy. SSL support is a core
-Conjure requirement and Caddy makes it zero-configuration.
+Bates requirement and Caddy makes it zero-configuration.
 
 ### Dynamic Configuration via REST API
 
@@ -50,7 +50,7 @@ curl -X DELETE http://localhost:2019/id/myapp
 ```
 
 The `@id` field enables direct access to individual routes without knowing
-their position in the array. This maps cleanly to Conjure's process names.
+their position in the array. This maps cleanly to Bates's process names.
 
 ### What Else It Provides
 
@@ -73,31 +73,31 @@ development requires `mkcert` as a separate tool to generate certificates,
 plus manual configuration to point Traefik at the certificate files. This
 negates the main benefit of using an off-the-shelf proxy.
 
-## Integration with Conjure
+## Integration with Bates
 
 ### Caddy as a Managed Process
 
-Conjure starts Caddy as a child process in its supervision tree, similar to
+Bates starts Caddy as a child process in its supervision tree, similar to
 how it manages application processes. Caddy listens on ports 80 and 443 (or
 configured alternatives) for HTTP and HTTPS traffic.
 
 ### Route Lifecycle
 
-When a Conjure process starts:
+When a Bates process starts:
 
 1. The process gets a port assigned (e.g., 4200).
-2. Conjure POSTs a route to Caddy's admin API mapping `<name>.test` to
+2. Bates POSTs a route to Caddy's admin API mapping `<name>.test` to
    `127.0.0.1:<port>`.
 3. Caddy automatically issues an SSL certificate for `<name>.test`.
 
-When a Conjure process stops:
+When a Bates process stops:
 
-1. Conjure DELETEs the route from Caddy via the admin API.
+1. Bates DELETEs the route from Caddy via the admin API.
 
 ### The Control Interface
 
 The control interface (dashboard and JSON API) runs as an internal HTTP
-server within Conjure on its own port. Conjure registers `conjure.test` as
+server within Bates on its own port. Bates registers `bates.test` as
 a Caddy upstream pointing to that port, just like any other application.
 This is added as a permanent route on Caddy startup, not tied to any
 application process lifecycle.
@@ -127,7 +127,7 @@ With Caddy in front, the port layout becomes:
 
 | Port | Service |
 |------|---------|
-| 42000 | Conjure DNS server (UDP) |
+| 42000 | Bates DNS server (UDP) |
 | 80 | Caddy HTTP (redirects to HTTPS) |
 | 443 | Caddy HTTPS (reverse proxy to applications) |
 | 2019 | Caddy admin API (localhost only) |

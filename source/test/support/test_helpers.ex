@@ -1,4 +1,4 @@
-defmodule Conjure.TestHelpers do
+defmodule Bates.TestHelpers do
   def assert_eventually(fun, attempts \\ 50) do
     if fun.() do
       :ok

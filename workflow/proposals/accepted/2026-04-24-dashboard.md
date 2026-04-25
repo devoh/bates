@@ -7,7 +7,7 @@
 
 ## Summary
 
-Add a dashboard LiveView at `conjure.test` that shows all configured
+Add a dashboard LiveView at `bates.test` that shows all configured
 applications with their status, hostname, and port, with real-time
 updates via PubSub and controls to start, stop, and restart each
 application.
@@ -16,7 +16,7 @@ application.
 
 ## Problem
 
-Visiting `conjure.test` currently returns a 404 from the
+Visiting `bates.test` currently returns a 404 from the
 FallbackController. There's no way to see which applications are
 configured, what state they're in, or control them from a browser.
 The JSON API exists (`GET /status`, `POST /processes/:name/start`,
@@ -35,7 +35,7 @@ Pow's status endpoint and Puma-dev's status page).
   with PubSub subscriptions so status updates appear in real time
   without polling or client-side JavaScript. This matches the loading
   page's approach.
-- **Served on `conjure.test`.** The dashboard is the default view when
+- **Served on `bates.test`.** The dashboard is the default view when
   visiting the control hostname in a browser. The existing API
   endpoints coexist on the same hostname via content negotiation (the
   API routes are in the `:api` pipeline, the dashboard in `:browser`).
@@ -72,34 +72,34 @@ Pow's status endpoint and Puma-dev's status page).
 > or executed. These are pointers to help orient, not implementation
 > instructions.
 
-- **ProcessSupervisor** (`source/lib/conjure/process_supervisor.ex`) —
+- **ProcessSupervisor** (`source/lib/bates/process_supervisor.ex`) —
   `process_names/0` returns all registered process names from the
   Registry. `status/0` returns a map of hostname to status. These are
   the data sources for the dashboard.
-- **Process GenServer** (`source/lib/conjure/process.ex`) — Public API:
+- **Process GenServer** (`source/lib/bates/process.ex`) — Public API:
   `up/1`, `down/1`, `port/1`, `status/1`. Broadcasts on
   `process:<name>` with `{:status, "starting"}`, `{:status, "up"}`,
   `{:status, "down"}`, `{:status, "crashed", log_output}`.
-- **ProcessController** (`source/lib/conjure_web/controllers/process_controller.ex`) —
+- **ProcessController** (`source/lib/bates_web/controllers/process_controller.ex`) —
   JSON API for status, start, stop. The `status/2` action builds a
   list of process maps with name, hostname, status, and port. The
   dashboard needs the same data but rendered as HTML.
-- **LoadingLive** (`source/lib/conjure_web/live/loading_live.ex`) —
+- **LoadingLive** (`source/lib/bates_web/live/loading_live.ex`) —
   Existing LiveView that subscribes to a single process's PubSub topic.
   The dashboard will follow the same pattern but subscribe to all
   processes.
-- **FallbackController** (`source/lib/conjure_web/controllers/fallback_controller.ex`) —
-  Catch-all route. Returns 404 for `conjure.test` requests. The
+- **FallbackController** (`source/lib/bates_web/controllers/fallback_controller.ex`) —
+  Catch-all route. Returns 404 for `bates.test` requests. The
   dashboard will replace this 404 as the default view.
-- **Router** (`source/lib/conjure_web/router.ex`) — Browser pipeline
+- **Router** (`source/lib/bates_web/router.ex`) — Browser pipeline
   has `live "/loading/:app_name", LoadingLive` and
   `get "/*path", FallbackController, :index`. The dashboard route
   needs to go before the catch-all.
-- **Layouts** (`source/lib/conjure_web/layouts/`) — Minimal root
+- **Layouts** (`source/lib/bates_web/layouts/`) — Minimal root
   layout with no CSS framework. `app.html.heex` passes through
   `@inner_content` with no wrapper.
-- **Tests** — `test/conjure_web/live/loading_live_test.exs` (LiveView
-  test patterns), `test/conjure_web/controllers/fallback_controller_test.exs`
+- **Tests** — `test/bates_web/live/loading_live_test.exs` (LiveView
+  test patterns), `test/bates_web/controllers/fallback_controller_test.exs`
   (controller tests), `test/support/conn_case.ex` (test helper).
 
 ---
@@ -141,7 +141,7 @@ endpoints needed.
 
 The dashboard mounts at `live "/", DashboardLive` in the browser
 pipeline, before the catch-all. The FallbackController continues to
-handle non-root paths on `conjure.test` (returning 404) and app
+handle non-root paths on `bates.test` (returning 404) and app
 domain redirects.
 
 ---
@@ -152,7 +152,7 @@ domain redirects.
    current state.
 2. One-click start, stop, and restart from the browser.
 3. Real-time status updates without manual refresh.
-4. A landing page for `conjure.test` instead of a 404.
+4. A landing page for `bates.test` instead of a 404.
 
 ---
 

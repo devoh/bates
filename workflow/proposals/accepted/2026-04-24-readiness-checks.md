@@ -7,7 +7,7 @@
 
 ## Summary
 
-Add TCP-based readiness checks so Conjure knows when a process is
+Add TCP-based readiness checks so Bates knows when a process is
 actually accepting connections, not just spawned. The loading page
 currently redirects the moment the OS process starts, which usually
 lands on a connection refused error because the app hasn't bound its
@@ -68,12 +68,12 @@ until the app finally starts.
 > or executed. These are pointers to help orient, not implementation
 > instructions.
 
-- **Process GenServer** (`source/lib/conjure/process.ex`) — Manages
+- **Process GenServer** (`source/lib/bates/process.ex`) — Manages
   the OS process lifecycle. `handle_call(:up, ...)` starts the process
   and broadcasts `{:status, "up"}` immediately. State tracks `pid`,
   `exit_status`, and a log buffer. The `status_name/1` helper derives
   status from whether `pid` is set.
-- **Loading LiveView** (`source/lib/conjure_web/live/loading_live.ex`)
+- **Loading LiveView** (`source/lib/bates_web/live/loading_live.ex`)
   — Subscribes to PubSub topic `process:<name>`. Redirects on
   `{:status, "up"}` or if status is `"up"` at mount time. Shows crash
   details on `{:status, "crashed", log_output}`.
@@ -82,7 +82,7 @@ until the app finally starts.
   `{:status, "down"}`, `{:status, "crashed", log_output}`.
 - **Process struct** — Has a `port` field (0 means auto-assign). Port
   is assigned at init via `PortNumber.next/0`.
-- **Tests** — `test/conjure_web/live/loading_live_test.exs` covers
+- **Tests** — `test/bates_web/live/loading_live_test.exs` covers
   redirect on PubSub message, redirect on mount when already up, and
   redirect when process starts during mount.
 

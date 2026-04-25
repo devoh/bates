@@ -1,4 +1,4 @@
-# Conjure
+# Bates
 
 Local multi-application development server.
 

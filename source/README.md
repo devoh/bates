@@ -1,4 +1,4 @@
-# Conjure
+# Bates
 
 A server process manager for local development.
 

@@ -1,6 +1,6 @@
 # Plan: Dashboard
 
-**Goal:** Add a LiveView dashboard at `conjure.test` showing all
+**Goal:** Add a LiveView dashboard at `bates.test` showing all
 configured applications with real-time status and start/stop/restart
 controls.
 
@@ -15,14 +15,14 @@ controls.
 
 ## Why This Matters
 
-Visiting `conjure.test` returns a 404. There's no browser-based way to
+Visiting `bates.test` returns a 404. There's no browser-based way to
 see which applications are configured, what state they're in, or
 control them. The dashboard fills this gap with real-time visibility
 and one-click controls.
 
 ## Acceptance Criteria
 
-- [x] Visiting `conjure.test/` in a browser shows the dashboard
+- [x] Visiting `bates.test/` in a browser shows the dashboard
 - [x] The dashboard lists all configured processes with name, hostname
       (clickable link), status, and port
 - [x] Status updates in real time via PubSub (no page refresh)
@@ -51,22 +51,22 @@ browser pipeline. This must happen first because the dashboard route
 would otherwise catch app-domain requests.
 
 **Files to create:**
-- `source/lib/conjure_web/plugs/app_redirect.ex` — A plug module
+- `source/lib/bates_web/plugs/app_redirect.ex` — A plug module
   that compares `conn.host` against the control hostname
-  (`ConjureWeb.Endpoint.config(:url)[:host]`). If the host is not
+  (`BatesWeb.Endpoint.config(:url)[:host]`). If the host is not
   the control host, extract the app name (strip `.test` suffix) and
   redirect to `/loading/<app_name>`. Otherwise, pass through.
 
 **Files to update:**
-- `source/lib/conjure_web/router.ex` — Add the plug to the browser
-  pipeline: `plug ConjureWeb.Plugs.AppRedirect`.
-- `source/lib/conjure_web/controllers/fallback_controller.ex` —
+- `source/lib/bates_web/router.ex` — Add the plug to the browser
+  pipeline: `plug BatesWeb.Plugs.AppRedirect`.
+- `source/lib/bates_web/controllers/fallback_controller.ex` —
   Remove the host check. The controller no longer needs to
   distinguish app domains from the control domain. It only handles
-  `conjure.test` requests now, so it can always return 404.
+  `bates.test` requests now, so it can always return 404.
 
 **Files to update (tests):**
-- `source/test/conjure_web/controllers/fallback_controller_test.exs` —
+- `source/test/bates_web/controllers/fallback_controller_test.exs` —
   The "redirects app domain to loading page" test now tests the plug
   behavior (the redirect still happens, just earlier in the pipeline).
   The "returns 404 on control domain" test should still pass.
@@ -80,7 +80,7 @@ Create the dashboard LiveView with real-time status display and
 process controls.
 
 **Files to create:**
-- `source/lib/conjure_web/live/dashboard_live.ex` — A LiveView that:
+- `source/lib/bates_web/live/dashboard_live.ex` — A LiveView that:
   - In `mount/3`: calls `ProcessSupervisor.process_names/0`, then
     `Process.status/1` and `Process.port/1` for each name.
     Subscribes to `process:<name>` PubSub topic for each. Stores
@@ -109,11 +109,11 @@ process controls.
     font, clean layout, no CSS framework).
 
 **Files to update:**
-- `source/lib/conjure_web/router.ex` — Add
+- `source/lib/bates_web/router.ex` — Add
   `live "/", DashboardLive` to the browser scope, before the
   loading and catch-all routes.
 
-**Verify:** `mix compile` succeeds. Visiting `conjure.test/` shows the
+**Verify:** `mix compile` succeeds. Visiting `bates.test/` shows the
 dashboard with process list.
 
 ### Phase 3: Tests
@@ -122,7 +122,7 @@ Add tests for the dashboard LiveView and update existing tests as
 needed.
 
 **Files to create:**
-- `source/test/conjure_web/live/dashboard_live_test.exs` — Tests:
+- `source/test/bates_web/live/dashboard_live_test.exs` — Tests:
   - Dashboard renders with process list (name, hostname, status,
     port)
   - Dashboard shows empty state when no processes configured
@@ -133,7 +133,7 @@ needed.
   - Restart calls `Process.down/1` then `Process.up/1`
 
 **Files to update:**
-- `source/test/conjure_web/controllers/fallback_controller_test.exs` —
+- `source/test/bates_web/controllers/fallback_controller_test.exs` —
   Update if the plug changes affect test behavior. The app-domain
   redirect test should still pass (the redirect happens in the plug
   now). The 404 test on control domain for `"/"` path may need
@@ -192,14 +192,14 @@ describes the implemented behavior.
   (lines 24-29). The dashboard route goes here, before the catch-all.
 
 **Endpoint config:**
-- `ConjureWeb.Endpoint.config(:url)[:host]` returns the control
-  hostname (e.g., `"conjure.test"`). Used by FallbackController and
+- `BatesWeb.Endpoint.config(:url)[:host]` returns the control
+  hostname (e.g., `"bates.test"`). Used by FallbackController and
   will be used by the new plug.
 
 **Existing test files:**
-- `test/conjure_web/live/loading_live_test.exs` — LiveView test
+- `test/bates_web/live/loading_live_test.exs` — LiveView test
   patterns (PubSub subscription, redirect assertions)
-- `test/conjure_web/controllers/fallback_controller_test.exs` — 2
+- `test/bates_web/controllers/fallback_controller_test.exs` — 2
   tests, both may need updating
 - `test/support/conn_case.ex` — test helper with `@endpoint` and
   `build_conn()`
@@ -230,9 +230,9 @@ pre-work is required.
 |------------|--------|-------|
 | `ProcessSupervisor.process_names/0` | Verified | Returns registered names from Registry |
 | `Process.up/1`, `down/1`, `port/1`, `status/1` | Verified | All exist with expected signatures |
-| Phoenix PubSub | Verified | In supervision tree as `Conjure.PubSub` |
+| Phoenix PubSub | Verified | In supervision tree as `Bates.PubSub` |
 | Phoenix LiveView | Verified | In mix.exs deps |
-| `ConjureWeb.Endpoint.config(:url)[:host]` | Verified | Returns `"conjure.test"` |
+| `BatesWeb.Endpoint.config(:url)[:host]` | Verified | Returns `"bates.test"` |
 
 ### Open Questions
 

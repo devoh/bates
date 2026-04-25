@@ -1,7 +1,7 @@
 # Procfile Managers
 
 A survey of tools that run multiple processes from a `Procfile`. These are
-relevant to Conjure because the Procfile format is a potential plugin point for
+relevant to Bates because the Procfile format is a potential plugin point for
 process discovery within applications.
 
 ## The Procfile Format
@@ -70,17 +70,17 @@ or environments where you just want to run processes and see output.
 - **Ultraman** (Rust): Foreman port with identical semantics.
 - **Prox** (Go): Adds Unix socket control and per-process log tailing.
 
-## Relevance to Conjure
+## Relevance to Bates
 
-Conjure's TOML configuration already defines services per-application. A
+Bates's TOML configuration already defines services per-application. A
 Procfile plugin could optionally discover processes from an app's `Procfile`
 instead of requiring manual configuration:
 
 - Read `Procfile` from the application's working directory.
-- Map process types to Conjure services.
+- Map process types to Bates services.
 - Fall back to TOML-defined services when no `Procfile` exists.
 - Allow TOML overrides even when a `Procfile` is present.
 
 Overmind's per-process restart and tmux attachment are worth studying as UX
-patterns, though Conjure's architecture (BEAM-based supervision) may offer
+patterns, though Bates's architecture (BEAM-based supervision) may offer
 equivalent capabilities through OTP process management rather than tmux.

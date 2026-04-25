@@ -2,7 +2,7 @@
 
 A survey of projects that manage local development environments for web
 applications on macOS. These represent the historical lineage of the
-problem-space that Conjure operates in.
+problem-space that Bates operates in.
 
 ## Pow
 
@@ -44,7 +44,7 @@ CoffeeScript codebase made contributions difficult in its later years.
 - **Stars:** 1.8k
 
 Self-described "emotional successor to Pow." The closest living project to what
-Conjure is building. Uses `.test` TLD. Automatic HTTPS via a local CA.
+Bates is building. Uses `.test` TLD. Automatic HTTPS via a local CA.
 WebSocket support.
 
 **Architecture:**
@@ -55,7 +55,7 @@ WebSocket support.
 - Symlink-based app discovery (same model as Pow).
 - Status API via `puma-dev` hostname.
 
-**Limitations relevant to Conjure:**
+**Limitations relevant to Bates:**
 - Rack-only. Spawns Puma processes, so it's locked to Ruby web apps.
 - Single-application-per-hostname. No concept of multi-service applications
   (web server + worker + database).
@@ -105,14 +105,14 @@ and multiplexes output. No DNS, no SSL, no routing.
 - Single-application only.
 
 **Ideas worth borrowing:**
-- The `Procfile` format is a de facto standard. Conjure could optionally read
+- The `Procfile` format is a de facto standard. Bates could optionally read
   Procfiles from application directories as a plugin for process discovery
   (as noted in the project's CLAUDE.md).
 - `.env` file loading is a well-understood pattern.
 
 ## Gaps in the Landscape
 
-The consistent gaps across all of these projects, which define Conjure's
+The consistent gaps across all of these projects, which define Bates's
 opportunity:
 
 1. **Multi-application orchestration.** Every project above is single-app.
@@ -123,7 +123,7 @@ opportunity:
    Foreman is language-agnostic but doesn't handle DNS or SSL.
 
 3. **Environment setup.** None manage environment configuration per-app (e.g.,
-   loading the right Ruby/Node version, setting env vars). Conjure's TOML
+   loading the right Ruby/Node version, setting env vars). Bates's TOML
    config addresses this.
 
 4. **Service dependencies.** No project handles "app A needs PostgreSQL and

@@ -131,12 +131,12 @@ numeric `port` use that value directly.
 
 Port assignment happens at application init time, not at startup of the OS
 process. A service keeps its assigned port for its entire lifetime, even
-across stop/start cycles. Ports may differ across Conjure restarts since
+across stop/start cycles. Ports may differ across Bates restarts since
 they are dynamically assigned rather than deterministic.
 
 ## Supervision
 
-On startup, Conjure reads the TOML configuration and creates a
+On startup, Bates reads the TOML configuration and creates a
 supervised process for each application. Each application supervises
 its own services. Applications start asynchronously so initialization
 doesn't block.
@@ -221,14 +221,14 @@ exec bin/rails server
 
 OS processes require:
 
-- Linked execution (Conjure is notified on exit).
+- Linked execution (Bates is notified on exit).
 - stdout/stderr capture.
 - Signal-based stop (graceful shutdown).
 - Working directory configuration (from the application's `root`).
 
 ## Readiness
 
-After spawning the OS process, Conjure polls `127.0.0.1:<port>` via TCP
+After spawning the OS process, Bates polls `127.0.0.1:<port>` via TCP
 connect every 200ms. When the connection succeeds, the service transitions
 from `starting` to `up` and a PubSub broadcast fires. If 60 seconds elapse
 without a successful connection, the OS process is stopped and the service
@@ -246,14 +246,14 @@ to `up` with no polling).
 
 Each service's stdout and stderr are captured and handled in two ways:
 
-1. **Interleaved stream.** All service output is written to Conjure's
+1. **Interleaved stream.** All service output is written to Bates's
    stdout with each line prefixed by the application and service name
    (e.g., `[myapp:web]`). This provides a single stream for watching
    all activity.
 
 2. **Per-service log files.** Each service's output is also written to a
    dedicated log file for isolated inspection. Log files are stored in a
-   runtime directory scoped to the current Conjure session.
+   runtime directory scoped to the current Bates session.
 
 ## How It Connects
 

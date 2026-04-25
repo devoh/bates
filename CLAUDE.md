@@ -1,8 +1,8 @@
-# Conjure
+# Bates
 
 Local multi-application development server.
 
-**Repo:** tylerhunt/conjure
+**Repo:** tylerhunt/bates
 **Methodology:** Context-Driven Development (CDD). See `CDD.md`.
 
 ## Additional Context
@@ -12,7 +12,7 @@ gitignored.
 
 ## What This Is
 
-Conjure is a local development server that supports running multiple server
+Bates is a local development server that supports running multiple server
 applications simultaneously. It is configured by a TOML file with each
 application given its own section that defines the working path, environment
 setup, and the services required to run the application.

@@ -1,14 +1,14 @@
 # Control Interface
 
-A built-in dashboard, API, and loading page served by Conjure on its own
-internal port. Caddy routes `conjure.test` directly here, and all application
+A built-in dashboard, API, and loading page served by Bates on its own
+internal port. Caddy routes `bates.test` directly here, and all application
 routes fall back here when the app isn't running.
 
 ## Dashboard
 
-A human-friendly web page at `conjure.test` that shows the state of all
+A human-friendly web page at `bates.test` that shows the state of all
 configured applications. The dashboard is the default view when visiting
-`conjure.test` in a browser.
+`bates.test` in a browser.
 
 Implemented as a Phoenix LiveView. The LiveView subscribes to process
 state changes via PubSub, so the dashboard updates in real time without
@@ -73,15 +73,15 @@ terminal.
 
 ## API
 
-A JSON API on `conjure.test` for programmatic control. This is what a CLI
-tool (`conjure status`, `conjure up myapp`) would use under the hood.
+A JSON API on `bates.test` for programmatic control. This is what a CLI
+tool (`bates status`, `bates up myapp`) would use under the hood.
 
 ### Endpoints
 
 **List all processes and their status:**
 
 ```
-GET conjure.test/status
+GET bates.test/status
 
 → 200
 {
@@ -95,7 +95,7 @@ GET conjure.test/status
 **Start a process:**
 
 ```
-POST conjure.test/processes/<name>/start
+POST bates.test/processes/<name>/start
 
 → 200  {"name": "myapp", "status": "up"}
 → 422  {"name": "myapp", "error": "..."}
@@ -104,7 +104,7 @@ POST conjure.test/processes/<name>/start
 **Stop a process:**
 
 ```
-POST conjure.test/processes/<name>/stop
+POST bates.test/processes/<name>/stop
 
 → 200  {"name": "myapp", "status": "down"}
 → 422  {"name": "myapp", "error": "..."}
@@ -113,7 +113,7 @@ POST conjure.test/processes/<name>/stop
 **Restart a process:**
 
 ```
-POST conjure.test/processes/<name>/restart
+POST bates.test/processes/<name>/restart
 
 → 200  {"name": "myapp", "status": "up"}
 → 422  {"name": "myapp", "error": "..."}
@@ -129,13 +129,13 @@ The dashboard and API share the same hostname. Routing between them:
 
 ## How It Connects
 
-Caddy routes requests to `conjure.test` directly to the control interface.
+Caddy routes requests to `bates.test` directly to the control interface.
 All application routes use the control interface as a fallback upstream —
 when an app isn't listening, Caddy's connection is refused and the request
 lands here instead. See [Routing](routing.md).
 
 An `AppRedirect` plug in the browser pipeline intercepts app-domain
-requests (any `.test` hostname other than `conjure.test`) and redirects
+requests (any `.test` hostname other than `bates.test`) and redirects
 them to the loading page before they reach any route. This keeps the
 dashboard and other control-domain routes from accidentally handling
 app-domain traffic.
