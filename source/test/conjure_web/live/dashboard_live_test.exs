@@ -17,17 +17,7 @@ defmodule ConjureWeb.DashboardLiveTest do
   test "renders empty state when no processes configured", %{conn: conn} do
     {:ok, _live, html} = live(conn, "/")
 
-    # Only processes from config.toml may be present. If the process
-    # list is empty (no config.toml), the empty state should display.
-    # When config.toml exists, the table renders instead.
-    names = Conjure.ProcessSupervisor.process_names()
-
-    if names == [] do
-      assert html =~ "No applications configured"
-    else
-      assert html =~ "Name"
-      assert html =~ "Hostname"
-    end
+    assert html =~ "No applications configured"
   end
 
   test "displays port number for process", %{conn: conn} do
