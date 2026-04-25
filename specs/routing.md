@@ -74,6 +74,18 @@ Conjure session, so routes never need updating at runtime. Ports are
 dynamically assigned at init time and may differ across Conjure restarts,
 but the Caddyfile is regenerated on each start.
 
+## Control Interface Routing
+
+Within the Phoenix application, an `AppRedirect` plug in the browser
+pipeline handles app-domain requests before they reach any route. When
+a request arrives with a `.test` hostname other than `conjure.test`, the
+plug redirects to the loading page (`/loading/<name>`). This happens at
+the pipeline level, before route matching.
+
+Requests to `conjure.test` pass through the plug unchanged and are
+handled by the normal route table: the dashboard at `/`, the loading
+page at `/loading/:app_name`, and a catch-all fallback returning 404.
+
 ## How It Connects
 
 - **Conjure** starts Caddy as a child process, generating the routing

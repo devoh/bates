@@ -20,7 +20,7 @@ For each application:
 
 - **Name** — the process name from the TOML configuration.
 - **Hostname** — the `.test` URL (clickable link to the app).
-- **Status** — up, down, or crashed. Updates live as state changes.
+- **Status** — down, starting, up, or crashed. Updates live as state changes.
 - **Port** — the assigned port number.
 
 ### Controls
@@ -32,8 +32,8 @@ Each application has controls to:
 - **Restart** — stop then start.
 
 Controls should reflect current state: a running app shows stop and restart,
-a stopped app shows start, a crashed app shows start. Controls update
-immediately as state transitions occur.
+a starting app shows stop, a stopped app shows start, a crashed app shows
+start. Controls update immediately as state transitions occur.
 
 ## Loading Page
 
@@ -133,6 +133,12 @@ Caddy routes requests to `conjure.test` directly to the control interface.
 All application routes use the control interface as a fallback upstream —
 when an app isn't listening, Caddy's connection is refused and the request
 lands here instead. See [Routing](routing.md).
+
+An `AppRedirect` plug in the browser pipeline intercepts app-domain
+requests (any `.test` hostname other than `conjure.test`) and redirects
+them to the loading page before they reach any route. This keeps the
+dashboard and other control-domain routes from accidentally handling
+app-domain traffic.
 
 The control interface delegates to the process management layer for
 starting, stopping, and querying application state. It reads process
