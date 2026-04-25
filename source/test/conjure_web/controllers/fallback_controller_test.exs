@@ -12,7 +12,7 @@ defmodule ConjureWeb.FallbackControllerTest do
   test "returns 404 on control domain", %{conn: conn} do
     conn =
       %{conn | host: "conjure.test"}
-      |> get("/")
+      |> get("/nonexistent")
 
     assert conn.status == 404
   end

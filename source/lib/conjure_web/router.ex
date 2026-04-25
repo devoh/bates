@@ -11,6 +11,7 @@ defmodule ConjureWeb.Router do
     plug :put_root_layout, html: {ConjureWeb.Layouts, :root}
     plug :protect_from_forgery
     plug :put_secure_browser_headers
+    plug ConjureWeb.Plugs.AppRedirect
   end
 
   scope "/", ConjureWeb do
