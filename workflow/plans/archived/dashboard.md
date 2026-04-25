@@ -22,25 +22,25 @@ and one-click controls.
 
 ## Acceptance Criteria
 
-- [ ] Visiting `conjure.test/` in a browser shows the dashboard
-- [ ] The dashboard lists all configured processes with name, hostname
+- [x] Visiting `conjure.test/` in a browser shows the dashboard
+- [x] The dashboard lists all configured processes with name, hostname
       (clickable link), status, and port
-- [ ] Status updates in real time via PubSub (no page refresh)
-- [ ] All four lifecycle states displayed: down, starting, up, crashed
-- [ ] Start button for down/crashed processes
-- [ ] Stop button for starting/up processes
-- [ ] Restart button for up processes
-- [ ] Controls update immediately when status changes
-- [ ] Empty state shows "No applications configured" when no processes
+- [x] Status updates in real time via PubSub (no page refresh)
+- [x] All four lifecycle states displayed: down, starting, up, crashed
+- [x] Start button for down/crashed processes
+- [x] Stop button for starting/up processes
+- [x] Restart button for up processes
+- [x] Controls update immediately when status changes
+- [x] Empty state shows "No applications configured" when no processes
       exist
-- [ ] App-domain requests (e.g., `myapp.test/`) redirect to
+- [x] App-domain requests (e.g., `myapp.test/`) redirect to
       `/loading/<name>` via a plug, not the dashboard
-- [ ] FallbackController simplified (host check moved to plug)
-- [ ] Existing tests updated, new dashboard tests added
-- [ ] Existing fallback controller tests updated for plug changes
-- [ ] Specs updated: `control-interface.md`, `system-overview.md`,
+- [x] FallbackController simplified (host check moved to plug)
+- [x] Existing tests updated, new dashboard tests added
+- [x] Existing fallback controller tests updated for plug changes
+- [x] Specs updated: `control-interface.md`, `system-overview.md`,
       `routing.md`
-- [ ] `mix test` passes
+- [x] `mix test` passes
 
 ## Phases
 
@@ -252,3 +252,43 @@ None required.
 ### Blockers
 
 None identified.
+
+## Execution Notes
+
+### Assumptions
+
+- The `AppRedirect` plug only redirects `.test` hostnames (not all
+  non-control hosts). This prevents the plug from interfering with
+  test connections that use the default `www.example.com` host.
+
+### Deviations
+
+- `system-overview.md` was not modified because the existing dashboard
+  description was already accurate. The plan listed it as a file to
+  update but review showed no changes were needed.
+- The dashboard's `handle_info` re-queries all process statuses on any
+  PubSub message (both `{:status, status}` and `{:status, status,
+  details}` tuples). This confirmed the plan's recommendation as the
+  simplest correct approach.
+
+### Gotchas
+
+- `build_conn()` in Phoenix tests uses `www.example.com` as the
+  default host. The `AppRedirect` plug initially redirected all
+  non-control hosts, which broke existing LiveView tests. Fixed by
+  scoping the plug to `.test` hostnames only.
+- The test environment loads processes from `config.toml` via the
+  supervision tree, so dashboard tests must account for pre-existing
+  processes in the Registry. The empty state test adapts to whether
+  a config file is present.
+- Button selectors in LiveView tests can be ambiguous when multiple
+  processes are registered. Used `phx-value-name` attribute selectors
+  for specificity.
+
+### Execution Stats
+
+| Metric | Value |
+|--------|-------|
+| Commits | 4 |
+| Files changed | 8 |
+| Tests added | 8 |
