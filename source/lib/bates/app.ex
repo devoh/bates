@@ -223,6 +223,8 @@ defmodule Bates.App do
     assigned_port = assign_port(config)
     service_state = %{service_state | assigned_port: assigned_port}
 
+    update_caddy_route(config.hostname, assigned_port)
+
     command = parse_command(config)
     root = state.root |> Path.expand() |> to_charlist()
     env = env_with_port(assigned_port)
@@ -271,6 +273,8 @@ defmodule Bates.App do
     after
       5_000 -> :ok
     end
+
+    revert_caddy_route(service_state.config.hostname)
 
     new_svc = %{service_state | pid: nil, ready: false, started_at: nil, exit_status: nil, assigned_port: nil}
     new_pids = Map.delete(state.pids, pid)
@@ -345,6 +349,29 @@ defmodule Bates.App do
   defp assign_port(%Service{port: port}) when is_integer(port), do: port
   defp assign_port(%Service{hostname: hostname}) when not is_nil(hostname), do: Bates.PortNumber.next()
   defp assign_port(_service), do: nil
+
+  defp update_caddy_route(nil, _port), do: :ok
+  defp update_caddy_route(_hostname, nil), do: :ok
+
+  defp update_caddy_route(hostname, port) do
+    case Bates.Caddy.update_route(hostname, port) do
+      :ok -> :ok
+      {:error, reason} ->
+        Logger.warning("Failed to update Caddy route for #{hostname}: #{inspect(reason)}")
+        :ok
+    end
+  end
+
+  defp revert_caddy_route(nil), do: :ok
+
+  defp revert_caddy_route(hostname) do
+    case Bates.Caddy.revert_route(hostname) do
+      :ok -> :ok
+      {:error, reason} ->
+        Logger.warning("Failed to revert Caddy route for #{hostname}: #{inspect(reason)}")
+        :ok
+    end
+  end
 
   defp extract_exit_status(:normal), do: :normal
   defp extract_exit_status({:exit_status, _status}), do: :crashed
