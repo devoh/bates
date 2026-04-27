@@ -4,20 +4,9 @@ defmodule BatesWeb.LoadingLive do
   alias Bates.App
 
   @impl true
-  def mount(%{"app_name" => app_name} = params, _session, socket) do
-    hostname = params["hostname"]
-
+  def mount(%{"app_name" => app_name, "service_name" => service_name}, _session, socket) do
     if connected?(socket) do
-      if hostname do
-        # Find which service this hostname belongs to and subscribe to it
-        service = find_service_by_hostname(app_name, hostname)
-
-        if service do
-          Phoenix.PubSub.subscribe(Bates.PubSub, "service:#{app_name}:#{service.name}")
-        end
-      else
-        Phoenix.PubSub.subscribe(Bates.PubSub, "app:#{app_name}")
-      end
+      Phoenix.PubSub.subscribe(Bates.PubSub, "service:#{app_name}:#{service_name}")
 
       try do
         App.up(app_name)
@@ -33,11 +22,11 @@ defmodule BatesWeb.LoadingLive do
         :exit, _ -> "unknown"
       end
 
-    redirect_hostname = hostname || "#{app_name}.test"
-    socket = assign(socket, app_name: app_name, status: status, error: nil, redirect_hostname: redirect_hostname)
+    hostname = find_hostname(app_name, service_name)
+    socket = assign(socket, app_name: app_name, hostname: hostname, status: status, error: nil)
 
     if connected?(socket) and status == "up" do
-      {:ok, redirect(socket, external: "https://#{redirect_hostname}")}
+      {:ok, redirect(socket, external: "https://#{hostname}")}
     else
       {:ok, socket}
     end
@@ -45,7 +34,7 @@ defmodule BatesWeb.LoadingLive do
 
   @impl true
   def handle_info({:status, "up"}, socket) do
-    {:noreply, redirect(socket, external: "https://#{socket.assigns.redirect_hostname}")}
+    {:noreply, redirect(socket, external: "https://#{socket.assigns.hostname}")}
   end
 
   @impl true
@@ -86,10 +75,12 @@ defmodule BatesWeb.LoadingLive do
     """
   end
 
-  defp find_service_by_hostname(app_name, hostname) do
+  defp find_hostname(app_name, service_name) do
     try do
       App.services(app_name)
-      |> Enum.find(&(&1.hostname == hostname))
+      |> Enum.find_value(fn service ->
+        if service.name == service_name, do: service.hostname
+      end)
     catch
       :exit, _ -> nil
     end

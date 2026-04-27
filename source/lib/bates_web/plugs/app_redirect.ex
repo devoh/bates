@@ -18,16 +18,9 @@ defmodule BatesWeb.Plugs.AppRedirect do
           |> Phoenix.Controller.text("Not found")
           |> halt()
 
-        app_name ->
-          loading_path =
-            if hostname == "#{app_name}.test" do
-              "/loading/#{app_name}"
-            else
-              "/loading/#{app_name}?hostname=#{hostname}"
-            end
-
+        {app_name, service_name} ->
           conn
-          |> redirect(external: "https://#{control_host}#{loading_path}")
+          |> redirect(external: "https://#{control_host}/loading/#{app_name}/#{service_name}")
           |> halt()
       end
     else

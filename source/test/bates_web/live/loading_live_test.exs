@@ -20,7 +20,7 @@ defmodule BatesWeb.LoadingLiveTest do
     config = single_service_config("myapp")
     start_supervised!({App, config})
 
-    {:ok, _live, html} = live(conn, "/loading/myapp")
+    {:ok, _live, html} = live(conn, "/loading/myapp/myapp")
 
     assert html =~ "Starting application"
   end
@@ -33,18 +33,21 @@ defmodule BatesWeb.LoadingLiveTest do
     assert_eventually(fn -> App.status("myapp") == "up" end)
 
     assert {:error, {:redirect, %{to: "https://myapp.test"}}} =
-             live(conn, "/loading/myapp")
+             live(conn, "/loading/myapp/myapp")
   end
 
   test "redirects when app comes up after mount", %{conn: conn} do
-    {:ok, live, _html} = live(conn, "/loading/myapp")
+    config = single_service_config("myapp")
+    start_supervised!({App, config})
 
-    Phoenix.PubSub.broadcast(Bates.PubSub, "app:myapp", {:status, "up"})
+    {:ok, live, _html} = live(conn, "/loading/myapp/myapp")
+
+    Phoenix.PubSub.broadcast(Bates.PubSub, "service:myapp:myapp", {:status, "up"})
 
     assert_redirect(live, "https://myapp.test")
   end
 
-  test "loading page with hostname param redirects to that hostname", %{conn: conn} do
+  test "redirects to service hostname when service comes up", %{conn: conn} do
     config = {"myapp", ".", [
       %Service{name: "web", command: "sleep 999", port: nil, hostname: "myapp.test"},
       %Service{name: "vite", command: "sleep 999", port: nil, hostname: "vite.myapp.test"}
@@ -52,9 +55,8 @@ defmodule BatesWeb.LoadingLiveTest do
 
     start_supervised!({App, config})
 
-    {:ok, live, _html} = live(conn, "/loading/myapp?hostname=vite.myapp.test")
+    {:ok, live, _html} = live(conn, "/loading/myapp/vite")
 
-    # Simulate the vite service becoming ready
     Phoenix.PubSub.broadcast(
       Bates.PubSub,
       "service:myapp:vite",
@@ -62,16 +64,5 @@ defmodule BatesWeb.LoadingLiveTest do
     )
 
     assert_redirect(live, "https://vite.myapp.test")
-  end
-
-  test "loading page without hostname param redirects to app default", %{conn: conn} do
-    config = single_service_config("myapp")
-    start_supervised!({App, config})
-
-    {:ok, live, _html} = live(conn, "/loading/myapp")
-
-    Phoenix.PubSub.broadcast(Bates.PubSub, "app:myapp", {:status, "up"})
-
-    assert_redirect(live, "https://myapp.test")
   end
 end

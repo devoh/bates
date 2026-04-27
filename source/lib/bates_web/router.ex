@@ -27,7 +27,7 @@ defmodule BatesWeb.Router do
     pipe_through :browser
 
     live "/", DashboardLive
-    live "/loading/:app_name", LoadingLive
+    live "/loading/:app_name/:service_name", LoadingLive
     get "/*path", FallbackController, :index
   end
 end

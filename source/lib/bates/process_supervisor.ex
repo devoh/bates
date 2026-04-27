@@ -25,7 +25,7 @@ defmodule Bates.ProcessSupervisor do
         service <- App.services(name),
         service.hostname != nil,
         into: %{} do
-      {service.hostname, name}
+      {service.hostname, {name, service.name}}
     end
   end
 
