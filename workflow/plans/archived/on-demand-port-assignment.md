@@ -23,43 +23,44 @@ reflect actual runtime state.
 
 ## Acceptance Criteria
 
-- [ ] `Config.applications/1` returns services with `port: nil`
+- [x] `Config.applications/1` returns services with `port: nil`
       for auto-assigned services (no `PortNumber.next()` calls)
-- [ ] `Config.applications/1` returns services with the declared
+- [x] `Config.applications/1` returns services with the declared
       integer for explicit `port = 8080` services
-- [ ] `App.up/1` assigns a port to each routable service via
+- [x] `App.up/1` assigns a port to each routable service via
       `PortNumber.next()` (or uses the declared port for static ones)
-- [ ] Assigned port is stored in `assigned_port` field in GenServer
+- [x] Assigned port is stored in `assigned_port` field in GenServer
       service state, separate from `config.port`
-- [ ] `App.down/1` releases the assigned port (`assigned_port: nil`)
-- [ ] `App.services/1` returns the `assigned_port` value (nil when
+- [x] `App.down/1` releases the assigned port (`assigned_port: nil`)
+- [x] `App.services/1` returns the `assigned_port` value (nil when
       stopped, integer when running)
-- [ ] `env_with_port` and `check_ready` read from `assigned_port`
-- [ ] `parse_command` no longer does `$PORT` regex substitution;
+- [x] `env_with_port` and `check_ready` read from `assigned_port`
+- [x] `parse_command` no longer does `$PORT` regex substitution;
       `$PORT` is expanded by the shell from the `PORT` env var
-- [ ] Caddy starts with a static config where every routable service
+- [x] Caddy starts with a static config where every routable service
       route points to the control interface
-- [ ] Caddy config includes a `*.test` catch-all route pointing to
+- [x] Caddy config includes a `*.test` catch-all route pointing to
       the control interface
-- [ ] Each route has a stable `@id` tag for targeted API updates
-- [ ] Caddy admin API listens on a unix socket
-- [ ] `Caddy.update_route/2` updates a route's upstream to the
+- [x] Each route has a stable `@id` tag for targeted API updates
+- [x] Caddy admin API listens on TCP `localhost:2019` (unix socket
+      assumption unverified; TCP fallback used per plan)
+- [x] `Caddy.update_route/2` updates a route's upstream to the
       assigned port via the admin API
-- [ ] `Caddy.revert_route/1` reverts a route's upstream to the
+- [x] `Caddy.revert_route/1` reverts a route's upstream to the
       control interface via the admin API
-- [ ] `App.up/1` calls `Caddy.update_route/2` synchronously after
+- [x] `App.up/1` calls `Caddy.update_route/2` synchronously after
       port assignment
-- [ ] `App.down/1` calls `Caddy.revert_route/1` synchronously after
+- [x] `App.down/1` calls `Caddy.revert_route/1` synchronously after
       stopping services
-- [ ] On Caddy crash recovery, routes for running apps are
+- [x] On Caddy crash recovery, routes for running apps are
       re-registered
-- [ ] Dashboard shows port as nil for stopped apps, integer for
+- [x] Dashboard shows port as nil for stopped apps, integer for
       running apps
-- [ ] Specs updated: `process-management.md` port assignment section,
+- [x] Specs updated: `process-management.md` port assignment section,
       `routing.md` static routes section, `system-overview.md`
       on-demand startup flow and ports table
-- [ ] Existing tests updated, new Caddy-related tests added
-- [ ] `mix test` passes
+- [x] Existing tests updated, new Caddy-related tests added
+- [x] `mix test` passes
 
 ## Phases
 
@@ -363,3 +364,31 @@ the plan phases.
 ### Blockers
 
 None identified.
+
+## Execution Notes
+
+### Deviations from Plan
+
+- **Caddy admin API uses TCP `localhost:2019` instead of unix socket.**
+  POC gap #3 (unix socket from Erlang) was unverified. The agent used
+  the documented fallback: TCP on the default Caddy admin port. This is
+  simpler and avoids socket path management.
+
+- **Caddy JSON config via `--config -` stdin worked.** POC gap #2
+  confirmed during execution.
+
+- **`@id` tags work for targeted admin API updates.** POC gap #1
+  confirmed. Routes use `PATCH /id/<route_id>` for targeted updates.
+
+- **Used `:httpc` (OTP stdlib) for admin API calls.** No external HTTP
+  dependency needed. Added `:inets` to `extra_applications` in `mix.exs`.
+
+### Execution Stats
+
+| Metric | Value |
+|--------|-------|
+| Duration | ~11m |
+| Commits | 6 |
+| Files changed | 13 |
+| Tests | 52 (all passing) |
+| Tests added | 8 (caddy_test.exs) |
