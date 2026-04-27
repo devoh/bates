@@ -14,7 +14,7 @@ defmodule BatesWeb.FallbackControllerTest do
       %{conn | host: "testapp.test"}
       |> get("/")
 
-    assert redirected_to(conn) == "/loading/testapp"
+    assert redirected_to(conn) == "https://bates.test/loading/testapp"
   end
 
   test "redirects custom hostname to loading page with hostname param", %{conn: conn} do
@@ -29,21 +29,7 @@ defmodule BatesWeb.FallbackControllerTest do
       %{conn | host: "vite.myapp.test"}
       |> get("/")
 
-    assert redirected_to(conn) == "/loading/myapp?hostname=vite.myapp.test"
-  end
-
-  test "does not redirect loading page on app domain", %{conn: conn} do
-    config = {"testapp", ".", [
-      %Service{name: "testapp", command: "sleep 999", port: nil, hostname: "testapp.test"}
-    ]}
-
-    start_supervised!({App, config})
-
-    conn =
-      %{conn | host: "testapp.test"}
-      |> get("/loading/testapp")
-
-    assert conn.status == 200
+    assert redirected_to(conn) == "https://bates.test/loading/myapp?hostname=vite.myapp.test"
   end
 
   test "returns 404 on control domain", %{conn: conn} do

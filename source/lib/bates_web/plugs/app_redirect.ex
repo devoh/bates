@@ -7,9 +7,7 @@ defmodule BatesWeb.Plugs.AppRedirect do
   def call(conn, _opts) do
     control_host = BatesWeb.Endpoint.config(:url)[:host]
 
-    already_loading = match?(["loading" | _], conn.path_info)
-
-    if conn.host != control_host and String.ends_with?(conn.host, ".test") and not already_loading do
+    if conn.host != control_host and String.ends_with?(conn.host, ".test") do
       hostname_map = Bates.ProcessSupervisor.hostname_lookup()
       hostname = conn.host
 
@@ -21,7 +19,7 @@ defmodule BatesWeb.Plugs.AppRedirect do
           |> halt()
 
         app_name ->
-          redirect_path =
+          loading_path =
             if hostname == "#{app_name}.test" do
               "/loading/#{app_name}"
             else
@@ -29,7 +27,7 @@ defmodule BatesWeb.Plugs.AppRedirect do
             end
 
           conn
-          |> redirect(to: redirect_path)
+          |> redirect(external: "https://#{control_host}#{loading_path}")
           |> halt()
       end
     else
