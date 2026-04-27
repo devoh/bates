@@ -54,18 +54,17 @@ See [Control Interface](control-interface.md).
                            (app up)     (app down)
                                │            │
                                ▼            ▼
-                           Application  Control Interface
-                           process      starts the app,
-                           (dynamic     serves loading page
-                            port)
+                           Service      Control Interface
+                           (dynamic     starts the app,
+                            port)       serves loading page
                                │            │
                                ▼            ▼
                            ProcessSupervisor
-                           Manages all configured processes
+                           Manages all configured applications
                                │
                                ▼
-                           Process (GenServer per app)
-                           Manages OS process lifecycle via erlexec
+                           App (GenServer per application)
+                           Manages multiple service lifecycles via erlexec
 ```
 
 The typical request flow (app running):
@@ -84,11 +83,11 @@ The on-demand startup flow (app not running):
 3. Caddy tries the primary upstream — connection refused (app is down).
 4. Caddy falls back to the control interface.
 5. The control interface starts the app and serves a loading page.
-6. The process GenServer spawns the OS process and enters the `starting`
-   state. It polls `127.0.0.1:<port>` via TCP connect every 200ms.
+6. The Application GenServer spawns all services and enters the
+   `starting` state. It polls each service's port via TCP connect.
 7. The loading page (a LiveView) receives boot progress via PubSub.
-   When the TCP readiness check succeeds, the process broadcasts `up`
-   and the loading page redirects.
+   When the requested service's readiness check succeeds, the
+   Application GenServer broadcasts `up` and the loading page redirects.
 
 ### CLI
 

@@ -21,12 +21,16 @@ linked lifecycle management.
 
 - **ProcessSupervisor** as a `DynamicSupervisor`. Children are started
   asynchronously so initialization doesn't block.
-- **One GenServer per application**, supervising its own services.
+- **`Bates.App`** — one GenServer per application, managing a map of
+  service states (pid, ready, log buffer, etc.) keyed by service name.
+  The `pids` map provides reverse lookup from erlexec pid to service
+  name for EXIT and stdout/stderr message routing.
 - **Registry** keyed by application name for lookup from any part of
   the system (routing, control interface) without direct process
   references.
-- Process state changes broadcast via **Phoenix PubSub**. LiveViews
-  subscribe to receive real-time updates.
+- Process state changes broadcast via **Phoenix PubSub** at two levels:
+  per-service on `"service:<app>:<service>"` and aggregated on
+  `"app:<app>"`. LiveViews subscribe to receive real-time updates.
 
 ## Caddy Invocation
 
@@ -77,8 +81,13 @@ to the control interface with no fallback.
 
 The control interface delegates to the process management layer:
 
-- `Process.up/1` — start an application
-- `Process.down/1` — stop an application
+- `App.up/1` — start an application (all services)
+- `App.down/1` — stop an application (all services)
+- `App.status/1` — get derived application status
+- `App.services/1` — list services with status, hostname, and port
+- `App.service_status/2` — get status for a specific service
+- `ProcessSupervisor.app_names/0` — list all application names
+- `ProcessSupervisor.hostname_lookup/0` — hostname-to-app-name map
 - `ProcessSupervisor.status/0` — list all applications and states
 
 These are the internal API that the LiveViews and JSON API call.

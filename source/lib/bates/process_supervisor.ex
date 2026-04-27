@@ -1,14 +1,14 @@
 defmodule Bates.ProcessSupervisor do
   use DynamicSupervisor
 
-  alias Bates.Process
+  alias Bates.App
 
-  # public API
+  # Public API
 
   def start_link(_) do
     case DynamicSupervisor.start_link(__MODULE__, :ok, name: __MODULE__) do
       {:ok, _pid} = ok ->
-        Task.start(&load_processes/0)
+        Task.start(&load_applications/0)
         ok
 
       other ->
@@ -16,41 +16,44 @@ defmodule Bates.ProcessSupervisor do
     end
   end
 
-  def hostnames do
-    process_names() |> Enum.map(&hostname/1)
+  def app_names do
+    Registry.select(Bates.ProcessRegistry, [{{:"$1", :_, :_}, [], [:"$1"]}])
+  end
+
+  def hostname_lookup do
+    for name <- app_names(),
+        service <- App.services(name),
+        service.hostname != nil,
+        into: %{} do
+      {service.hostname, name}
+    end
   end
 
   def status do
-    for name <- process_names(),
+    for name <- app_names(),
         into: %{},
-        do: {hostname(name), Process.status(name)}
+        do: {name, App.status(name)}
   end
 
-  # callbacks
+  # Callbacks
 
   @impl true
   def init(:ok) do
     DynamicSupervisor.init(strategy: :one_for_one)
   end
 
-  # helpers
+  # Helpers
 
-  defp hostname(name), do: name <> ".test"
-
-  defp load_processes do
-    Bates.Config.processes() |> Enum.each(&start_child/1)
+  defp load_applications do
+    Bates.Config.applications() |> Enum.each(&start_child/1)
   end
 
-  defp start_child(process) do
-    spec = Process.child_spec(process)
+  defp start_child(config) do
+    spec = App.child_spec(config)
 
     case DynamicSupervisor.start_child(__MODULE__, spec) do
       {:error, {:already_started, pid}} -> {:ok, pid}
       result -> result
     end
-  end
-
-  def process_names do
-    Registry.select(Bates.ProcessRegistry, [{{:"$1", :_, :_}, [], [:"$1"]}])
   end
 end

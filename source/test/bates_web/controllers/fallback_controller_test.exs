@@ -1,7 +1,15 @@
 defmodule BatesWeb.FallbackControllerTest do
   use BatesWeb.ConnCase
 
+  alias Bates.{App, Service}
+
   test "redirects app domain to loading page", %{conn: conn} do
+    config = {"testapp", ".", [
+      %Service{name: "testapp", command: "sleep 999", port: Bates.PortNumber.next(), hostname: "testapp.test"}
+    ]}
+
+    start_supervised!({App, config})
+
     conn =
       %{conn | host: "testapp.test"}
       |> get("/")
@@ -9,7 +17,28 @@ defmodule BatesWeb.FallbackControllerTest do
     assert redirected_to(conn) == "/loading/testapp"
   end
 
+  test "redirects custom hostname to loading page with hostname param", %{conn: conn} do
+    config = {"myapp", ".", [
+      %Service{name: "web", command: "sleep 999", port: Bates.PortNumber.next(), hostname: "myapp.test"},
+      %Service{name: "vite", command: "sleep 999", port: Bates.PortNumber.next(), hostname: "vite.myapp.test"}
+    ]}
+
+    start_supervised!({App, config})
+
+    conn =
+      %{conn | host: "vite.myapp.test"}
+      |> get("/")
+
+    assert redirected_to(conn) == "/loading/myapp?hostname=vite.myapp.test"
+  end
+
   test "does not redirect loading page on app domain", %{conn: conn} do
+    config = {"testapp", ".", [
+      %Service{name: "testapp", command: "sleep 999", port: Bates.PortNumber.next(), hostname: "testapp.test"}
+    ]}
+
+    start_supervised!({App, config})
+
     conn =
       %{conn | host: "testapp.test"}
       |> get("/loading/testapp")
@@ -21,6 +50,14 @@ defmodule BatesWeb.FallbackControllerTest do
     conn =
       %{conn | host: "bates.test"}
       |> get("/nonexistent")
+
+    assert conn.status == 404
+  end
+
+  test "returns 404 for unknown .test hostname", %{conn: conn} do
+    conn =
+      %{conn | host: "unknown.test"}
+      |> get("/")
 
     assert conn.status == 404
   end

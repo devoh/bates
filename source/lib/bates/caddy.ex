@@ -45,7 +45,7 @@ defmodule Bates.Caddy do
     {:noreply, %{state | pid: nil, os_pid: nil}}
   end
 
-  # helpers
+  # Helpers
 
   defp check_prerequisites do
     with :ok <- check_caddy_in_path(),
@@ -87,13 +87,14 @@ defmodule Bates.Caddy do
   defp generate_caddyfile do
     control_port = control_interface_port()
 
-    app_blocks =
-      for name <- Bates.ProcessSupervisor.process_names() do
-        {:ok, port} = Bates.Process.port(name)
-        app_block(name, port, control_port)
+    service_blocks =
+      for name <- Bates.ProcessSupervisor.app_names(),
+          service <- Bates.App.services(name),
+          service.hostname != nil do
+        service_block(service.hostname, service.port, control_port)
       end
 
-    blocks = [control_block(control_port) | app_blocks]
+    blocks = [control_block(control_port) | service_blocks]
     Enum.join(blocks, "\n\n") <> "\n"
   end
 
@@ -106,9 +107,9 @@ defmodule Bates.Caddy do
     """
   end
 
-  defp app_block(name, port, control_port) do
+  defp service_block(hostname, port, control_port) do
     """
-    #{name}.test {
+    #{hostname} {
       tls internal
       handle_errors {
         @502 expression `{err.status_code} == 502`

@@ -1,19 +1,21 @@
 defmodule BatesWeb.ProcessController do
   use BatesWeb, :controller
 
-  alias Bates.{Process, ProcessSupervisor}
+  alias Bates.{App, ProcessSupervisor}
 
   def status(conn, _params) do
     processes =
-      for name <- ProcessSupervisor.process_names() do
-        {:ok, port} = Process.port(name)
-        status = Process.status(name)
+      for name <- ProcessSupervisor.app_names() do
+        status = App.status(name)
+        services = App.services(name)
 
         %{
           name: name,
-          hostname: "#{name}.test",
           status: status,
-          port: port
+          services:
+            Enum.map(services, fn svc ->
+              %{name: svc.name, hostname: svc.hostname, status: svc.status, port: svc.port}
+            end)
         }
       end
 
@@ -21,7 +23,7 @@ defmodule BatesWeb.ProcessController do
   end
 
   def start(conn, %{"name" => name}) do
-    case Process.up(name) do
+    case App.up(name) do
       :ok ->
         json(conn, %{name: name, status: "up"})
 
@@ -33,7 +35,7 @@ defmodule BatesWeb.ProcessController do
   end
 
   def stop(conn, %{"name" => name}) do
-    case Process.down(name) do
+    case App.down(name) do
       :ok ->
         json(conn, %{name: name, status: "down"})
 

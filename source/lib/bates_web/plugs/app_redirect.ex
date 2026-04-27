@@ -10,11 +10,28 @@ defmodule BatesWeb.Plugs.AppRedirect do
     already_loading = match?(["loading" | _], conn.path_info)
 
     if conn.host != control_host and String.ends_with?(conn.host, ".test") and not already_loading do
-      app_name = conn.host |> String.trim_trailing(".test") |> String.split(".") |> List.first()
+      hostname_map = Bates.ProcessSupervisor.hostname_lookup()
+      hostname = conn.host
 
-      conn
-      |> redirect(to: "/loading/#{app_name}")
-      |> halt()
+      case Map.get(hostname_map, hostname) do
+        nil ->
+          conn
+          |> put_status(404)
+          |> Phoenix.Controller.text("Not found")
+          |> halt()
+
+        app_name ->
+          redirect_path =
+            if hostname == "#{app_name}.test" do
+              "/loading/#{app_name}"
+            else
+              "/loading/#{app_name}?hostname=#{hostname}"
+            end
+
+          conn
+          |> redirect(to: redirect_path)
+          |> halt()
+      end
     else
       conn
     end

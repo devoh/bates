@@ -1,15 +1,26 @@
 defmodule BatesWeb.LoadingLive do
   use BatesWeb, :live_view
 
-  alias Bates.Process
+  alias Bates.App
 
   @impl true
-  def mount(%{"app_name" => app_name}, _session, socket) do
+  def mount(%{"app_name" => app_name} = params, _session, socket) do
+    hostname = params["hostname"]
+
     if connected?(socket) do
-      Phoenix.PubSub.subscribe(Bates.PubSub, "process:#{app_name}")
+      if hostname do
+        # Find which service this hostname belongs to and subscribe to it
+        service = find_service_by_hostname(app_name, hostname)
+
+        if service do
+          Phoenix.PubSub.subscribe(Bates.PubSub, "service:#{app_name}:#{service.name}")
+        end
+      else
+        Phoenix.PubSub.subscribe(Bates.PubSub, "app:#{app_name}")
+      end
 
       try do
-        Process.up(app_name)
+        App.up(app_name)
       catch
         :exit, _ -> :ok
       end
@@ -17,15 +28,16 @@ defmodule BatesWeb.LoadingLive do
 
     status =
       try do
-        Process.status(app_name)
+        App.status(app_name)
       catch
         :exit, _ -> "unknown"
       end
 
-    socket = assign(socket, app_name: app_name, status: status, error: nil)
+    redirect_hostname = hostname || "#{app_name}.test"
+    socket = assign(socket, app_name: app_name, status: status, error: nil, redirect_hostname: redirect_hostname)
 
     if connected?(socket) and status == "up" do
-      {:ok, redirect(socket, external: "https://#{app_name}.test")}
+      {:ok, redirect(socket, external: "https://#{redirect_hostname}")}
     else
       {:ok, socket}
     end
@@ -33,8 +45,7 @@ defmodule BatesWeb.LoadingLive do
 
   @impl true
   def handle_info({:status, "up"}, socket) do
-    app_name = socket.assigns.app_name
-    {:noreply, redirect(socket, external: "https://#{app_name}.test")}
+    {:noreply, redirect(socket, external: "https://#{socket.assigns.redirect_hostname}")}
   end
 
   @impl true
@@ -73,5 +84,14 @@ defmodule BatesWeb.LoadingLive do
       <% end %>
     </div>
     """
+  end
+
+  defp find_service_by_hostname(app_name, hostname) do
+    try do
+      App.services(app_name)
+      |> Enum.find(&(&1.hostname == hostname))
+    catch
+      :exit, _ -> nil
+    end
   end
 end
