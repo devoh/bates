@@ -23,43 +23,43 @@ hierarchy so they can be managed as a unit.
 
 ## Acceptance Criteria
 
-- [ ] Multi-service TOML config (`[app.services.web]` subtables) is
+- [x] Multi-service TOML config (`[app.services.web]` subtables) is
       parsed into Application structs with multiple services.
-- [ ] Single-service shorthand (`command` on app table) continues to
+- [x] Single-service shorthand (`command` on app table) continues to
       work and is equivalent to one routable service.
-- [ ] Each application is a single GenServer managing a map of service
+- [x] Each application is a single GenServer managing a map of service
       states (pid, ready, log buffer, etc.).
-- [ ] Starting an application spawns all services concurrently.
-- [ ] Stopping an application stops all services.
-- [ ] Application status is derived: all up → up, all down → down,
+- [x] Starting an application spawns all services concurrently.
+- [x] Stopping an application stops all services.
+- [x] Application status is derived: all up → up, all down → down,
       any crashed → crashed, otherwise → partial.
-- [ ] Each routable service (with a `hostname`) gets its own Caddy
+- [x] Each routable service (with a `hostname`) gets its own Caddy
       site block.
-- [ ] `hostname = true` resolves to `<app_name>.test`. A string value
+- [x] `hostname = true` resolves to `<app_name>.test`. A string value
       resolves to `<value>.test`.
-- [ ] AppRedirect plug resolves arbitrary `.test` hostnames to the
+- [x] AppRedirect plug resolves arbitrary `.test` hostnames to the
       correct application name via a lookup (not string parsing).
-- [ ] Dashboard groups services by application. Multi-service apps show
+- [x] Dashboard groups services by application. Multi-service apps show
       nested service rows. Single-service apps show only the app row.
-- [ ] Dashboard controls are application-level. Partial status shows
+- [x] Dashboard controls are application-level. Partial status shows
       Start, Stop, and Restart.
-- [ ] Loading page starts the full application but redirects when the
+- [x] Loading page starts the full application but redirects when the
       specific requested service is ready (not all services).
-- [ ] API nests services under applications in the status response.
-- [ ] Log prefixes: `[myapp]` for single-service, `[myapp:web]` for
+- [x] API nests services under applications in the status response.
+- [x] Log prefixes: `[myapp]` for single-service, `[myapp:web]` for
       multi-service.
-- [ ] PubSub broadcasts on `"service:<app>:<service>"` per service and
+- [x] PubSub broadcasts on `"service:<app>:<service>"` per service and
       `"app:<app>"` for aggregated application status.
-- [ ] All existing tests updated and passing.
-- [ ] New tests for multi-service config parsing, lifecycle, dashboard
+- [x] All existing tests updated and passing.
+- [x] New tests for multi-service config parsing, lifecycle, dashboard
       grouping, and loading page service-specific redirect.
-- [ ] Specs updated: `process-management.md`, `control-interface.md`,
+- [x] Specs updated: `process-management.md`, `control-interface.md`,
       `cli.md`, `routing.md`, `system-overview.md`,
       `sandbox/implementation-notes.md`.
-- [ ] `Config.applications/0` returns `list({app_name, root, [Service]})`.
-- [ ] `Bates.App` exposes GenServer calls: `up/1`, `down/1`, `status/1`,
+- [x] `Config.applications/0` returns `list({app_name, root, [Service]})`.
+- [x] `Bates.App` exposes GenServer calls: `up/1`, `down/1`, `status/1`,
       `services/1`, `service_status/2`.
-- [ ] `Bates.App` state maps erlexec pids to service names for reliable
+- [x] `Bates.App` state maps erlexec pids to service names for reliable
       EXIT and stdout/stderr handling.
 
 ## Phase 1: Service Struct and Config Parsing
@@ -430,3 +430,38 @@ None required.
 
 None identified. All referenced files exist. No circular dependencies
 between phases. Dependencies are installed and compatible.
+
+## Execution Notes
+
+### Assumptions and Decisions
+
+- `Bates.App` maps both erlexec pids and OS pids in the `pids` map.
+  Erlexec delivers EXIT messages using the Erlang pid and stdout/stderr
+  using the OS pid, so both mappings are needed for reliable routing.
+- `derive_status/1` includes a `"starting"` status (all services
+  starting or up) in addition to the four statuses in the proposal.
+  This gives the dashboard and loading page a more accurate picture
+  during boot.
+- `stop_service/4` uses `:exec.kill(pid, :sigkill)` with a 5-second
+  monitor timeout. A more graceful SIGTERM-first approach is a future
+  improvement.
+
+### Deviations from Plan
+
+- The agent combined all 7 phases into a single commit instead of one
+  commit per phase. The spec updates for `cli.md` and `routing.md`
+  were added in a follow-up commit.
+- `process-management.md` required no changes — it already described
+  the multi-service model correctly (it was the target spec the code
+  was built from).
+
+### Execution Stats
+
+| Metric | Value |
+|--------|-------|
+| Commits | 2 |
+| Files changed | 22 |
+| Lines added | +1164 |
+| Lines removed | -570 |
+| Tests | 41 pass, 0 failures |
+| PR | #7 |
