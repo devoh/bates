@@ -10,7 +10,7 @@ defmodule BatesWeb.LoadingLiveTest do
       %Service{
         name: name,
         command: command,
-        port: Bates.PortNumber.next(),
+        port: nil,
         hostname: "#{name}.test"
       }
     ]}
@@ -46,8 +46,8 @@ defmodule BatesWeb.LoadingLiveTest do
 
   test "loading page with hostname param redirects to that hostname", %{conn: conn} do
     config = {"myapp", ".", [
-      %Service{name: "web", command: "sleep 999", port: Bates.PortNumber.next(), hostname: "myapp.test"},
-      %Service{name: "vite", command: "sleep 999", port: Bates.PortNumber.next(), hostname: "vite.myapp.test"}
+      %Service{name: "web", command: "sleep 999", port: nil, hostname: "myapp.test"},
+      %Service{name: "vite", command: "sleep 999", port: nil, hostname: "vite.myapp.test"}
     ]}
 
     start_supervised!({App, config})

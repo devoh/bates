@@ -5,7 +5,7 @@ defmodule BatesWeb.FallbackControllerTest do
 
   test "redirects app domain to loading page", %{conn: conn} do
     config = {"testapp", ".", [
-      %Service{name: "testapp", command: "sleep 999", port: Bates.PortNumber.next(), hostname: "testapp.test"}
+      %Service{name: "testapp", command: "sleep 999", port: nil, hostname: "testapp.test"}
     ]}
 
     start_supervised!({App, config})
@@ -19,8 +19,8 @@ defmodule BatesWeb.FallbackControllerTest do
 
   test "redirects custom hostname to loading page with hostname param", %{conn: conn} do
     config = {"myapp", ".", [
-      %Service{name: "web", command: "sleep 999", port: Bates.PortNumber.next(), hostname: "myapp.test"},
-      %Service{name: "vite", command: "sleep 999", port: Bates.PortNumber.next(), hostname: "vite.myapp.test"}
+      %Service{name: "web", command: "sleep 999", port: nil, hostname: "myapp.test"},
+      %Service{name: "vite", command: "sleep 999", port: nil, hostname: "vite.myapp.test"}
     ]}
 
     start_supervised!({App, config})
@@ -34,7 +34,7 @@ defmodule BatesWeb.FallbackControllerTest do
 
   test "does not redirect loading page on app domain", %{conn: conn} do
     config = {"testapp", ".", [
-      %Service{name: "testapp", command: "sleep 999", port: Bates.PortNumber.next(), hostname: "testapp.test"}
+      %Service{name: "testapp", command: "sleep 999", port: nil, hostname: "testapp.test"}
     ]}
 
     start_supervised!({App, config})

@@ -8,7 +8,7 @@ defmodule BatesWeb.ProcessControllerTest do
       %Service{
         name: "testapp",
         command: "elixir test/support/test_server.ex",
-        port: Bates.PortNumber.next(),
+        port: nil,
         hostname: "testapp.test"
       }
     ]}
