@@ -10,7 +10,7 @@ defmodule Bates.AppTest do
   end
 
   defp single_service_config(opts \\ []) do
-    port = Keyword.get(opts, :port, Bates.PortNumber.next())
+    port = Keyword.get(opts, :port, nil)
     command = Keyword.get(opts, :command, "sleep 999")
 
     {"testapp", ".", [
@@ -19,7 +19,7 @@ defmodule Bates.AppTest do
   end
 
   test "status is 'starting' immediately after up/1" do
-    config = single_service_config(port: 19876)
+    config = single_service_config()
     start_supervised!({App, config})
     :ok = App.up("testapp")
 
@@ -39,7 +39,7 @@ defmodule Bates.AppTest do
   end
 
   test "transitions to 'crashed' on readiness timeout" do
-    config = single_service_config(port: 19877, command: "sleep 999")
+    config = single_service_config(command: "sleep 999")
     start_supervised!({App, config})
     :ok = App.up("testapp")
 
@@ -52,7 +52,7 @@ defmodule Bates.AppTest do
   end
 
   test "down works while in 'starting' state" do
-    config = single_service_config(port: 19878, command: "sleep 999")
+    config = single_service_config(command: "sleep 999")
     start_supervised!({App, config})
     :ok = App.up("testapp")
 
@@ -86,7 +86,7 @@ defmodule Bates.AppTest do
     assert App.service_status("testapp", "worker") == "up"
   end
 
-  test "services/1 returns service list" do
+  test "services/1 returns service list with nil port when stopped" do
     config = single_service_config()
     start_supervised!({App, config})
 
@@ -94,7 +94,23 @@ defmodule Bates.AppTest do
     assert service.name == "testapp"
     assert service.hostname == "testapp.test"
     assert service.status == "down"
+    assert service.port == nil
+  end
+
+  test "services/1 returns assigned port when running" do
+    config = single_service_config(command: "elixir test/support/test_server.ex")
+    start_supervised!({App, config})
+    :ok = App.up("testapp")
+
+    assert_eventually(fn -> App.status("testapp") == "up" end)
+
+    [service] = App.services("testapp")
     assert is_integer(service.port)
+
+    :ok = App.down("testapp")
+
+    [service] = App.services("testapp")
+    assert service.port == nil
   end
 
   describe "multi-service" do
@@ -109,7 +125,7 @@ defmodule Bates.AppTest do
         %Service{
           name: "web",
           command: "elixir test/support/test_server.ex",
-          port: Bates.PortNumber.next(),
+          port: nil,
           hostname: "testapp.test"
         },
         %Service{

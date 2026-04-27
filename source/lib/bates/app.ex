@@ -8,7 +8,6 @@ defmodule Bates.App do
   @max_log_lines 100
   @poll_interval Application.compile_env(:bates, :poll_interval, 200)
   @readiness_timeout Application.compile_env(:bates, :readiness_timeout, 60_000)
-  @port_regex ~r/\$PORT\b/
 
   # Public API
 
@@ -54,6 +53,7 @@ defmodule Bates.App do
       Map.new(services, fn %Service{} = service ->
         {service.name, %{
           config: service,
+          assigned_port: nil,
           pid: nil,
           ready: false,
           started_at: nil,
@@ -115,7 +115,7 @@ defmodule Bates.App do
           name: svc.config.name,
           hostname: svc.config.hostname,
           status: service_status_name(svc),
-          port: svc.config.port
+          port: svc.assigned_port
         }
       end)
 
@@ -125,8 +125,8 @@ defmodule Bates.App do
   @impl GenServer
   def handle_info({:check_ready, service_name}, state) do
     case Map.get(state.services, service_name) do
-      %{pid: pid, ready: false, config: config} = svc when not is_nil(pid) ->
-        case :gen_tcp.connect(~c"127.0.0.1", config.port, [], 100) do
+      %{pid: pid, ready: false, assigned_port: port} = svc when not is_nil(pid) ->
+        case :gen_tcp.connect(~c"127.0.0.1", port, [], 100) do
           {:ok, socket} ->
             :gen_tcp.close(socket)
             new_svc = %{svc | ready: true}
@@ -141,7 +141,7 @@ defmodule Bates.App do
             if elapsed >= @readiness_timeout do
               :exec.stop(pid)
               new_pids = Map.delete(state.pids, pid)
-              message = "Timed out waiting for port #{config.port}"
+              message = "Timed out waiting for port #{port}"
               new_svc = %{svc | pid: nil, ready: false, started_at: nil, exit_status: :timeout}
               new_state = %{state | pids: new_pids}
               new_state = put_in(new_state, [:services, service_name], new_svc)
@@ -219,9 +219,13 @@ defmodule Bates.App do
 
   defp start_service(state, service_name, service_state) do
     config = service_state.config
+
+    assigned_port = assign_port(config)
+    service_state = %{service_state | assigned_port: assigned_port}
+
     command = parse_command(config)
     root = state.root |> Path.expand() |> to_charlist()
-    env = env_with_port(config)
+    env = env_with_port(assigned_port)
     opts = [:stdout, :stderr, cd: root, env: env]
 
     case :exec.run_link(command, opts) do
@@ -233,7 +237,7 @@ defmodule Bates.App do
 
         broadcast_service(state.name, service_name, {:status, "starting"})
 
-        if config.port == nil do
+        if assigned_port == nil do
           new_svc = %{new_svc | ready: true}
           new_state = %{state | pids: new_pids}
           new_state = put_in(new_state, [:services, service_name], new_svc)
@@ -268,7 +272,7 @@ defmodule Bates.App do
       5_000 -> :ok
     end
 
-    new_svc = %{service_state | pid: nil, ready: false, started_at: nil, exit_status: nil}
+    new_svc = %{service_state | pid: nil, ready: false, started_at: nil, exit_status: nil, assigned_port: nil}
     new_pids = Map.delete(state.pids, pid)
     new_state = %{state | pids: new_pids}
     new_state = put_in(new_state, [:services, service_name], new_svc)
@@ -317,9 +321,9 @@ defmodule Bates.App do
     :queue.to_list(buffer) |> Enum.join("\n")
   end
 
-  defp env_with_port(%Service{port: nil}), do: []
+  defp env_with_port(nil), do: []
 
-  defp env_with_port(%Service{port: port}) do
+  defp env_with_port(port) when is_integer(port) do
     [{~c"PORT", to_charlist(port)}]
   end
 
@@ -334,10 +338,13 @@ defmodule Bates.App do
     Logger.info("#{prefix} #{message}")
   end
 
-  defp parse_command(%Service{command: command, port: port}) do
-    port_str = if port, do: to_string(port), else: ""
-    Regex.replace(@port_regex, command, port_str) |> to_charlist()
+  defp parse_command(%Service{command: command}) do
+    to_charlist(command)
   end
+
+  defp assign_port(%Service{port: port}) when is_integer(port), do: port
+  defp assign_port(%Service{hostname: hostname}) when not is_nil(hostname), do: Bates.PortNumber.next()
+  defp assign_port(_service), do: nil
 
   defp extract_exit_status(:normal), do: :normal
   defp extract_exit_status({:exit_status, _status}), do: :crashed
