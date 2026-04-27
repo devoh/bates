@@ -47,9 +47,16 @@ the server to be running.
 ```
 $ bates status
 NAME       HOSTNAME          STATUS   PORT
-myapp      myapp.test        up       52341
+myapp                        up
+  web      myapp.test        up       52341
+  vite     vite.myapp.test   up       52342
+  worker                     up       —
 api        api.test          down     —
 ```
+
+Single-service apps (like `api` above) show one row with no nesting.
+Multi-service apps show the application row with derived status,
+followed by indented service rows.
 
 ### `bates up <name>`
 
