@@ -30,7 +30,7 @@ defmodule Bates.Config do
     %Service{
       name: name,
       command: Map.fetch!(options, "command"),
-      port: Bates.PortNumber.next(),
+      port: nil,
       hostname: "#{name}.test"
     }
   end
@@ -56,5 +56,5 @@ defmodule Bates.Config do
 
   defp resolve_port(_hostname, port) when is_integer(port), do: port
   defp resolve_port(nil, _port), do: nil
-  defp resolve_port(_hostname, _port), do: Bates.PortNumber.next()
+  defp resolve_port(_hostname, _port), do: nil
 end

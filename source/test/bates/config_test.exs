@@ -14,7 +14,7 @@ defmodule Bates.ConfigTest do
     assert service.name == "testapp"
     assert service.command == "elixir test/support/test_server.ex"
     assert service.hostname == "testapp.test"
-    assert is_integer(service.port)
+    assert service.port == nil
   end
 
   test "parses multi-service config with hostnames and ports" do
@@ -29,12 +29,12 @@ defmodule Bates.ConfigTest do
     web = service_map["web"]
     assert web.command == "bin/rails server -p $PORT"
     assert web.hostname == "myapp.test"
-    assert is_integer(web.port)
+    assert web.port == nil
 
     vite = service_map["vite"]
     assert vite.command == "bin/vite dev --port $PORT"
     assert vite.hostname == "vite.myapp.test"
-    assert is_integer(vite.port)
+    assert vite.port == nil
 
     worker = service_map["worker"]
     assert worker.command == "bin/sidekiq"
