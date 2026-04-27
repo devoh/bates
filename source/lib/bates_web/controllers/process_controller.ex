@@ -45,4 +45,16 @@ defmodule BatesWeb.ProcessController do
         |> json(%{name: name, error: inspect(reason)})
     end
   end
+
+  def restart(conn, %{"name" => name}) do
+    with :ok <- App.down(name),
+         :ok <- App.up(name) do
+      json(conn, %{name: name, status: "up"})
+    else
+      {:error, reason} ->
+        conn
+        |> put_status(422)
+        |> json(%{name: name, error: inspect(reason)})
+    end
+  end
 end

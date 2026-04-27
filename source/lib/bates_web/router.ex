@@ -20,6 +20,7 @@ defmodule BatesWeb.Router do
     get "/status", ProcessController, :status
     post "/processes/:name/start", ProcessController, :start
     post "/processes/:name/stop", ProcessController, :stop
+    post "/processes/:name/restart", ProcessController, :restart
   end
 
   scope "/", BatesWeb do
