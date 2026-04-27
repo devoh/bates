@@ -127,12 +127,16 @@ application, not just the triggered service.
 Auto-assigned ports are detected dynamically by binding a TCP socket to
 port 0, reading the OS-assigned port, and closing the socket. This
 guarantees the port is available at assignment time. Services with a
-numeric `port` use that value directly.
+numeric `port` in the configuration use that value directly.
 
-Port assignment happens at application init time, not at startup of the OS
-process. A service keeps its assigned port for its entire lifetime, even
-across stop/start cycles. Ports may differ across Bates restarts since
-they are dynamically assigned rather than deterministic.
+Port assignment happens in `App.up/1` when a service starts, not at
+configuration time. The assigned port is stored in an `assigned_port`
+field in the GenServer's service state, separate from `config.port`
+(which holds the declared value: `nil` for auto-assigned, integer for
+static). On stop, the assigned port is released (`assigned_port` set
+back to `nil`). Each start cycle gets a fresh port assignment. Ports
+may differ not only across Bates restarts but also across stop/start
+cycles within a single session.
 
 ## Supervision
 
@@ -258,9 +262,11 @@ Each service's stdout and stderr are captured and handled in two ways:
 ## How It Connects
 
 - **Routing** generates a Caddy route for every service that has a `hostname`.
-  Each route maps `<hostname>.test` to the service's port with a fallback to
-  the control interface. Routes are static — routing does not interact with
-  process lifecycle.
+  All routes initially point to the control interface. When a service starts
+  and gets a port, `App.up/1` calls `Caddy.update_route/2` to update the
+  route's upstream to the assigned port. When a service stops, `App.down/1`
+  calls `Caddy.revert_route/1` to point the route back to the control
+  interface.
 - **Control interface** starts and stops entire applications (all services
   together). It is also the fallback upstream for Caddy routes, triggering
   on-demand startup when a request arrives for a down app. The loading page
