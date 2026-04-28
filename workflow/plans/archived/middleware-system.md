@@ -28,41 +28,41 @@ model. This plan implements it.
 
 ## Acceptance Criteria
 
-- [ ] `Bates.ProcessInvocation` struct exists with `prologue` (list of
+- [x] `Bates.ProcessInvocation` struct exists with `prologue` (list of
       strings), `environment` (map of string-to-string), and `command`
       (string) fields.
-- [ ] `Bates.Middleware` behaviour declares
+- [x] `Bates.Middleware` behaviour declares
       `apply(invocation, context) :: invocation`.
-- [ ] `Bates.Middleware.Asdf` appends
+- [x] `Bates.Middleware.Asdf` appends
       `source $(brew --prefix)/opt/asdf/libexec/asdf.sh` to `prologue`.
-- [ ] `Bates.Middleware.Port` adds `"PORT" => "<assigned_port>"` to
+- [x] `Bates.Middleware.Port` adds `"PORT" => "<assigned_port>"` to
       `environment`. The middleware is auto-injected by `Config` for any
       service whose hostname is non-nil (i.e. any service that gets a
       port assignment). Users do not have to list it.
-- [ ] `Config.applications/0` parses an optional `middleware` key on the
+- [x] `Config.applications/0` parses an optional `middleware` key on the
       application table and on each service table, concatenates the two
       lists (app-level first), and appends `"port"` for services with a
       hostname. The merged list is stored on the `Service` struct.
-- [ ] Single-service shorthand parses `middleware` from the application
+- [x] Single-service shorthand parses `middleware` from the application
       table.
-- [ ] Unknown middleware names cause `Config.applications/0` to return
+- [x] Unknown middleware names cause `Config.applications/0` to return
       `{:error, {:unknown_middleware, name}}`.
-- [ ] `App.start_service/3` builds a `ProcessInvocation` by folding the
+- [x] `App.start_service/3` builds a `ProcessInvocation` by folding the
       service's middleware list over an empty invocation seeded with the
       service's command, compiles the prologue and command into a single
       shell string of the form `prologue1; prologue2; exec <command>`,
       passes the environment map via erlexec's `env` option, and runs the
       compiled string through `:exec.run_link/2`.
-- [ ] Signals reach the spawned service directly (verified by the `exec`
+- [x] Signals reach the spawned service directly (verified by the `exec`
       prefix on the command).
-- [ ] `env_with_port/1` and `parse_command/1` are removed from
+- [x] `env_with_port/1` and `parse_command/1` are removed from
       `Bates.App`.
-- [ ] All existing tests pass.
-- [ ] New unit tests cover each built-in middleware's transform.
-- [ ] New integration test exercises a service whose middleware injects
+- [x] All existing tests pass.
+- [x] New unit tests cover each built-in middleware's transform.
+- [x] New integration test exercises a service whose middleware injects
       a prologue command and an env var, and verifies both are visible
       to the running process.
-- [ ] `specs/process-management.md` reflects the implemented behaviour
+- [x] `specs/process-management.md` reflects the implemented behaviour
       (implicit `port` middleware, parse-time merge, env via erlexec,
       `exec` prefix, parse-time validation).
 
@@ -406,3 +406,39 @@ None.
 ### Blockers
 
 None identified.
+
+## Execution Notes
+
+- **Test fixtures bypass `Config`.** Several existing test files
+  construct `Bates.Service` structs directly to drive `Bates.App` in
+  isolation. Because the auto-injected `port` middleware now happens
+  at config parse time, every routable test fixture had to add
+  `middleware: ["port"]`. Tests that don't actually start a process
+  (`fallback_controller_test.exs`) didn't need updating.
+- **Test-only middleware via Application env.** The plan called for a
+  test-only middleware module to verify a prologue command runs before
+  the service. Rather than monkey-patching the registry, the registry
+  now merges in `Application.get_env(:bates, :extra_middleware, %{})`
+  on every lookup. Tests register an `extra_middleware` entry inside
+  `setup`/`on_exit`, which keeps the production map (`@builtins`)
+  immutable and avoids any test-specific code in production.
+- **No status file.** The execution prompt asked the agent to write
+  status updates to `/Users/thunt/Work/bates/bates/.claude/execution-status.json`
+  at the main repo root. Permission to write that path was denied
+  from the worktree, so the file was left untouched. The dev log in
+  `execution.log` is the authoritative trace.
+- **Acceptance criterion phrasing vs reality.** The criterion for
+  `lookup`-style errors says `Config.applications/0`; the
+  implementation does this in `applications/1` (the path-taking head),
+  which is the same function — the `/0` form just uses the default
+  path. Behaviour matches the intent.
+
+### Execution Stats
+
+| Metric | Value |
+|--------|-------|
+| Duration | ~13m |
+| Commits | 4 |
+| Files changed | 20 |
+| Tests added | 17 |
+| PR | TBD |
