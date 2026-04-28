@@ -275,12 +275,11 @@ defmodule Bates.Caddy do
   end
 
   defp service_routes(control_port) do
-    for name <- Bates.ProcessSupervisor.app_names(),
-        service <- Bates.App.services(name),
-        service.hostname != nil do
+    for {_name, _root, services} <- Bates.Config.applications(),
+        %{hostname: hostname} when not is_nil(hostname) <- services do
       %{
-        "@id" => "route:#{service.hostname}",
-        "match" => [%{"host" => [service.hostname]}],
+        "@id" => "route:#{hostname}",
+        "match" => [%{"host" => [hostname]}],
         "handle" => [
           %{
             "handler" => "subroute",
