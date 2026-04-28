@@ -161,8 +161,7 @@ Middleware can be specified at two levels:
   Runs first. Use for project-wide concerns like runtime version
   managers.
 - **Service-level** — applies to a single service. Runs after
-  application-level middleware. Use for service-specific concerns like
-  port assignment.
+  application-level middleware. Use for service-specific concerns.
 
 ```toml
 [myapp]
@@ -172,17 +171,24 @@ middleware = ["asdf"]
 [myapp.services.web]
 command = "bin/rails server"
 hostname = true
-middleware = ["port"]
 
 [myapp.services.worker]
 command = "bundle exec sidekiq"
 ```
 
-In this example, the web service's pipeline is `asdf` then `port`. The
-worker has only `asdf` — no port assignment since it doesn't serve HTTP.
+In this example, the web service runs `asdf` and then `port` (the
+`port` middleware is applied automatically by Bates because the service
+has a hostname — users do not list it). The worker runs only `asdf`,
+since it does not serve HTTP and gets no port assignment.
 
 Middleware ordering is the user's responsibility; if middleware B depends
 on a runtime managed by middleware A, list A first.
+
+The application-level and service-level lists are merged at config
+parse time into a single ordered list per service. The runtime sees
+only that merged list. Unknown middleware names cause Bates to refuse
+to start; the error is surfaced by the configuration loader before any
+application is supervised.
 
 ### Process Invocation
 
@@ -193,7 +199,7 @@ assembled at init time.
 | Field | Source | Description |
 |-------|--------|-------------|
 | `prologue` | Middleware | Ordered list of shell commands that run before `command` to set up the environment. |
-| `environment` | Config + middleware | Map of environment variables set before the prologue runs. |
+| `environment` | Config + middleware | Map of environment variables set on the OS process by the spawner (not via shell `export`). |
 | `command` | Config | The supervised process. Copied from the service's `command` field. |
 
 ### Built-in Middleware
@@ -201,26 +207,35 @@ assembled at init time.
 | Middleware | What it does |
 |------------|-------------|
 | `asdf` | Adds `source $(brew --prefix)/opt/asdf/libexec/asdf.sh` to the prologue, enabling asdf-managed runtimes. |
-| `port` | Assigns a dynamically detected port to the `PORT` environment variable for services with a `port` (explicit or implied by `hostname`). |
+| `port` | Sets the `PORT` environment variable to the service's assigned port. Applied automatically for services with a hostname; users do not need to list it. |
 
 ## Service Execution
 
-Each service is executed in a single shell context using its process
-invocation. The `environment` variables are exported first, `prologue`
-commands run in order to build up the shell environment (PATH, shims,
-etc.), and the `command` runs as the final step, inheriting everything.
+Each service is executed in a single shell invocation built from its
+process invocation. Environment variables come from the OS process
+spawner (erlexec's `env:` option, which merges with Bates's inherited
+environment so `PATH`, `HOME`, etc. survive); they are not exported by
+shell. The prologue commands run in order to build up the shell
+environment (PATH, shims, etc.), and the supervised command runs as
+the final step, prefixed with `exec` so that signals reach it
+directly without an intermediate shell.
+
+The compiled invocation has the form:
+
+```
+prologue1; prologue2; exec <command>
+```
+
+When the prologue is empty, the result is simply `exec <command>`.
 
 Conceptually, the execution is equivalent to:
 
 ```bash
-# Environment (from config and middleware)
-export PORT=<assigned-port>
+# Environment (set on the OS process by the spawner)
+PORT=<assigned-port>
 
-# Prologue (from middleware, in order)
-source /opt/homebrew/opt/asdf/libexec/asdf.sh
-
-# Command (the supervised process)
-exec bin/rails server
+# Prologue + exec'd command (single shell invocation)
+source /opt/homebrew/opt/asdf/libexec/asdf.sh; exec bin/rails server
 ```
 
 OS processes require:
