@@ -38,4 +38,27 @@ defmodule BatesWeb.ProcessControllerTest do
 
     assert %{"name" => "testapp", "status" => "up"} = json_response(conn, 200)
   end
+
+  test "logs returns per-service log lines", %{conn: conn} do
+    config = single_service_config()
+    start_app(config)
+    :ok = App.up("testapp")
+    assert_eventually(fn -> App.status("testapp") == "up" end)
+
+    conn = get(conn, "/processes/testapp/logs")
+
+    assert %{"name" => "testapp", "services" => services} = json_response(conn, 200)
+    assert [%{"name" => "testapp", "lines" => lines}] = services
+    assert is_list(lines)
+  end
+
+  test "logs returns empty lines when app has not started", %{conn: conn} do
+    config = single_service_config()
+    start_app(config)
+
+    conn = get(conn, "/processes/testapp/logs")
+
+    assert %{"name" => "testapp", "services" => services} = json_response(conn, 200)
+    assert [%{"name" => "testapp", "lines" => []}] = services
+  end
 end

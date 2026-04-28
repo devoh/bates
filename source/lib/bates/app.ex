@@ -5,7 +5,7 @@ defmodule Bates.App do
   alias Bates.Service
 
   @timeout 60_000
-  @max_log_lines 100
+  @max_log_lines 1_000
   @poll_interval Application.compile_env(:bates, :poll_interval, 200)
   @readiness_timeout Application.compile_env(:bates, :readiness_timeout, 60_000)
 
@@ -41,6 +41,10 @@ defmodule Bates.App do
 
   def services(name) do
     GenServer.call(via_tuple(name), :services)
+  end
+
+  def logs(name) do
+    GenServer.call(via_tuple(name), :logs)
   end
 
   # Callbacks
@@ -120,6 +124,16 @@ defmodule Bates.App do
       end)
 
     {:reply, service_list, state}
+  end
+
+  @impl GenServer
+  def handle_call(:logs, _from, state) do
+    logs =
+      Enum.map(state.services, fn {_name, svc} ->
+        %{name: svc.config.name, lines: :queue.to_list(svc.log_buffer)}
+      end)
+
+    {:reply, logs, state}
   end
 
   @impl GenServer

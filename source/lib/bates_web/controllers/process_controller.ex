@@ -46,6 +46,11 @@ defmodule BatesWeb.ProcessController do
     end
   end
 
+  def logs(conn, %{"name" => name}) do
+    logs = App.logs(name)
+    json(conn, %{name: name, services: logs})
+  end
+
   def restart(conn, %{"name" => name}) do
     with :ok <- App.down(name),
          :ok <- App.up(name) do
