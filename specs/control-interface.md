@@ -137,6 +137,25 @@ POST bates.test/processes/<name>/restart
 → 422  {"name": "myapp", "error": "..."}
 ```
 
+**Get application logs:**
+
+```
+GET bates.test/processes/<name>/logs
+
+→ 200
+{
+  "name": "myapp",
+  "services": [
+    {"name": "web", "lines": ["Starting server on port 3000...", "Listening..."]},
+    {"name": "worker", "lines": ["Worker started", "Processing jobs..."]}
+  ]
+}
+```
+
+Returns the recent output from each service's in-memory ring buffer.
+Lines are ordered oldest to newest. Services that haven't produced
+output return an empty list.
+
 ### Content Negotiation
 
 The dashboard and API share the same hostname. Routing between them:
