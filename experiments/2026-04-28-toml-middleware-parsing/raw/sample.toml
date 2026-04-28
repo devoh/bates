@@ -1,0 +1,11 @@
+[myapp]
+root = "/tmp/myapp"
+middleware = ["asdf"]
+
+[myapp.services.web]
+command = "bin/rails server"
+hostname = true
+middleware = ["port"]
+
+[myapp.services.worker]
+command = "bin/sidekiq"

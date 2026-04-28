@@ -1,0 +1,45 @@
+Reading fixture: /Users/thunt/Work/bates/bates/experiments/2026-04-28-toml-middleware-parsing/raw/sample.toml
+
+--- Raw TOML ---
+[myapp]
+root = "/tmp/myapp"
+middleware = ["asdf"]
+
+[myapp.services.web]
+command = "bin/rails server"
+hostname = true
+middleware = ["port"]
+
+[myapp.services.worker]
+command = "bin/sidekiq"
+
+
+--- Toml.decode/1 result ---
+{:ok,
+ %{
+   "myapp" => %{
+     "middleware" => ["asdf"],
+     "root" => "/tmp/myapp",
+     "services" => %{
+       "web" => %{
+         "command" => "bin/rails server",
+         "hostname" => true,
+         "middleware" => ["port"]
+       },
+       "worker" => %{"command" => "bin/sidekiq"}
+     }
+   }
+ }}
+
+--- App-level middleware ---
+value: ["asdf"]
+is_list/1: true
+all binaries?: true
+
+--- Service-level middleware (web) ---
+value: ["port"]
+is_list/1: true
+all binaries?: true
+
+--- Service-level middleware (worker) ---
+value (should be nil/missing): nil

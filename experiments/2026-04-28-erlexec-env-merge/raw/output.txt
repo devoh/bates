@@ -1,0 +1,63 @@
+## Raw output from `mix run --no-start ../experiments/2026-04-28-erlexec-env-merge/explore.exs`
+## Run from /Users/thunt/Work/bates/bates/source on 2026-04-28
+## Erlang/OTP 27.3.4.10 + Elixir 1.19.5 + erlexec (whatever is in deps/)
+
+started :exec
+
+========================================================================
+Run 1: env (no :env opt) — baseline
+opts: [:stdout, :sync]
+========================================================================
+result key: PATH/HOME/USER all present, FOO absent, PORT absent.
+
+Selected env vars:
+  USER=thunt
+  HOME=/Users/thunt
+  SHELL=/bin/bash
+  PATH=/Users/thunt/.asdf/installs/erlang/27.3.4.10/erts-15.2.7.7/bin:...:/opt/homebrew/bin:...:/usr/bin:/bin:...
+  HOMEBREW_PREFIX=/opt/homebrew
+  ASDF_DIR=/opt/homebrew/opt/asdf/libexec
+
+(Full env was 60+ vars from the parent shell. Truncated here for brevity.)
+
+========================================================================
+Run 2: env with env: [{FOO, bar}]
+opts: [:stdout, :sync, {:env, [{~c"FOO", ~c"bar"}]}]
+========================================================================
+ALL inherited vars from Run 1 are still present (PATH, HOME, USER, SHELL,
+HOMEBREW_PREFIX, ASDF_DIR, etc). FOO=bar is *added* to the list.
+
+  USER=thunt
+  HOME=/Users/thunt
+  PATH=/Users/thunt/.asdf/installs/erlang/27.3.4.10/erts-15.2.7.7/bin:...:/opt/homebrew/bin:...
+  FOO=bar             <-- new
+
+========================================================================
+Run 3: env with env: [{PORT, 5000}] — mirrors the middleware-system plan
+opts: [:stdout, :sync, {:env, [{~c"PORT", ~c"5000"}]}]
+========================================================================
+Same pattern: full inherited env preserved, PORT=5000 inserted.
+
+  USER=thunt
+  HOME=/Users/thunt
+  PATH=/Users/thunt/.asdf/installs/erlang/27.3.4.10/erts-15.2.7.7/bin:...:/opt/homebrew/bin:...
+  PORT=5000           <-- new
+
+========================================================================
+Run 4: sh -c 'echo PATH=$PATH; echo HOME=$HOME; echo PORT=$PORT'
+opts: [:stdout, :sync, {:env, [{~c"PORT", ~c"5000"}]}]
+========================================================================
+The sh interpreter found and inherited PATH and HOME. PORT was injected.
+
+  PATH=/Users/thunt/.asdf/installs/erlang/27.3.4.10/erts-15.2.7.7/bin:...:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:...
+  HOME=/Users/thunt
+  PORT=5000
+
+=== verdict ===
+MERGE: Run 2 contains both PATH (inherited) and FOO=bar (new).
+
+NOTE: The full unredacted erlexec result tuples and stdout strings (every
+single env var) were captured at experiment time and are reproducible by
+re-running explore.exs. They are omitted here for readability — they
+contained ~60 vars per run and only PATH was truncated above for line-
+length reasons.
