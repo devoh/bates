@@ -14,7 +14,13 @@ defmodule Bates.AppTest do
     command = Keyword.get(opts, :command, "sleep 999")
 
     {"testapp", ".", [
-      %Service{name: "testapp", command: command, port: port, hostname: "testapp.test"}
+      %Service{
+        name: "testapp",
+        command: command,
+        port: port,
+        hostname: "testapp.test",
+        middleware: ["port"]
+      }
     ]}
   end
 
@@ -126,7 +132,8 @@ defmodule Bates.AppTest do
           name: "web",
           command: "elixir test/support/test_server.ex",
           port: nil,
-          hostname: "testapp.test"
+          hostname: "testapp.test",
+          middleware: ["port"]
         },
         %Service{
           name: "worker",
@@ -174,6 +181,79 @@ defmodule Bates.AppTest do
       assert services["web"].status == "down"
       assert services["worker"].hostname == nil
       assert services["worker"].status == "down"
+    end
+  end
+
+  describe "middleware" do
+    defmodule MarkerMiddleware do
+      @behaviour Bates.Middleware
+
+      @impl true
+      def apply(invocation, %{service: %{name: name}}) do
+        marker_path = Application.fetch_env!(:bates, :marker_paths) |> Map.fetch!(name)
+        %{invocation | prologue: invocation.prologue ++ ["touch #{marker_path}"]}
+      end
+    end
+
+    setup do
+      Phoenix.PubSub.subscribe(Bates.PubSub, "service:testapp:web")
+      :ok
+    end
+
+    test "the port middleware exposes the assigned PORT to the running service" do
+      port_file = Path.join(System.tmp_dir!(), "bates_port_#{System.unique_integer([:positive])}")
+      on_exit(fn -> File.rm(port_file) end)
+
+      config = {"testapp", ".", [
+        %Service{
+          name: "web",
+          command: ~s|sh -c 'echo $PORT > #{port_file}; exec elixir test/support/test_server.ex'|,
+          port: nil,
+          hostname: "testapp.test",
+          middleware: ["port"]
+        }
+      ]}
+
+      start_supervised!({App, config})
+      :ok = App.up("testapp")
+
+      assert_eventually(fn -> App.status("testapp") == "up" end)
+
+      [service] = App.services("testapp")
+      {written_port, ""} = port_file |> File.read!() |> String.trim() |> Integer.parse()
+      assert written_port == service.port
+    end
+
+    test "a prologue command emitted by middleware runs before the service" do
+      marker_path =
+        Path.join(System.tmp_dir!(), "bates_marker_#{System.unique_integer([:positive])}")
+
+      File.rm(marker_path)
+      on_exit(fn -> File.rm(marker_path) end)
+
+      Application.put_env(:bates, :extra_middleware, %{"marker" => MarkerMiddleware})
+      Application.put_env(:bates, :marker_paths, %{"web" => marker_path})
+
+      on_exit(fn ->
+        Application.delete_env(:bates, :extra_middleware)
+        Application.delete_env(:bates, :marker_paths)
+      end)
+
+      config = {"testapp", ".", [
+        %Service{
+          name: "web",
+          command: "elixir test/support/test_server.ex",
+          port: nil,
+          hostname: "testapp.test",
+          middleware: ["marker", "port"]
+        }
+      ]}
+
+      start_supervised!({App, config})
+      :ok = App.up("testapp")
+
+      assert_eventually(fn -> App.status("testapp") == "up" end)
+      assert File.exists?(marker_path)
     end
   end
 

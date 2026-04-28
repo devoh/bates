@@ -12,13 +12,13 @@ defmodule Bates.Middleware do
 end
 
 defmodule Bates.Middleware.Registry do
-  @middleware %{
+  @builtins %{
     "asdf" => Bates.Middleware.Asdf,
     "port" => Bates.Middleware.Port
   }
 
   def lookup(name) when is_binary(name) do
-    case Map.fetch(@middleware, name) do
+    case Map.fetch(all(), name) do
       {:ok, module} -> {:ok, module}
       :error -> {:error, :unknown}
     end
@@ -29,5 +29,10 @@ defmodule Bates.Middleware.Registry do
       {:ok, module} -> module
       {:error, :unknown} -> raise "Unknown middleware: #{inspect(name)}"
     end
+  end
+
+  defp all do
+    extra = Application.get_env(:bates, :extra_middleware, %{})
+    Map.merge(@builtins, extra)
   end
 end

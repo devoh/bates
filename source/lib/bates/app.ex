@@ -2,7 +2,7 @@ defmodule Bates.App do
   use GenServer, restart: :transient
   require Logger
 
-  alias Bates.Service
+  alias Bates.{Middleware, ProcessInvocation, Service}
 
   @timeout 60_000
   @max_log_lines 1_000
@@ -239,9 +239,10 @@ defmodule Bates.App do
 
     update_caddy_route(config.hostname, assigned_port)
 
-    command = parse_command(config)
+    invocation = build_invocation(config, assigned_port, state)
+    command = invocation |> ProcessInvocation.compile() |> to_charlist()
     root = state.root |> Path.expand() |> to_charlist()
-    env = env_with_port(assigned_port)
+    env = build_env(invocation.environment)
     opts = [:stdout, :stderr, cd: root, env: env]
 
     case :exec.run_link(command, opts) do
@@ -339,10 +340,24 @@ defmodule Bates.App do
     :queue.to_list(buffer) |> Enum.join("\n")
   end
 
-  defp env_with_port(nil), do: []
+  defp build_invocation(%Service{} = config, assigned_port, state) do
+    modules = Enum.map(config.middleware, &Middleware.Registry.lookup!/1)
+    initial = %ProcessInvocation{command: config.command}
 
-  defp env_with_port(port) when is_integer(port) do
-    [{~c"PORT", to_charlist(port)}]
+    context = %{
+      assigned_port: assigned_port,
+      service: config,
+      app_name: state.name,
+      root: state.root
+    }
+
+    Middleware.apply_pipeline(initial, modules, context)
+  end
+
+  defp build_env(environment) do
+    Enum.map(environment, fn {key, value} ->
+      {to_charlist(key), to_charlist(value)}
+    end)
   end
 
   defp log(app_name, service_name, message) do
@@ -354,10 +369,6 @@ defmodule Bates.App do
       end
 
     Logger.info("#{prefix} #{message}")
-  end
-
-  defp parse_command(%Service{command: command}) do
-    to_charlist(command)
   end
 
   defp assign_port(%Service{port: port}) when is_integer(port), do: port

@@ -9,7 +9,8 @@ defmodule BatesWeb.LoadingControllerTest do
         name: name,
         command: command,
         port: nil,
-        hostname: "#{name}.test"
+        hostname: "#{name}.test",
+        middleware: ["port"]
       }
     ]}
   end
@@ -47,7 +48,7 @@ defmodule BatesWeb.LoadingControllerTest do
 
   test "redirects to service hostname for multi-service app", %{conn: conn} do
     config = {"myapp", ".", [
-      %Service{name: "web", command: "elixir test/support/test_server.ex", port: nil, hostname: "myapp.test"},
+      %Service{name: "web", command: "elixir test/support/test_server.ex", port: nil, hostname: "myapp.test", middleware: ["port"]},
       %Service{name: "vite", command: "sleep 999", port: nil}
     ]}
 

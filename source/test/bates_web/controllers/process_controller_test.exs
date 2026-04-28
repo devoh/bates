@@ -9,7 +9,8 @@ defmodule BatesWeb.ProcessControllerTest do
         name: "testapp",
         command: "elixir test/support/test_server.ex",
         port: nil,
-        hostname: "testapp.test"
+        hostname: "testapp.test",
+        middleware: ["port"]
       }
     ]}
   end

@@ -11,7 +11,8 @@ defmodule BatesWeb.DashboardLiveTest do
         name: name,
         command: command,
         port: Bates.PortNumber.next(),
-        hostname: "#{name}.test"
+        hostname: "#{name}.test",
+        middleware: ["port"]
       }
     ]}
   end
@@ -142,7 +143,7 @@ defmodule BatesWeb.DashboardLiveTest do
 
   test "multi-service app shows service rows", %{conn: conn} do
     config = {"myapp", ".", [
-      %Service{name: "web", command: "sleep 999", port: Bates.PortNumber.next(), hostname: "myapp.test"},
+      %Service{name: "web", command: "sleep 999", port: Bates.PortNumber.next(), hostname: "myapp.test", middleware: ["port"]},
       %Service{name: "worker", command: "sleep 999", port: nil, hostname: nil}
     ]}
 
@@ -169,7 +170,7 @@ defmodule BatesWeb.DashboardLiveTest do
 
   test "partial status shows start, stop, and restart buttons", %{conn: conn} do
     config = {"myapp", ".", [
-      %Service{name: "web", command: "sleep 999", port: 19879, hostname: "myapp.test"},
+      %Service{name: "web", command: "sleep 999", port: 19879, hostname: "myapp.test", middleware: ["port"]},
       %Service{name: "worker", command: "sleep 999", port: nil, hostname: nil}
     ]}
 
