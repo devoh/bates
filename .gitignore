@@ -1,9 +1,10 @@
 # Claude Code
-.claude/activity/
-.claude/scheduled_tasks.lock
-.claude/execution-status.json
-.claude/worktrees/
 .claude/*-prompt.md
+.claude/activity/
+.claude/execution-status.json
+.claude/plan_usage/
+.claude/scheduled_tasks.lock
+.claude/worktrees/
 
 # Agent execution log
 execution.log
