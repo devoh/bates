@@ -46,43 +46,35 @@ are application-level only — there are no per-service controls.
 ## Loading Page
 
 When a request arrives for an application that isn't running, Caddy's
-fallback routes it here. The control interface identifies the target app
-from the request's `Host` header via a hostname-to-application lookup.
+fallback routes it to the control interface. An `AppRedirect` plug
+identifies the target app and service from the request's `Host` header
+via a hostname-to-application lookup and redirects to the loading page
+on the control host (`bates.test`).
 
-Implemented as a Phoenix LiveView. When a specific service hostname was
-requested (e.g., `vite.myapp.test`), the LiveView subscribes to that
-service's PubSub topic (`"service:<app>:<service>"`). Otherwise it
-subscribes to the application-level topic (`"app:<app>"`).
+The loading page is a blocking controller action at
+`/loading/:app_name/:service_name`. It works for all HTTP clients
+(browsers, curl, API clients) without requiring a websocket.
 
 The flow:
 
-1. Subscribes to PubSub for the target (service or application), then
-   triggers `App.up/1` to start the full application (all services).
-2. Checks the application status. If already `up`, redirects immediately
-   without waiting for a PubSub message.
-3. Otherwise, shows the app name and boot status (typically `starting`),
-   updating live as the application starts.
+1. Subscribes to PubSub for the target service
+   (`"service:<app>:<service>"`), then triggers `App.up/1` to start the
+   full application (all services).
+2. Checks the application status. If already `up`, redirects immediately.
+3. Otherwise, blocks until the service comes up, waiting in a receive
+   loop for the PubSub broadcast.
 4. The Application GenServer polls each service's assigned port via TCP
    connect. When a service's connection succeeds, it broadcasts
    `{:status, "up"}` on both the service and application PubSub topics.
-5. On receiving `{:status, "up"}` for the subscribed target: redirects
-   to the originally requested hostname (e.g., `https://vite.myapp.test`),
-   not necessarily the application's default hostname. The loading page
-   does not wait for all services to be up — only the requested one.
-6. On crash or readiness timeout: displays the error with recent log
-   output.
+5. On receiving `{:status, "up"}`: redirects to the service's hostname
+   (e.g., `https://vite.myapp.test`). The loading page does not wait for
+   all services to be up — only the requested one.
+6. On crash: returns 502 with the application name and error details.
+7. On readiness timeout: returns 504.
 
-### Crash Display
-
-If a service exits during boot (non-zero exit status), the loading page
-shows:
-
-- The application name and status (crashed).
-- The exit status code.
-- Recent log output (stdout/stderr captured by the Application GenServer).
-
-This gives the developer immediate feedback without needing to check a
-terminal.
+Because the loading page is served from `bates.test` (the control host),
+its connection is not disrupted when Caddy updates the app's route
+upstream on startup.
 
 ## API
 
@@ -162,20 +154,18 @@ lands here instead. See [Routing](routing.md).
 
 An `AppRedirect` plug in the browser pipeline intercepts app-domain
 requests (any `.test` hostname other than `bates.test`) and redirects
-them to the loading page before they reach any route. The plug uses a
+them to the loading page on the control host. The plug uses a
 hostname-to-application lookup to resolve arbitrary hostnames (e.g.,
-`vite.myapp.test` → application `myapp`) rather than parsing the
-hostname string. When a non-default hostname is requested, it is passed
-as a query parameter so the loading page knows which service to wait
-for. This keeps the dashboard and other control-domain routes from
-accidentally handling app-domain traffic.
+`vite.myapp.test` → application `myapp`, service `vite`) and redirects
+to `/loading/:app_name/:service_name` on `bates.test`. This keeps the
+loading page's connection on a stable hostname that isn't affected by
+Caddy route updates when the app starts.
 
 The control interface delegates to the process management layer for
-starting, stopping, and querying application state. It reads service
-log output for crash display.
+starting, stopping, and querying application state.
 
-Both the dashboard and loading page are LiveViews that subscribe to
-state changes via PubSub. Application GenServers broadcast state
-transitions at both the service level (`"service:<app>:<service>"`)
-and application level (`"app:<app>"`). Connected LiveViews receive
-those events and re-render immediately.
+The dashboard is a LiveView that subscribes to application-level state
+changes via PubSub (`"app:<name>"`). The loading page is a blocking
+controller that subscribes to service-level state changes
+(`"service:<app>:<service>"`). Application GenServers broadcast state
+transitions at both levels.

@@ -83,14 +83,14 @@ The on-demand startup flow (app not running):
 2. The client connects to Caddy on port 443.
 3. Caddy routes to the control interface (the default upstream for
    stopped apps).
-4. The control interface starts the app and serves a loading page.
-5. The Application GenServer assigns ports to each service via
-   `PortNumber.next()`, updates Caddy routes via the admin API, and
-   spawns all services. It enters the `starting` state and polls each
-   service's port via TCP connect.
-6. The loading page (a LiveView) receives boot progress via PubSub.
-   When the requested service's readiness check succeeds, the
-   Application GenServer broadcasts `up` and the loading page redirects.
+4. The control interface redirects to a loading page on `bates.test`
+   that triggers `App.up/1` and blocks until the app is ready.
+5. The Application GenServer assigns ports to each service, updates
+   Caddy routes via the admin API, and spawns all services. It enters
+   the `starting` state and polls each service's port via TCP connect.
+6. When the requested service's readiness check succeeds, the
+   Application GenServer broadcasts `up` via PubSub. The loading page
+   receives the broadcast and redirects to the app hostname.
 
 ### CLI
 

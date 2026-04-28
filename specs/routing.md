@@ -89,16 +89,17 @@ Caddy's admin API listens on `localhost:2019`.
 Within the Phoenix application, an `AppRedirect` plug in the browser
 pipeline handles app-domain requests before they reach any route. When
 a request arrives with a `.test` hostname other than `bates.test`, the
-plug resolves the hostname to an application name using a lookup map
-from `ProcessSupervisor.hostname_lookup/0` and redirects to the
-loading page (`/loading/<name>`). When the requested hostname differs
-from the application's default hostname (e.g., `vite.myapp.test` for
-application `myapp`), the original hostname is passed as a query
-parameter so the loading page knows which specific service to wait for.
+plug resolves the hostname to an application and service name using a
+lookup map from `ProcessSupervisor.hostname_lookup/0` and redirects to
+the loading page at `bates.test/loading/:app_name/:service_name`. The
+redirect targets the control host (`bates.test`) so the loading page's
+connection is not disrupted when Caddy updates the app's route upstream
+on startup.
 
 Requests to `bates.test` pass through the plug unchanged and are
 handled by the normal route table: the dashboard at `/`, the loading
-page at `/loading/:app_name`, and a catch-all fallback returning 404.
+page at `/loading/:app_name/:service_name`, and a catch-all fallback
+returning 404.
 
 ## How It Connects
 
