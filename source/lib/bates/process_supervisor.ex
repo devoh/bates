@@ -45,7 +45,13 @@ defmodule Bates.ProcessSupervisor do
   # Helpers
 
   defp load_applications do
-    Bates.Config.applications() |> Enum.each(&start_child/1)
+    case Bates.Config.applications() do
+      {:error, reason} ->
+        raise "Bates configuration error: #{inspect(reason)}"
+
+      applications when is_list(applications) ->
+        Enum.each(applications, &start_child/1)
+    end
   end
 
   defp start_child(config) do

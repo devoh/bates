@@ -1,0 +1,16 @@
+[myapp]
+root = "/tmp/myapp"
+middleware = ["asdf"]
+
+[myapp.services.web]
+command = "bin/rails server -p $PORT"
+hostname = true
+middleware = []
+
+[myapp.services.vite]
+command = "bin/vite dev --port $PORT"
+hostname = "vite.myapp"
+middleware = ["port"]
+
+[myapp.services.worker]
+command = "bin/sidekiq"
