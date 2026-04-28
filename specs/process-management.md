@@ -255,9 +255,12 @@ Each service's stdout and stderr are captured and handled in two ways:
    (e.g., `[myapp:web]`). This provides a single stream for watching
    all activity.
 
-2. **Per-service log files.** Each service's output is also written to a
-   dedicated log file for isolated inspection. Log files are stored in a
-   runtime directory scoped to the current Bates session.
+2. **Per-service ring buffer.** Each service keeps its recent output in
+   an in-memory ring buffer. This provides isolated, per-service access
+   to recent log output without writing to disk. The buffer is used by
+   the loading page to display crash output, and can be exposed via the
+   API for CLI access (e.g., `bates logs myapp:web`). Logs are lost on
+   Bates restart, which is acceptable for a development server.
 
 ## How It Connects
 
