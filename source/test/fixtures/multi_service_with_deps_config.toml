@@ -1,0 +1,15 @@
+[myapp]
+root = "/tmp/myapp"
+
+[myapp.services.web]
+command = "bin/rails server -p $PORT"
+hostname = true
+depends_on = ["vite"]
+
+[myapp.services.vite]
+command = "bin/vite dev --port $PORT"
+hostname = "vite.myapp"
+
+[myapp.services.worker]
+command = "bin/sidekiq"
+depends_on = ["web"]

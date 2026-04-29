@@ -133,4 +133,49 @@ defmodule Bates.ConfigTest do
                {:error, {:unknown_middleware, "nope"}}
     end
   end
+
+  describe "depends_on" do
+    test "parses depends_on as a list of sibling service names" do
+      [{_name, _root, services}] =
+        Config.applications("test/fixtures/multi_service_with_deps_config.toml")
+
+      service_map = Map.new(services, &{&1.name, &1})
+
+      assert service_map["web"].depends_on == ["vite"]
+      assert service_map["worker"].depends_on == ["web"]
+    end
+
+    test "defaults to empty list when depends_on key is absent" do
+      [{_name, _root, services}] =
+        Config.applications("test/fixtures/multi_service_with_deps_config.toml")
+
+      service_map = Map.new(services, &{&1.name, &1})
+
+      assert service_map["vite"].depends_on == []
+    end
+
+    test "single-service shorthand has empty depends_on" do
+      [{_name, _root, [service]}] = Config.applications("test/fixtures/config.toml")
+
+      assert service.depends_on == []
+    end
+
+    test "returns {:error, {:unknown_dependency, app, service, missing}} for unknown name" do
+      assert Config.applications("test/fixtures/unknown_dependency_config.toml") ==
+               {:error, {:unknown_dependency, "myapp", "web", "nonexistent"}}
+    end
+
+    test "returns {:error, {:dependency_cycle, app, cycle}} for two-service cycle" do
+      assert {:error, {:dependency_cycle, "myapp", cycle}} =
+               Config.applications("test/fixtures/cyclic_dependencies_config.toml")
+
+      assert MapSet.new(cycle) == MapSet.new(["web", "worker"])
+      assert length(cycle) == 2
+    end
+
+    test "returns {:error, {:dependency_cycle, app, cycle}} for self-loop" do
+      assert Config.applications("test/fixtures/self_loop_dependency_config.toml") ==
+               {:error, {:dependency_cycle, "myapp", ["web"]}}
+    end
+  end
 end

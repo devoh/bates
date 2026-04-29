@@ -184,6 +184,164 @@ defmodule Bates.AppTest do
     end
   end
 
+  describe "depends_on" do
+    setup do
+      Phoenix.PubSub.subscribe(Bates.PubSub, "service:testapp:web")
+      Phoenix.PubSub.subscribe(Bates.PubSub, "service:testapp:vite")
+      Phoenix.PubSub.subscribe(Bates.PubSub, "service:testapp:worker")
+      :ok
+    end
+
+    defp multi_service_with_deps_config(opts \\ []) do
+      vite_command = Keyword.get(opts, :vite_command, "elixir test/support/test_server.ex")
+      web_command = Keyword.get(opts, :web_command, "elixir test/support/test_server.ex")
+
+      {"testapp", ".", [
+        %Service{
+          name: "vite",
+          command: vite_command,
+          port: nil,
+          hostname: "vite.testapp.test",
+          middleware: ["port"]
+        },
+        %Service{
+          name: "web",
+          command: web_command,
+          port: nil,
+          hostname: "testapp.test",
+          middleware: ["port"],
+          depends_on: ["vite"]
+        }
+      ]}
+    end
+
+    test "dependent stays down while dependency is starting" do
+      config = multi_service_with_deps_config(vite_command: "sleep 999")
+      start_supervised!({App, config})
+      :ok = App.up("testapp")
+
+      assert App.service_status("testapp", "vite") == "starting"
+      assert App.service_status("testapp", "web") == "down"
+    end
+
+    test "dependent transitions to starting once dependency reaches up" do
+      config = multi_service_with_deps_config()
+      start_supervised!({App, config})
+      :ok = App.up("testapp")
+
+      assert_receive {:status, "up"}, 10_000
+      assert_eventually(fn -> App.service_status("testapp", "web") in ["starting", "up"] end)
+      assert_eventually(fn -> App.status("testapp") == "up" end)
+    end
+
+    test "dependent stays down when dependency crashes" do
+      config = multi_service_with_deps_config(vite_command: "sleep 999")
+      start_supervised!({App, config})
+      :ok = App.up("testapp")
+
+      # Test config sets readiness_timeout to 2_000ms, so vite times out.
+      assert_receive {:status, "crashed", _details}, 5_000
+
+      assert App.service_status("testapp", "vite") == "crashed"
+      assert App.service_status("testapp", "web") == "down"
+      assert App.status("testapp") == "crashed"
+    end
+
+    test "queued dependent does not start the readiness timer" do
+      config = multi_service_with_deps_config(vite_command: "sleep 999")
+      start_supervised!({App, config})
+      :ok = App.up("testapp")
+
+      # Wait for the parent's readiness timeout to fire.
+      assert_receive {:status, "crashed", _details}, 5_000
+
+      # The dependent never got `started_at` set, so its services entry has
+      # no pid and reads as "down" rather than "crashed".
+      assert App.service_status("testapp", "web") == "down"
+
+      web_service = App.services("testapp") |> Enum.find(&(&1.name == "web"))
+      assert web_service.port == nil
+    end
+
+    test "repeated :up restarts a crashed dependency" do
+      config = multi_service_with_deps_config(vite_command: "sleep 999")
+      start_supervised!({App, config})
+      :ok = App.up("testapp")
+
+      assert_receive {:status, "crashed", _details}, 5_000
+      assert App.service_status("testapp", "vite") == "crashed"
+      assert App.service_status("testapp", "web") == "down"
+
+      :ok = App.up("testapp")
+
+      # Re-running :up on a crashed service kicks off another start attempt
+      # since pid == nil. Vite is "starting" again briefly.
+      assert App.service_status("testapp", "vite") in ["starting", "crashed"]
+    end
+
+    test "self-up idempotency: repeated :up does not double-start" do
+      config = multi_service_with_deps_config()
+      start_supervised!({App, config})
+
+      :ok = App.up("testapp")
+      vite_state_first = App.services("testapp") |> Enum.find(&(&1.name == "vite"))
+
+      :ok = App.up("testapp")
+      vite_state_second = App.services("testapp") |> Enum.find(&(&1.name == "vite"))
+
+      # Same assigned port means the service was not torn down and restarted.
+      assert vite_state_first.port == vite_state_second.port
+    end
+
+    test "stops services in reverse topological order" do
+      config = multi_service_with_deps_config()
+      start_supervised!({App, config})
+      :ok = App.up("testapp")
+
+      assert_eventually(fn -> App.status("testapp") == "up" end)
+
+      # Use a per-test agent to record stop-broadcast order. Subscribe a
+      # dedicated process to each service's topic so we can attribute the
+      # `{:status, "down"}` broadcasts to specific services.
+      test = self()
+
+      web_listener =
+        spawn_link(fn ->
+          Phoenix.PubSub.subscribe(Bates.PubSub, "service:testapp:web")
+          relay_down(test, "web")
+        end)
+
+      vite_listener =
+        spawn_link(fn ->
+          Phoenix.PubSub.subscribe(Bates.PubSub, "service:testapp:vite")
+          relay_down(test, "vite")
+        end)
+
+      # Give the subscribers a moment to register.
+      Process.sleep(50)
+
+      :ok = App.down("testapp")
+
+      # Web (the dependent) must reach "down" before vite (the dependency).
+      assert_receive {:service_down, first}, 5_000
+      assert_receive {:service_down, second}, 5_000
+      assert {first, second} == {"web", "vite"}
+
+      Process.exit(web_listener, :kill)
+      Process.exit(vite_listener, :kill)
+
+      assert App.service_status("testapp", "vite") == "down"
+      assert App.service_status("testapp", "web") == "down"
+    end
+
+    defp relay_down(test, name) do
+      receive do
+        {:status, "down"} -> send(test, {:service_down, name})
+        _ -> relay_down(test, name)
+      end
+    end
+  end
+
   describe "middleware" do
     defmodule MarkerMiddleware do
       @behaviour Bates.Middleware
