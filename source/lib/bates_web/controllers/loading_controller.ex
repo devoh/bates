@@ -7,6 +7,7 @@ defmodule BatesWeb.LoadingController do
 
   def show(conn, %{"app_name" => app_name, "service_name" => service_name}) do
     Phoenix.PubSub.subscribe(Bates.PubSub, "service:#{app_name}:#{service_name}")
+    Phoenix.PubSub.subscribe(Bates.PubSub, "app:#{app_name}")
 
     try do
       App.up(app_name)
@@ -62,6 +63,7 @@ defmodule BatesWeb.LoadingController do
       receive do
         {:status, "up"} -> :up
         {:status, "crashed", details} -> {:crashed, details}
+        {:status, "crashed"} -> {:crashed, ""}
         {:status, _} -> receive_until(deadline)
       after
         remaining -> :timeout
