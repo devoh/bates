@@ -78,7 +78,11 @@ defmodule Bates.App do
   @impl GenServer
   def handle_call(:down, _from, state) do
     new_state =
-      Enum.reduce(state.services, state, fn {service_name, service_state}, acc ->
+      state
+      |> reverse_topological_order()
+      |> Enum.reduce(state, fn service_name, acc ->
+        service_state = Map.fetch!(acc.services, service_name)
+
         if service_state.pid != nil do
           stop_service(acc, service_name, service_state)
         else
@@ -221,6 +225,26 @@ defmodule Bates.App do
   end
 
   # Helpers
+
+  defp reverse_topological_order(state) do
+    graph = :digraph.new()
+
+    try do
+      Enum.each(state.services, fn {name, _service} ->
+        :digraph.add_vertex(graph, name)
+      end)
+
+      Enum.each(state.services, fn {name, %{config: %Service{depends_on: depends_on}}} ->
+        Enum.each(depends_on, fn dependency_name ->
+          :digraph.add_edge(graph, name, dependency_name)
+        end)
+      end)
+
+      :digraph_utils.topsort(graph)
+    after
+      :digraph.delete(graph)
+    end
+  end
 
   defp start_eligible(state) do
     Enum.reduce(state.services, state, fn {service_name, service_state}, acc ->
