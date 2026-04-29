@@ -8,9 +8,9 @@ defmodule Bates.Config do
          {:ok, config} <- Toml.decode(toml) do
       applications = Enum.map(config, &build_application/1)
 
-      case validate_middleware(applications) do
-        :ok -> applications
-        {:error, _} = error -> error
+      with :ok <- validate_middleware(applications),
+           :ok <- validate_dependencies(applications) do
+        applications
       end
     else
       {:error, :enoent} -> []
@@ -106,5 +106,69 @@ defmodule Bates.Config do
         {:error, :unknown} -> {:halt, {:error, {:unknown_middleware, name}}}
       end
     end)
+  end
+
+  defp validate_dependencies(applications) do
+    Enum.reduce_while(applications, :ok, fn {app_name, _root, services}, _acc ->
+      with :ok <- validate_dependency_names(app_name, services),
+           :ok <- validate_dependency_cycles(app_name, services) do
+        {:cont, :ok}
+      else
+        {:error, _} = error -> {:halt, error}
+      end
+    end)
+  end
+
+  defp validate_dependency_names(app_name, services) do
+    declared = MapSet.new(services, & &1.name)
+
+    Enum.reduce_while(services, :ok, fn %Service{name: name, depends_on: depends_on}, _acc ->
+      case Enum.find(depends_on, &(not MapSet.member?(declared, &1))) do
+        nil ->
+          {:cont, :ok}
+
+        missing ->
+          {:halt, {:error, {:unknown_dependency, app_name, name, missing}}}
+      end
+    end)
+  end
+
+  defp validate_dependency_cycles(app_name, services) do
+    graph = :digraph.new()
+
+    try do
+      Enum.each(services, fn %Service{name: name} ->
+        :digraph.add_vertex(graph, name)
+      end)
+
+      Enum.each(services, fn %Service{name: name, depends_on: depends_on} ->
+        Enum.each(depends_on, fn dependency ->
+          :digraph.add_edge(graph, name, dependency)
+        end)
+      end)
+
+      case find_cycle(graph, services) do
+        nil -> :ok
+        cycle -> {:error, {:dependency_cycle, app_name, cycle}}
+      end
+    after
+      :digraph.delete(graph)
+    end
+  end
+
+  defp find_cycle(graph, services) do
+    Enum.find_value(services, fn %Service{name: name} ->
+      case :digraph.get_short_cycle(graph, name) do
+        false -> nil
+        cycle -> normalize_cycle(cycle)
+      end
+    end)
+  end
+
+  defp normalize_cycle([first | _] = cycle) do
+    case List.last(cycle) do
+      ^first -> Enum.drop(cycle, -1)
+      _ -> cycle
+    end
   end
 end

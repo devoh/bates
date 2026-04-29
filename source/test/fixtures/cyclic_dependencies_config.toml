@@ -1,0 +1,11 @@
+[myapp]
+root = "/tmp/myapp"
+
+[myapp.services.web]
+command = "bin/rails server -p $PORT"
+hostname = true
+depends_on = ["worker"]
+
+[myapp.services.worker]
+command = "bin/sidekiq"
+depends_on = ["web"]
