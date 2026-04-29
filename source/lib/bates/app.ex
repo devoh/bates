@@ -341,6 +341,8 @@ defmodule Bates.App do
   end
 
   defp build_invocation(%Service{} = config, assigned_port, state) do
+    validate_routable_middleware!(config)
+
     modules = Enum.map(config.middleware, &Middleware.Registry.lookup!/1)
     initial = %ProcessInvocation{command: config.command}
 
@@ -352,6 +354,17 @@ defmodule Bates.App do
     }
 
     Middleware.apply_pipeline(initial, modules, context)
+  end
+
+  defp validate_routable_middleware!(%Service{hostname: nil}), do: :ok
+
+  defp validate_routable_middleware!(%Service{name: name, middleware: middleware}) do
+    if "port" in middleware do
+      :ok
+    else
+      raise "Service #{inspect(name)} has a hostname but no \"port\" middleware. " <>
+              "Add \"port\" to its middleware list."
+    end
   end
 
   defp build_env(environment) do

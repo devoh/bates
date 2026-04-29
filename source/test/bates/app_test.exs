@@ -224,6 +224,29 @@ defmodule Bates.AppTest do
       assert written_port == service.port
     end
 
+    test "raises if a routable service is missing the port middleware" do
+      Process.flag(:trap_exit, true)
+
+      config = {"testapp", ".", [
+        %Service{
+          name: "web",
+          command: "sleep 999",
+          port: nil,
+          hostname: "testapp.test",
+          middleware: []
+        }
+      ]}
+
+      pid = start_supervised!({App, config})
+      ref = Process.monitor(pid)
+
+      catch_exit(App.up("testapp"))
+
+      assert_receive {:DOWN, ^ref, :process, ^pid, reason}, 1_000
+      assert {%RuntimeError{message: message}, _stack} = reason
+      assert message =~ ~s|"port" middleware|
+    end
+
     test "a prologue command emitted by middleware runs before the service" do
       marker_path =
         Path.join(System.tmp_dir!(), "bates_marker_#{System.unique_integer([:positive])}")
