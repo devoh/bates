@@ -28,54 +28,54 @@ Two follow-on features are blocked on this landing:
 
 ## Acceptance Criteria
 
-- [ ] `%Bates.Service{}` has a `depends_on` field defaulting to `[]`.
-- [ ] `Bates.Config` parses `depends_on` from each service table as a list
+- [x] `%Bates.Service{}` has a `depends_on` field defaulting to `[]`.
+- [x] `Bates.Config` parses `depends_on` from each service table as a list
       of sibling service names; missing key defaults to `[]`.
-- [ ] `Bates.Config` returns `{:error, {:unknown_dependency, app, service,
+- [x] `Bates.Config` returns `{:error, {:unknown_dependency, app, service,
       missing}}` when a `depends_on` entry names a service not declared in
       the same application.
-- [ ] `Bates.Config` returns `{:error, {:dependency_cycle, app, cycle}}`
+- [x] `Bates.Config` returns `{:error, {:dependency_cycle, app, cycle}}`
       when the dependency graph contains a cycle. Self-loops surface as a
       length-1 cycle through the same code path.
-- [ ] `Bates.App.handle_call(:up, ...)` walks the dependency graph: it
+- [x] `Bates.App.handle_call(:up, ...)` walks the dependency graph: it
       starts every service that is `down` and whose every `depends_on`
       entry currently reads as `up`. Other services remain `down` with
       `pid == nil`.
-- [ ] After a successful `:check_ready` transition to `up`, the App
+- [x] After a successful `:check_ready` transition to `up`, the App
       re-evaluates the graph and starts any newly-eligible service. Repeats
       to fixpoint as dependencies clear.
-- [ ] Repeated `:up` calls on a partially-up application re-evaluate the
+- [x] Repeated `:up` calls on a partially-up application re-evaluate the
       graph and start any `down` service whose dependencies are now met
       (including services in `crashed` state with no pid). This is the
       recovery path.
-- [ ] `Bates.App.handle_call(:down, ...)` stops services in reverse
+- [x] `Bates.App.handle_call(:down, ...)` stops services in reverse
       topological order: services with no remaining started dependents stop
       first. Within a level, stops are sequential. Services with `pid ==
       nil` (queued or already stopped) are skipped.
-- [ ] A dependency that reaches `crashed` leaves dependents in `down` with
+- [x] A dependency that reaches `crashed` leaves dependents in `down` with
       `pid == nil`. Application status derivation already reports `crashed`
       when any service is `crashed`; no change needed there.
-- [ ] The 60-second readiness timeout still measures from `started_at`,
+- [x] The 60-second readiness timeout still measures from `started_at`,
       which is only set when a service enters `starting`. Services queued
       on dependencies do not start the timer. (Falls out of the existing
       structure; no code change.)
-- [ ] `BatesWeb.LoadingController` subscribes to `app:#{app_name}` in
+- [x] `BatesWeb.LoadingController` subscribes to `app:#{app_name}` in
       addition to its current per-service subscription, and returns the
       crash response when the application reaches `crashed` (covers
       upstream-dependency crashes). The app-level broadcast is
       `{:status, "crashed"}` (no details element, unlike the per-service
       `{:status, "crashed", details}`).
-- [ ] An integration test exercises the loading-page app-`crashed`
+- [x] An integration test exercises the loading-page app-`crashed`
       bailout: a request for service B (which `depends_on` A) returns
       a crash response when A crashes, without spinning indefinitely.
-- [ ] A dedicated fixture
+- [x] A dedicated fixture
       `source/test/fixtures/multi_service_with_deps_config.toml`
       exercises a small dependency graph (e.g., web depends on vite,
       worker depends on web). The existing `multi_service_config.toml`
       stays untouched so pre-existing tests are unaffected.
-- [ ] `Bates.ConfigTest` covers: parsing `depends_on`, missing-name
+- [x] `Bates.ConfigTest` covers: parsing `depends_on`, missing-name
       rejection, cycle rejection (including a self-loop case).
-- [ ] `Bates.AppTest` covers: ordered start (parent waits while child is
+- [x] `Bates.AppTest` covers: ordered start (parent waits while child is
       `starting`), ordered stop, dependents stay `down` while a dependency
       is `starting`, dependents stay `down` when a dependency crashes,
       readiness timeout does not fire while a service is queued, repeated
@@ -351,3 +351,64 @@ None. All POC gaps are either resolved during the audit or verifiable inline dur
 ### Blockers
 
 None identified.
+
+## Execution Notes
+
+### Implementation choices
+
+- **Cycle detection via `:digraph`.** OTP stdlib `:digraph` plus
+  `:digraph.get_short_cycle/2` returns the cycle path for free and
+  surfaces self-loops naturally as length-1 cycles. The post-processing
+  helper `normalize_cycle/1` strips the trailing-vertex repetition
+  produced by `get_short_cycle` so the error tuple's `cycle` list is a
+  clean ordered sequence with no duplicates.
+- **Topological sort.** The down walk uses
+  `:digraph_utils.topsort/1` with edges directed dependent-to-dependency.
+  `topsort/1` returns sources before sinks, which matches the desired
+  shutdown order (dependents first).
+- **Eligibility helper signature.** `eligible_to_start?/2` first
+  guards on `pid == nil`, then falls through to a clause that checks
+  every `depends_on` entry currently reads `"up"`. The two-clause
+  shape locks in the audit's POC gap #4 (don't double-start a running
+  service).
+- **`start_eligible/1`.** Called from both `handle_call(:up, ...)` and
+  the `:check_ready` success branch. Each `:check_ready` event drives
+  the cascade by re-running the eligibility walk on the latest state.
+
+### Deviations from the plan
+
+- The plan called for running `mix dialyzer` in Phase 7 along with
+  `mix format` and `mix test`. Dialyzer is not wired up in `mix.exs`
+  and the prompt's wrap-up checklist explicitly skips it. Skipped.
+- The plan instructed running `mix format` and committing fixes.
+  Running `mix format` reformatted 18 files because the repo had
+  pre-existing formatter drift. To keep the PR scoped, the format
+  commit only includes the six files this branch otherwise touches.
+  Reformatting the rest of the codebase is left as a follow-up.
+
+### Surprises
+
+- The first version of the loading-controller upstream-crash test
+  used `sleep 999` for the crashing dependency, which races with the
+  controller's own readiness deadline (both compile from the same
+  `:bates :readiness_timeout` key, so they fire near-simultaneously).
+  Switched the dependency command to `exit 1` so the crashed
+  broadcast is immediate and deterministic.
+
+### Spec verification
+
+`specs/process-management.md` "Service Dependencies" already
+described the implemented design (cross-app deps disallowed,
+config-load-time validation, `crashed` dependency leaves dependents
+`down`, readiness timeout begins on `starting`). No spec edits were
+required.
+
+### Execution Stats
+
+| Metric | Value |
+|--------|-------|
+| Duration | ~14m |
+| Commits | 7 |
+| Files changed | 11 |
+| Tests added | 13 |
+| PR | #pending |
