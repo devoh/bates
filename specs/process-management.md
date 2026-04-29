@@ -57,6 +57,7 @@ This is equivalent to defining a single service with `port = "auto"` and
 | `root` | Yes | Working directory for all services. Supports `~` expansion. |
 | `command` | Yes (if no `services`) | Shorthand for a single routable service. |
 | `middleware` | No | Ordered list of middleware names. Applied to all services in this application at init time. |
+| `addons` | No | List of built-in addon names to attach to the application. Each addon expands into a service that all other services in the application implicitly depend on. See Addons. |
 
 #### Service fields
 
@@ -294,6 +295,100 @@ papers over.
 | `asdf` | Adds `source $(brew --prefix)/opt/asdf/libexec/asdf.sh` to the prologue, enabling asdf-managed runtimes. |
 | `direnv` | Adds `eval "$(direnv export bash)"` to the prologue, loading the working directory's `.envrc` into the environment. |
 | `port` | Sets the `PORT` environment variable to the service's assigned port. Applied automatically for services with a hostname; users do not need to list it. |
+
+## Addons
+
+Addons are built-in, reusable service definitions that an application
+can pull in by name. They cover common dependencies that most
+applications need but should not have to configure by hand — for
+example, a local Postgres instance with its data directory and port
+managed alongside the application.
+
+### Declaring Addons
+
+The short form lists addon names on the application table:
+
+```toml
+[myapp]
+root = "~/Code/myapp"
+addons = ["postgresql"]
+
+[myapp.services.web]
+command = "bin/rails server"
+hostname = true
+```
+
+The table form is equivalent and exists for addons that accept
+overrides:
+
+```toml
+[myapp]
+root = "~/Code/myapp"
+
+[myapp.addons.postgresql]
+
+[myapp.services.web]
+command = "bin/rails server"
+hostname = true
+```
+
+In v1, no addon defines override fields, so the two forms produce
+identical configurations. The table form is reserved for future
+addon-specific options.
+
+### Available Addons
+
+Addons are built into Bates. Naming an addon that Bates does not
+provide is a configuration error caught at load time.
+
+| Addon | What it provides |
+|-------|------------------|
+| `postgresql` | A local Postgres instance scoped to the application. Publishes `PGPORT` to dependents. |
+
+The mechanics of each addon — its command, prologue, exports, data
+location, version handling — are specified separately from this
+framework section.
+
+### Expansion
+
+At configuration load time, each declared addon expands into a regular
+service entry in the application's service map. The service name
+matches the addon name (`postgresql` becomes a service named
+`postgresql`), and the service's behavior comes from a built-in
+middleware of the same name. From the runtime's perspective, an addon
+is a service like any other — it has a status, a port, a log buffer,
+appears on the dashboard, and participates in the application's
+start/stop lifecycle.
+
+A name collision between an addon and a user-declared service in the
+same application is a configuration error. The error is surfaced by
+the configuration loader before any application is supervised.
+
+Each application may declare a given addon at most once. Multiple
+instances of the same addon within a single application are not
+supported.
+
+### Implicit Dependency Edge
+
+When an application declares an addon, every other service in that
+application implicitly `depends_on` the addon. The web service in the
+example above does not list `postgresql` in its `depends_on` field —
+the addon declaration is enough. This matches the typical use case
+(every service in the application needs the database up before it
+boots) and keeps configuration short.
+
+To opt out, declare the dependency manually as a service rather than
+as an addon. Bates does not provide a per-service opt-out flag.
+
+### Addons and Exports
+
+An addon's middleware publishes exports the same way any middleware
+would; see Service Environment Exports under Middleware. Because every
+other service in the application implicitly depends on the addon,
+those exports are seeded into every sibling's environment
+automatically. A `postgresql` addon publishing `PGPORT` makes that
+variable available to every other service without any further
+configuration.
 
 ## Service Execution
 
