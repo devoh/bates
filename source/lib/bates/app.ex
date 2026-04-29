@@ -72,16 +72,7 @@ defmodule Bates.App do
 
   @impl GenServer
   def handle_call(:up, _from, state) do
-    new_state =
-      Enum.reduce(state.services, state, fn {service_name, service_state}, acc ->
-        if service_state.pid == nil do
-          start_service(acc, service_name, service_state)
-        else
-          acc
-        end
-      end)
-
-    {:reply, :ok, new_state}
+    {:reply, :ok, start_eligible(state)}
   end
 
   @impl GenServer
@@ -147,7 +138,7 @@ defmodule Bates.App do
             new_state = put_in(state, [:services, service_name], new_svc)
             broadcast_service(state.name, service_name, {:status, "up"})
             broadcast_app(state.name, {:status, derive_status(new_state)})
-            {:noreply, new_state}
+            {:noreply, start_eligible(new_state)}
 
           {:error, _} ->
             elapsed = System.monotonic_time(:millisecond) - svc.started_at
@@ -230,6 +221,27 @@ defmodule Bates.App do
   end
 
   # Helpers
+
+  defp start_eligible(state) do
+    Enum.reduce(state.services, state, fn {service_name, service_state}, acc ->
+      if eligible_to_start?(service_state, acc.services) do
+        start_service(acc, service_name, service_state)
+      else
+        acc
+      end
+    end)
+  end
+
+  defp eligible_to_start?(%{pid: pid}, _services) when not is_nil(pid), do: false
+
+  defp eligible_to_start?(%{config: %Service{depends_on: depends_on}}, services) do
+    Enum.all?(depends_on, fn dependency_name ->
+      case Map.get(services, dependency_name) do
+        nil -> false
+        dependency_state -> service_status_name(dependency_state) == "up"
+      end
+    end)
+  end
 
   defp start_service(state, service_name, service_state) do
     config = service_state.config
