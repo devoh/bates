@@ -13,8 +13,12 @@ defmodule Bates.Middleware.Registry do
 
   def lookup!(name) when is_binary(name) do
     case lookup(name) do
-      {:ok, module} -> module
-      {:error, :unknown} -> raise "Unknown middleware: #{inspect(name)}"
+      {:ok, module} ->
+        module
+
+      {:error, :unknown} ->
+        known = all() |> Map.keys() |> Enum.sort() |> Enum.join(", ")
+        raise "Unknown middleware: #{inspect(name)} (known: #{known})"
     end
   end
 

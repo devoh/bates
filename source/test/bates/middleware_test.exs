@@ -28,6 +28,16 @@ defmodule Bates.MiddlewareTest do
         Registry.lookup!("nope")
       end
     end
+
+    test "raised error lists the known middleware names" do
+      error =
+        assert_raise RuntimeError, fn ->
+          Registry.lookup!("nope")
+        end
+
+      assert error.message =~ "asdf"
+      assert error.message =~ "port"
+    end
   end
 
   describe "apply_pipeline/3" do
