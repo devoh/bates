@@ -4,15 +4,16 @@ defmodule BatesWeb.LoadingControllerTest do
   alias Bates.{App, Service}
 
   defp service_config(name, command) do
-    {name, ".", [
-      %Service{
-        name: name,
-        command: command,
-        port: nil,
-        hostname: "#{name}.test",
-        middleware: ["port"]
-      }
-    ]}
+    {name, ".",
+     [
+       %Service{
+         name: name,
+         command: command,
+         port: nil,
+         hostname: "#{name}.test",
+         middleware: ["port"]
+       }
+     ]}
   end
 
   test "redirects when app is already running", %{conn: conn} do
@@ -47,10 +48,18 @@ defmodule BatesWeb.LoadingControllerTest do
   end
 
   test "redirects to service hostname for multi-service app", %{conn: conn} do
-    config = {"myapp", ".", [
-      %Service{name: "web", command: "elixir test/support/test_server.ex", port: nil, hostname: "myapp.test", middleware: ["port"]},
-      %Service{name: "vite", command: "sleep 999", port: nil}
-    ]}
+    config =
+      {"myapp", ".",
+       [
+         %Service{
+           name: "web",
+           command: "elixir test/support/test_server.ex",
+           port: nil,
+           hostname: "myapp.test",
+           middleware: ["port"]
+         },
+         %Service{name: "vite", command: "sleep 999", port: nil}
+       ]}
 
     start_supervised!({App, config})
 
@@ -60,23 +69,25 @@ defmodule BatesWeb.LoadingControllerTest do
   end
 
   test "returns 502 when an upstream dependency crashes", %{conn: conn} do
-    config = {"myapp", ".", [
-      %Service{
-        name: "vite",
-        command: "exit 1",
-        port: nil,
-        hostname: "vite.myapp.test",
-        middleware: ["port"]
-      },
-      %Service{
-        name: "web",
-        command: "elixir test/support/test_server.ex",
-        port: nil,
-        hostname: "myapp.test",
-        middleware: ["port"],
-        depends_on: ["vite"]
-      }
-    ]}
+    config =
+      {"myapp", ".",
+       [
+         %Service{
+           name: "vite",
+           command: "exit 1",
+           port: nil,
+           hostname: "vite.myapp.test",
+           middleware: ["port"]
+         },
+         %Service{
+           name: "web",
+           command: "elixir test/support/test_server.ex",
+           port: nil,
+           hostname: "myapp.test",
+           middleware: ["port"],
+           depends_on: ["vite"]
+         }
+       ]}
 
     start_supervised!({App, config})
 

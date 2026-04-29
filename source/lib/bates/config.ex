@@ -49,7 +49,10 @@ defmodule Bates.Config do
       hostname = resolve_hostname(app_name, options["hostname"])
       port = resolve_port(hostname, options["port"])
       service_middleware = Map.get(options, "middleware", [])
-      middleware = merge_middleware(app_middleware, service_middleware, hostname)
+
+      middleware =
+        merge_middleware(app_middleware, service_middleware, hostname)
+
       depends_on = Map.get(options, "depends_on", [])
 
       %Service{
@@ -75,7 +78,9 @@ defmodule Bates.Config do
 
   defp resolve_hostname(_app_name, nil), do: nil
   defp resolve_hostname(app_name, true), do: "#{app_name}.test"
-  defp resolve_hostname(_app_name, value) when is_binary(value), do: "#{value}.test"
+
+  defp resolve_hostname(_app_name, value) when is_binary(value),
+    do: "#{value}.test"
 
   defp resolve_port(_hostname, port) when is_integer(port), do: port
   defp resolve_port(nil, _port), do: nil
@@ -91,7 +96,8 @@ defmodule Bates.Config do
   end
 
   defp validate_services(services) do
-    Enum.reduce_while(services, :ok, fn %Service{middleware: middleware}, _acc ->
+    Enum.reduce_while(services, :ok, fn %Service{middleware: middleware},
+                                        _acc ->
       case validate_names(middleware) do
         :ok -> {:cont, :ok}
         {:error, _} = error -> {:halt, error}
@@ -122,7 +128,11 @@ defmodule Bates.Config do
   defp validate_dependency_names(app_name, services) do
     declared = MapSet.new(services, & &1.name)
 
-    Enum.reduce_while(services, :ok, fn %Service{name: name, depends_on: depends_on}, _acc ->
+    Enum.reduce_while(services, :ok, fn %Service{
+                                          name: name,
+                                          depends_on: depends_on
+                                        },
+                                        _acc ->
       case Enum.find(depends_on, &(not MapSet.member?(declared, &1))) do
         nil ->
           {:cont, :ok}

@@ -6,7 +6,11 @@ defmodule BatesWeb.LoadingController do
   @timeout Application.compile_env(:bates, :readiness_timeout, 60_000)
 
   def show(conn, %{"app_name" => app_name, "service_name" => service_name}) do
-    Phoenix.PubSub.subscribe(Bates.PubSub, "service:#{app_name}:#{service_name}")
+    Phoenix.PubSub.subscribe(
+      Bates.PubSub,
+      "service:#{app_name}:#{service_name}"
+    )
+
     Phoenix.PubSub.subscribe(Bates.PubSub, "app:#{app_name}")
 
     try do

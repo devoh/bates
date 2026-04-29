@@ -55,16 +55,17 @@ defmodule Bates.App do
 
     service_states =
       Map.new(services, fn %Service{} = service ->
-        {service.name, %{
-          config: service,
-          assigned_port: nil,
-          pid: nil,
-          ready: false,
-          started_at: nil,
-          exit_status: nil,
-          log_buffer: :queue.new(),
-          log_count: 0
-        }}
+        {service.name,
+         %{
+           config: service,
+           assigned_port: nil,
+           pid: nil,
+           ready: false,
+           started_at: nil,
+           exit_status: nil,
+           log_buffer: :queue.new(),
+           log_count: 0
+         }}
       end)
 
     {:ok, %{name: name, root: root, services: service_states, pids: %{}}}
@@ -134,7 +135,8 @@ defmodule Bates.App do
   @impl GenServer
   def handle_info({:check_ready, service_name}, state) do
     case Map.get(state.services, service_name) do
-      %{pid: pid, ready: false, assigned_port: port} = svc when not is_nil(pid) ->
+      %{pid: pid, ready: false, assigned_port: port} = svc
+      when not is_nil(pid) ->
         case :gen_tcp.connect(~c"127.0.0.1", port, [], 100) do
           {:ok, socket} ->
             :gen_tcp.close(socket)
@@ -151,14 +153,33 @@ defmodule Bates.App do
               :exec.stop(pid)
               new_pids = Map.delete(state.pids, pid)
               message = "Timed out waiting for port #{port}"
-              new_svc = %{svc | pid: nil, ready: false, started_at: nil, exit_status: :timeout}
+
+              new_svc = %{
+                svc
+                | pid: nil,
+                  ready: false,
+                  started_at: nil,
+                  exit_status: :timeout
+              }
+
               new_state = %{state | pids: new_pids}
               new_state = put_in(new_state, [:services, service_name], new_svc)
-              broadcast_service(state.name, service_name, {:status, "crashed", message})
+
+              broadcast_service(
+                state.name,
+                service_name,
+                {:status, "crashed", message}
+              )
+
               broadcast_app(state.name, {:status, derive_status(new_state)})
               {:noreply, new_state}
             else
-              Process.send_after(self(), {:check_ready, service_name}, @poll_interval)
+              Process.send_after(
+                self(),
+                {:check_ready, service_name},
+                @poll_interval
+              )
+
               {:noreply, state}
             end
         end
@@ -234,7 +255,8 @@ defmodule Bates.App do
         :digraph.add_vertex(graph, name)
       end)
 
-      Enum.each(state.services, fn {name, %{config: %Service{depends_on: depends_on}}} ->
+      Enum.each(state.services, fn {name,
+                                    %{config: %Service{depends_on: depends_on}}} ->
         Enum.each(depends_on, fn dependency_name ->
           :digraph.add_edge(graph, name, dependency_name)
         end)
@@ -256,7 +278,8 @@ defmodule Bates.App do
     end)
   end
 
-  defp eligible_to_start?(%{pid: pid}, _services) when not is_nil(pid), do: false
+  defp eligible_to_start?(%{pid: pid}, _services) when not is_nil(pid),
+    do: false
 
   defp eligible_to_start?(%{config: %Service{depends_on: depends_on}}, services) do
     Enum.all?(depends_on, fn dependency_name ->
@@ -298,7 +321,12 @@ defmodule Bates.App do
           broadcast_app(state.name, {:status, derive_status(new_state)})
           new_state
         else
-          Process.send_after(self(), {:check_ready, service_name}, @poll_interval)
+          Process.send_after(
+            self(),
+            {:check_ready, service_name},
+            @poll_interval
+          )
+
           started_at = System.monotonic_time(:millisecond)
           new_svc = %{new_svc | started_at: started_at}
           new_state = %{state | pids: new_pids}
@@ -308,7 +336,10 @@ defmodule Bates.App do
         end
 
       {:error, reason} ->
-        Logger.error("Failed to start service #{service_name}: #{inspect(reason)}")
+        Logger.error(
+          "Failed to start service #{service_name}: #{inspect(reason)}"
+        )
+
         state
     end
   end
@@ -327,7 +358,15 @@ defmodule Bates.App do
 
     revert_caddy_route(service_state.config.hostname)
 
-    new_svc = %{service_state | pid: nil, ready: false, started_at: nil, exit_status: nil, assigned_port: nil}
+    new_svc = %{
+      service_state
+      | pid: nil,
+        ready: false,
+        started_at: nil,
+        exit_status: nil,
+        assigned_port: nil
+    }
+
     new_pids = Map.delete(state.pids, pid)
     new_state = %{state | pids: new_pids}
     new_state = put_in(new_state, [:services, service_name], new_svc)
@@ -339,7 +378,8 @@ defmodule Bates.App do
   end
 
   defp derive_status(state) do
-    statuses = Enum.map(state.services, fn {_name, svc} -> service_status_name(svc) end)
+    statuses =
+      Enum.map(state.services, fn {_name, svc} -> service_status_name(svc) end)
 
     cond do
       Enum.all?(statuses, &(&1 == "up")) -> "up"
@@ -350,13 +390,23 @@ defmodule Bates.App do
     end
   end
 
-  defp service_status_name(%{pid: pid, ready: true}) when not is_nil(pid), do: "up"
-  defp service_status_name(%{pid: pid, ready: false}) when not is_nil(pid), do: "starting"
-  defp service_status_name(%{exit_status: exit}) when exit in [:normal, nil], do: "down"
+  defp service_status_name(%{pid: pid, ready: true}) when not is_nil(pid),
+    do: "up"
+
+  defp service_status_name(%{pid: pid, ready: false}) when not is_nil(pid),
+    do: "starting"
+
+  defp service_status_name(%{exit_status: exit}) when exit in [:normal, nil],
+    do: "down"
+
   defp service_status_name(_), do: "crashed"
 
   defp broadcast_service(app_name, service_name, message) do
-    Phoenix.PubSub.broadcast(Bates.PubSub, "service:#{app_name}:#{service_name}", message)
+    Phoenix.PubSub.broadcast(
+      Bates.PubSub,
+      "service:#{app_name}:#{service_name}",
+      message
+    )
   end
 
   defp broadcast_app(app_name, message) do
@@ -394,7 +444,10 @@ defmodule Bates.App do
 
   defp validate_routable_middleware!(%Service{hostname: nil}), do: :ok
 
-  defp validate_routable_middleware!(%Service{name: name, middleware: middleware}) do
+  defp validate_routable_middleware!(%Service{
+         name: name,
+         middleware: middleware
+       }) do
     if "port" in middleware do
       :ok
     else
@@ -421,7 +474,10 @@ defmodule Bates.App do
   end
 
   defp assign_port(%Service{port: port}) when is_integer(port), do: port
-  defp assign_port(%Service{hostname: hostname}) when not is_nil(hostname), do: Bates.PortNumber.next()
+
+  defp assign_port(%Service{hostname: hostname}) when not is_nil(hostname),
+    do: Bates.PortNumber.next()
+
   defp assign_port(_service), do: nil
 
   defp update_caddy_route(nil, _port), do: :ok
@@ -429,9 +485,14 @@ defmodule Bates.App do
 
   defp update_caddy_route(hostname, port) do
     case Bates.Caddy.update_route(hostname, port) do
-      :ok -> :ok
+      :ok ->
+        :ok
+
       {:error, reason} ->
-        Logger.warning("Failed to update Caddy route for #{hostname}: #{inspect(reason)}")
+        Logger.warning(
+          "Failed to update Caddy route for #{hostname}: #{inspect(reason)}"
+        )
+
         :ok
     end
   end
@@ -440,9 +501,14 @@ defmodule Bates.App do
 
   defp revert_caddy_route(hostname) do
     case Bates.Caddy.revert_route(hostname) do
-      :ok -> :ok
+      :ok ->
+        :ok
+
       {:error, reason} ->
-        Logger.warning("Failed to revert Caddy route for #{hostname}: #{inspect(reason)}")
+        Logger.warning(
+          "Failed to revert Caddy route for #{hostname}: #{inspect(reason)}"
+        )
+
         :ok
     end
   end

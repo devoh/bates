@@ -18,7 +18,8 @@ defmodule Bates.ConfigTest do
   end
 
   test "parses multi-service config with hostnames and ports" do
-    [{name, root, services}] = Config.applications("test/fixtures/multi_service_config.toml")
+    [{name, root, services}] =
+      Config.applications("test/fixtures/multi_service_config.toml")
 
     assert name == "myapp"
     assert root == "/tmp/myapp"
@@ -43,21 +44,27 @@ defmodule Bates.ConfigTest do
   end
 
   test "hostname true resolves to app name" do
-    [{_name, _root, services}] = Config.applications("test/fixtures/multi_service_config.toml")
+    [{_name, _root, services}] =
+      Config.applications("test/fixtures/multi_service_config.toml")
+
     web = Enum.find(services, &(&1.name == "web"))
 
     assert web.hostname == "myapp.test"
   end
 
   test "hostname string resolves to custom value" do
-    [{_name, _root, services}] = Config.applications("test/fixtures/multi_service_config.toml")
+    [{_name, _root, services}] =
+      Config.applications("test/fixtures/multi_service_config.toml")
+
     vite = Enum.find(services, &(&1.name == "vite"))
 
     assert vite.hostname == "vite.myapp.test"
   end
 
   test "portless service has nil port and nil hostname" do
-    [{_name, _root, services}] = Config.applications("test/fixtures/multi_service_config.toml")
+    [{_name, _root, services}] =
+      Config.applications("test/fixtures/multi_service_config.toml")
+
     worker = Enum.find(services, &(&1.name == "worker"))
 
     assert worker.port == nil
@@ -70,7 +77,8 @@ defmodule Bates.ConfigTest do
 
   describe "middleware" do
     test "auto-appends 'port' for routable services in single-service shorthand" do
-      [{_name, _root, [service]}] = Config.applications("test/fixtures/config.toml")
+      [{_name, _root, [service]}] =
+        Config.applications("test/fixtures/config.toml")
 
       assert service.middleware == ["port"]
     end
@@ -123,7 +131,9 @@ defmodule Bates.ConfigTest do
 
     test "single-service shorthand picks up app-level middleware" do
       [{_name, _root, [service]}] =
-        Config.applications("test/fixtures/single_service_middleware_config.toml")
+        Config.applications(
+          "test/fixtures/single_service_middleware_config.toml"
+        )
 
       assert service.middleware == ["asdf", "port"]
     end
@@ -155,7 +165,8 @@ defmodule Bates.ConfigTest do
     end
 
     test "single-service shorthand has empty depends_on" do
-      [{_name, _root, [service]}] = Config.applications("test/fixtures/config.toml")
+      [{_name, _root, [service]}] =
+        Config.applications("test/fixtures/config.toml")
 
       assert service.depends_on == []
     end
@@ -167,14 +178,18 @@ defmodule Bates.ConfigTest do
 
     test "returns {:error, {:dependency_cycle, app, cycle}} for two-service cycle" do
       assert {:error, {:dependency_cycle, "myapp", cycle}} =
-               Config.applications("test/fixtures/cyclic_dependencies_config.toml")
+               Config.applications(
+                 "test/fixtures/cyclic_dependencies_config.toml"
+               )
 
       assert MapSet.new(cycle) == MapSet.new(["web", "worker"])
       assert length(cycle) == 2
     end
 
     test "returns {:error, {:dependency_cycle, app, cycle}} for self-loop" do
-      assert Config.applications("test/fixtures/self_loop_dependency_config.toml") ==
+      assert Config.applications(
+               "test/fixtures/self_loop_dependency_config.toml"
+             ) ==
                {:error, {:dependency_cycle, "myapp", ["web"]}}
     end
   end

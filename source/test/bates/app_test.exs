@@ -13,15 +13,16 @@ defmodule Bates.AppTest do
     port = Keyword.get(opts, :port, nil)
     command = Keyword.get(opts, :command, "sleep 999")
 
-    {"testapp", ".", [
-      %Service{
-        name: "testapp",
-        command: command,
-        port: port,
-        hostname: "testapp.test",
-        middleware: ["port"]
-      }
-    ]}
+    {"testapp", ".",
+     [
+       %Service{
+         name: "testapp",
+         command: command,
+         port: port,
+         hostname: "testapp.test",
+         middleware: ["port"]
+       }
+     ]}
   end
 
   test "status is 'starting' immediately after up/1" do
@@ -34,7 +35,9 @@ defmodule Bates.AppTest do
   end
 
   test "transitions to 'up' when port is listening" do
-    config = single_service_config(command: "elixir test/support/test_server.ex")
+    config =
+      single_service_config(command: "elixir test/support/test_server.ex")
+
     start_supervised!({App, config})
     :ok = App.up("testapp")
 
@@ -70,7 +73,9 @@ defmodule Bates.AppTest do
   end
 
   test "PubSub broadcasts fire for each transition" do
-    config = single_service_config(command: "elixir test/support/test_server.ex")
+    config =
+      single_service_config(command: "elixir test/support/test_server.ex")
+
     start_supervised!({App, config})
     :ok = App.up("testapp")
 
@@ -81,9 +86,16 @@ defmodule Bates.AppTest do
   test "portless service goes to up immediately" do
     Phoenix.PubSub.subscribe(Bates.PubSub, "service:testapp:worker")
 
-    config = {"testapp", ".", [
-      %Service{name: "worker", command: "sleep 999", port: nil, hostname: nil}
-    ]}
+    config =
+      {"testapp", ".",
+       [
+         %Service{
+           name: "worker",
+           command: "sleep 999",
+           port: nil,
+           hostname: nil
+         }
+       ]}
 
     start_supervised!({App, config})
     :ok = App.up("testapp")
@@ -104,7 +116,9 @@ defmodule Bates.AppTest do
   end
 
   test "services/1 returns assigned port when running" do
-    config = single_service_config(command: "elixir test/support/test_server.ex")
+    config =
+      single_service_config(command: "elixir test/support/test_server.ex")
+
     start_supervised!({App, config})
     :ok = App.up("testapp")
 
@@ -127,21 +141,22 @@ defmodule Bates.AppTest do
     end
 
     defp multi_service_config do
-      {"testapp", ".", [
-        %Service{
-          name: "web",
-          command: "elixir test/support/test_server.ex",
-          port: nil,
-          hostname: "testapp.test",
-          middleware: ["port"]
-        },
-        %Service{
-          name: "worker",
-          command: "sleep 999",
-          port: nil,
-          hostname: nil
-        }
-      ]}
+      {"testapp", ".",
+       [
+         %Service{
+           name: "web",
+           command: "elixir test/support/test_server.ex",
+           port: nil,
+           hostname: "testapp.test",
+           middleware: ["port"]
+         },
+         %Service{
+           name: "worker",
+           command: "sleep 999",
+           port: nil,
+           hostname: nil
+         }
+       ]}
     end
 
     test "all services start concurrently on up/1" do
@@ -193,26 +208,30 @@ defmodule Bates.AppTest do
     end
 
     defp multi_service_with_deps_config(opts \\ []) do
-      vite_command = Keyword.get(opts, :vite_command, "elixir test/support/test_server.ex")
-      web_command = Keyword.get(opts, :web_command, "elixir test/support/test_server.ex")
+      vite_command =
+        Keyword.get(opts, :vite_command, "elixir test/support/test_server.ex")
 
-      {"testapp", ".", [
-        %Service{
-          name: "vite",
-          command: vite_command,
-          port: nil,
-          hostname: "vite.testapp.test",
-          middleware: ["port"]
-        },
-        %Service{
-          name: "web",
-          command: web_command,
-          port: nil,
-          hostname: "testapp.test",
-          middleware: ["port"],
-          depends_on: ["vite"]
-        }
-      ]}
+      web_command =
+        Keyword.get(opts, :web_command, "elixir test/support/test_server.ex")
+
+      {"testapp", ".",
+       [
+         %Service{
+           name: "vite",
+           command: vite_command,
+           port: nil,
+           hostname: "vite.testapp.test",
+           middleware: ["port"]
+         },
+         %Service{
+           name: "web",
+           command: web_command,
+           port: nil,
+           hostname: "testapp.test",
+           middleware: ["port"],
+           depends_on: ["vite"]
+         }
+       ]}
     end
 
     test "dependent stays down while dependency is starting" do
@@ -230,7 +249,11 @@ defmodule Bates.AppTest do
       :ok = App.up("testapp")
 
       assert_receive {:status, "up"}, 10_000
-      assert_eventually(fn -> App.service_status("testapp", "web") in ["starting", "up"] end)
+
+      assert_eventually(fn ->
+        App.service_status("testapp", "web") in ["starting", "up"]
+      end)
+
       assert_eventually(fn -> App.status("testapp") == "up" end)
     end
 
@@ -284,10 +307,14 @@ defmodule Bates.AppTest do
       start_supervised!({App, config})
 
       :ok = App.up("testapp")
-      vite_state_first = App.services("testapp") |> Enum.find(&(&1.name == "vite"))
+
+      vite_state_first =
+        App.services("testapp") |> Enum.find(&(&1.name == "vite"))
 
       :ok = App.up("testapp")
-      vite_state_second = App.services("testapp") |> Enum.find(&(&1.name == "vite"))
+
+      vite_state_second =
+        App.services("testapp") |> Enum.find(&(&1.name == "vite"))
 
       # Same assigned port means the service was not torn down and restarted.
       assert vite_state_first.port == vite_state_second.port
@@ -348,8 +375,13 @@ defmodule Bates.AppTest do
 
       @impl true
       def apply(invocation, %{service: %{name: name}}) do
-        marker_path = Application.fetch_env!(:bates, :marker_paths) |> Map.fetch!(name)
-        %{invocation | prologue: invocation.prologue ++ ["touch #{marker_path}"]}
+        marker_path =
+          Application.fetch_env!(:bates, :marker_paths) |> Map.fetch!(name)
+
+        %{
+          invocation
+          | prologue: invocation.prologue ++ ["touch #{marker_path}"]
+        }
       end
     end
 
@@ -359,18 +391,26 @@ defmodule Bates.AppTest do
     end
 
     test "the port middleware exposes the assigned PORT to the running service" do
-      port_file = Path.join(System.tmp_dir!(), "bates_port_#{System.unique_integer([:positive])}")
+      port_file =
+        Path.join(
+          System.tmp_dir!(),
+          "bates_port_#{System.unique_integer([:positive])}"
+        )
+
       on_exit(fn -> File.rm(port_file) end)
 
-      config = {"testapp", ".", [
-        %Service{
-          name: "web",
-          command: ~s|sh -c 'echo $PORT > #{port_file}; exec elixir test/support/test_server.ex'|,
-          port: nil,
-          hostname: "testapp.test",
-          middleware: ["port"]
-        }
-      ]}
+      config =
+        {"testapp", ".",
+         [
+           %Service{
+             name: "web",
+             command:
+               ~s|sh -c 'echo $PORT > #{port_file}; exec elixir test/support/test_server.ex'|,
+             port: nil,
+             hostname: "testapp.test",
+             middleware: ["port"]
+           }
+         ]}
 
       start_supervised!({App, config})
       :ok = App.up("testapp")
@@ -378,22 +418,27 @@ defmodule Bates.AppTest do
       assert_eventually(fn -> App.status("testapp") == "up" end)
 
       [service] = App.services("testapp")
-      {written_port, ""} = port_file |> File.read!() |> String.trim() |> Integer.parse()
+
+      {written_port, ""} =
+        port_file |> File.read!() |> String.trim() |> Integer.parse()
+
       assert written_port == service.port
     end
 
     test "raises if a routable service is missing the port middleware" do
       Process.flag(:trap_exit, true)
 
-      config = {"testapp", ".", [
-        %Service{
-          name: "web",
-          command: "sleep 999",
-          port: nil,
-          hostname: "testapp.test",
-          middleware: []
-        }
-      ]}
+      config =
+        {"testapp", ".",
+         [
+           %Service{
+             name: "web",
+             command: "sleep 999",
+             port: nil,
+             hostname: "testapp.test",
+             middleware: []
+           }
+         ]}
 
       pid = start_supervised!({App, config})
       ref = Process.monitor(pid)
@@ -407,7 +452,10 @@ defmodule Bates.AppTest do
 
     test "a prologue command emitted by middleware runs before the service" do
       marker_path =
-        Path.join(System.tmp_dir!(), "bates_marker_#{System.unique_integer([:positive])}")
+        Path.join(
+          System.tmp_dir!(),
+          "bates_marker_#{System.unique_integer([:positive])}"
+        )
 
       File.rm(marker_path)
       on_exit(fn -> File.rm(marker_path) end)
@@ -420,15 +468,17 @@ defmodule Bates.AppTest do
         Application.delete_env(:bates, :marker_paths)
       end)
 
-      config = {"testapp", ".", [
-        %Service{
-          name: "web",
-          command: "elixir test/support/test_server.ex",
-          port: nil,
-          hostname: "testapp.test",
-          middleware: ["marker", "port"]
-        }
-      ]}
+      config =
+        {"testapp", ".",
+         [
+           %Service{
+             name: "web",
+             command: "elixir test/support/test_server.ex",
+             port: nil,
+             hostname: "testapp.test",
+             middleware: ["marker", "port"]
+           }
+         ]}
 
       start_supervised!({App, config})
       :ok = App.up("testapp")
