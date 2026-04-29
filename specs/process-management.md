@@ -163,6 +163,13 @@ The 60-second readiness timeout begins when a service enters
 count against this budget — a slow dependency cannot cause its
 dependents to time out before they have a chance to run.
 
+A service's environment is also seeded with the union of `exports`
+from every service in its transitive `depends_on` closure before its
+own middleware pipeline runs. This is how addon-style services (such
+as a local Postgres instance) hand connection details like `PGPORT`
+to the services that consume them. See "Service Environment Exports"
+under Middleware for the full mechanism.
+
 ## Port Assignment
 
 Auto-assigned ports are detected dynamically by binding a TCP socket to
@@ -194,7 +201,9 @@ references.
 
 Middleware transforms service configuration into a process invocation at
 init time. Each middleware can add entries to the process invocation's
-`prologue` (shell commands) and `environment` (variables).
+`prologue` (shell commands), `environment` (variables on the service's
+own OS process), and `exports` (variables published to dependent
+services).
 
 Middleware can be specified at two levels:
 
@@ -240,8 +249,43 @@ assembled at init time.
 | Field | Source | Description |
 |-------|--------|-------------|
 | `prologue` | Middleware | Ordered list of shell commands that run before `command` to set up the environment. |
-| `environment` | Config + middleware | Map of environment variables set on the OS process by the spawner (not via shell `export`). |
+| `environment` | Config + middleware + dependency exports | Map of environment variables set on the OS process by the spawner (not via shell `export`). Seeded from dependency `exports` before middleware runs. |
+| `exports` | Middleware | Map of environment variables this service publishes to its dependents. Not set on the service's own OS process unless the same middleware also writes `environment`. |
 | `command` | Config | The supervised process. Copied from the service's `command` field. |
+
+### Service Environment Exports
+
+A service can publish environment variables to its dependents through
+the `exports` field on the process invocation. Middleware writes to
+`exports` the same way it writes to `environment`. Exports are not a
+user-facing field in TOML; they exist only as a middleware concern.
+
+When a service starts, Bates seeds its initial `environment` with the
+union of `exports` from every service in its transitive `depends_on`
+closure. The service's own middleware pipeline runs on top of that
+seed, so middleware can reference inherited exports, override them, or
+extend them. If two dependencies export the same key, last-writer-wins
+by traversal order; the consumer's own middleware always wins because
+it runs after the seed.
+
+A producer's exports are computed during its own invocation build and
+stored on the application's per-service runtime state alongside
+`assigned_port`. They are settled by the time the producer reaches
+`up`, which is the gate dependents wait on.
+
+A middleware that wants to set a variable on its own service *and*
+publish it to dependents writes both `environment` and `exports`. For
+example, a hypothetical `postgresql` middleware would write `PGPORT`
+to both — `environment` so its own command line can reference it,
+`exports` so the web service that depends on it inherits it.
+
+Exports are not refreshed in a running consumer if its dependency
+restarts. A consumer holding a stale value — for example, an old
+`PGPORT` after Postgres was restarted with a freshly assigned port —
+keeps the stale value until the consumer itself is restarted. This
+stale-export window is intentional: it matches Bates's stance that
+restarts are an explicit developer action, not something the runtime
+papers over.
 
 ### Built-in Middleware
 
