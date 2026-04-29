@@ -9,6 +9,10 @@ defmodule Bates.MiddlewareTest do
       assert Registry.lookup("asdf") == {:ok, Bates.Middleware.Asdf}
     end
 
+    test "returns the module for 'direnv'" do
+      assert Registry.lookup("direnv") == {:ok, Bates.Middleware.Direnv}
+    end
+
     test "returns the module for 'port'" do
       assert Registry.lookup("port") == {:ok, Bates.Middleware.Port}
     end
@@ -36,6 +40,7 @@ defmodule Bates.MiddlewareTest do
         end
 
       assert error.message =~ "asdf"
+      assert error.message =~ "direnv"
       assert error.message =~ "port"
     end
   end

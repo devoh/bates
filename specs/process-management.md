@@ -207,6 +207,7 @@ assembled at init time.
 | Middleware | What it does |
 |------------|-------------|
 | `asdf` | Adds `source $(brew --prefix)/opt/asdf/libexec/asdf.sh` to the prologue, enabling asdf-managed runtimes. |
+| `direnv` | Adds `eval "$(direnv export bash)"` to the prologue, loading the working directory's `.envrc` into the environment. |
 | `port` | Sets the `PORT` environment variable to the service's assigned port. Applied automatically for services with a hostname; users do not need to list it. |
 
 ## Service Execution
