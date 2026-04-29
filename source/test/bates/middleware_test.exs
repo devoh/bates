@@ -40,6 +40,32 @@ defmodule Bates.MiddlewareTest do
     end
   end
 
+  describe "Registry.register/2 (test-only)" do
+    defmodule StubMiddleware do
+      @behaviour Bates.Middleware
+      @impl true
+      def apply(invocation, _context), do: invocation
+    end
+
+    test "registers a middleware so lookup/1 finds it" do
+      Registry.register("stub", StubMiddleware)
+      on_exit(fn -> Registry.unregister("stub") end)
+
+      assert Registry.lookup("stub") == {:ok, StubMiddleware}
+    end
+
+    test "unregister/1 removes a previously registered middleware" do
+      Registry.register("stub", StubMiddleware)
+      Registry.unregister("stub")
+
+      assert Registry.lookup("stub") == {:error, :unknown}
+    end
+
+    test "unregister/1 is a no-op for an unregistered name" do
+      assert Registry.unregister("never-registered") == :ok
+    end
+  end
+
   describe "apply_pipeline/3" do
     defmodule PrologueA do
       @behaviour Bates.Middleware

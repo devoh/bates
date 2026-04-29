@@ -231,11 +231,11 @@ defmodule Bates.AppTest do
       File.rm(marker_path)
       on_exit(fn -> File.rm(marker_path) end)
 
-      Application.put_env(:bates, :extra_middleware, %{"marker" => MarkerMiddleware})
+      Bates.Middleware.Registry.register("marker", MarkerMiddleware)
       Application.put_env(:bates, :marker_paths, %{"web" => marker_path})
 
       on_exit(fn ->
-        Application.delete_env(:bates, :extra_middleware)
+        Bates.Middleware.Registry.unregister("marker")
         Application.delete_env(:bates, :marker_paths)
       end)
 
