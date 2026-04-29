@@ -66,6 +66,7 @@ This is equivalent to defining a single service with `port = "auto"` and
 | `port` | No | `"auto"` to assign a dynamically detected port, or a number for a fixed port. Defaults to `"auto"` when `hostname` is set. |
 | `hostname` | No | `true` to use the application name as the hostname (e.g., `myapp` → `myapp.test`), or a string for a custom hostname (e.g., `"vite.myapp"` → `vite.myapp.test`). Creates a Caddy route. Implies `port = "auto"` unless overridden. |
 | `middleware` | No | Ordered list of middleware names. Applied after the application-level middleware. |
+| `depends_on` | No | List of sibling service names in the same application that must be `up` before this service starts. |
 
 ### Hostname and Port Rules
 
@@ -92,7 +93,7 @@ Each service has four states:
 
 Transitions:
 
-- `down` → `starting`: The `up` command spawns the OS process.
+- `down` → `starting`: The `up` command spawns the OS process once every service in `depends_on` is `up`.
 - `starting` → `up`: The TCP readiness check succeeds (port accepts connections).
 - `starting` → `crashed`: The readiness check times out (60 seconds) or the OS process exits during startup.
 - `starting` → `down`: The `down` command stops the OS process during startup.
@@ -118,9 +119,49 @@ An application's status is derived from its services:
 | Any service crashed | **crashed** |
 | Otherwise | **partial** |
 
-Starting an app starts all its services. Stopping an app stops all its
-services. The on-demand startup flow (via Caddy fallback) starts the full
-application, not just the triggered service.
+Starting an app walks the service dependency graph: services with no
+unmet dependencies start in parallel; the rest start as their
+dependencies become `up`. Stopping an app reverses the order —
+dependents stop before their dependencies. The on-demand startup flow
+(via Caddy fallback) still triggers the full application, not just the
+requested service; the loading page subscribes to the specific service
+that was requested and redirects when that service is `up`, regardless
+of where it sits in the graph.
+
+## Service Dependencies
+
+A service's `depends_on` field lists sibling services within the same
+application that must reach `up` before this service is started. While
+any dependency is not yet `up`, the service stays in `down`.
+
+```toml
+[myapp.services.web]
+command = "bin/rails server"
+hostname = true
+depends_on = ["vite"]
+
+[myapp.services.vite]
+command = "bin/vite dev"
+hostname = "vite.myapp"
+```
+
+Cross-application dependencies are not supported; `depends_on` may only
+name services declared in the same application table.
+
+Validation runs at configuration load time. Bates refuses to start when
+a `depends_on` entry names a service that does not exist in the same
+application, or when the dependency graph contains a cycle. The error
+is surfaced by the configuration loader before any application is
+supervised.
+
+If a dependency reaches `crashed` instead of `up`, its dependents
+remain in `down`. The application status derivation already covers
+this case: any service `crashed` makes the application `crashed`.
+
+The 60-second readiness timeout begins when a service enters
+`starting`. Time spent waiting for dependencies in `down` does not
+count against this budget — a slow dependency cannot cause its
+dependents to time out before they have a chance to run.
 
 ## Port Assignment
 
