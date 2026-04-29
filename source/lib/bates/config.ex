@@ -50,13 +50,15 @@ defmodule Bates.Config do
       port = resolve_port(hostname, options["port"])
       service_middleware = Map.get(options, "middleware", [])
       middleware = merge_middleware(app_middleware, service_middleware, hostname)
+      depends_on = Map.get(options, "depends_on", [])
 
       %Service{
         name: service_name,
         command: Map.fetch!(options, "command"),
         port: port,
         hostname: hostname,
-        middleware: middleware
+        middleware: middleware,
+        depends_on: depends_on
       }
     end)
   end

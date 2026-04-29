@@ -4,5 +4,6 @@ defmodule Bates.Service do
             command: "",
             port: nil,
             hostname: nil,
-            middleware: []
+            middleware: [],
+            depends_on: []
 end
