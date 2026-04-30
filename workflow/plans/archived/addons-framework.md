@@ -32,17 +32,17 @@ also has nothing to plug into until this lands.
 
 ## Acceptance Criteria
 
-- [ ] `Bates.Addon.Registry` module exists at
+- [x] `Bates.Addon.Registry` module exists at
       `source/lib/bates/addon/registry.ex`. Public API: `lookup/1`
       returning `{:ok, definition} | {:error, :unknown}`, `lookup!/1`
       returning the definition or raising. Test-gated `register/2` and
       `unregister/1` matching the `Bates.Middleware.Registry` pattern
       (gated by `if Mix.env() == :test`).
-- [ ] Definition shape is `%{command: String.t(), middleware:
+- [x] Definition shape is `%{command: String.t(), middleware:
       [String.t()]}`. The `middleware` key defaults to `[addon_name]`
       when the registered map omits it.
-- [ ] Production registry holds zero entries (`@builtins %{}`).
-- [ ] `Bates.Config.applications/1` recognizes `addons` as an
+- [x] Production registry holds zero entries (`@builtins %{}`).
+- [x] `Bates.Config.applications/1` recognizes `addons` as an
       application-level field. Both forms decode to the same internal
       list of addon names:
       - Short form: `addons = ["postgresql", "redis"]` preserves
@@ -51,57 +51,57 @@ also has nothing to plug into until this lands.
         `[myapp.addons.redis]` produces names sorted alphabetically
         (TOML decoders do not guarantee table key order; alphabetical
         is stable across runs).
-- [ ] Each declared addon expands into a `%Bates.Service{}` with:
+- [x] Each declared addon expands into a `%Bates.Service{}` with:
       - `name = addon_name`
       - `command = definition.command`
       - `port = nil`
       - `hostname = nil`
       - `middleware = app_middleware ++ definition.middleware`
       - `depends_on = []`
-- [ ] For every non-addon service `s` in the application, each addon
+- [x] For every non-addon service `s` in the application, each addon
       name is appended to `s.depends_on` in the order described above.
       Existing user-declared entries are preserved; an addon name
       already present (unlikely, but possible) is not duplicated.
-- [ ] Sibling addon services do not receive implicit edges to other
+- [x] Sibling addon services do not receive implicit edges to other
       addon services.
-- [ ] Single-service shorthand combined with `addons` produces a
+- [x] Single-service shorthand combined with `addons` produces a
       multi-service application with both the shorthand-derived
       service and the addon services. The shorthand-derived service
       carries the implicit edge to each addon.
-- [ ] `addons = []` is a valid no-op: no expansion, no implicit edges,
+- [x] `addons = []` is a valid no-op: no expansion, no implicit edges,
       no errors.
-- [ ] `Bates.Config.applications/1` returns
+- [x] `Bates.Config.applications/1` returns
       `{:error, {:unknown_addon, app_name, addon_name}}` when an addon
       name is not registered.
-- [ ] `Bates.Config.applications/1` returns
+- [x] `Bates.Config.applications/1` returns
       `{:error, {:addon_name_collision, app_name, addon_name}}` when
       an addon name matches a user-declared service in the same
       application.
-- [ ] `Bates.Config.applications/1` returns
+- [x] `Bates.Config.applications/1` returns
       `{:error, {:duplicate_addon, app_name, addon_name}}` when the
       short form lists the same name twice. (TOML's parser rejects the
       table-form duplicate path before Bates sees it, so no Bates code
       is needed for that case.)
-- [ ] The loader's `with` chain runs in the order:
+- [x] The loader's `with` chain runs in the order:
       `build services → expand_addons → validate_middleware →
       validate_dependencies`. The `expand_addons` step produces the
       three errors above and emits the expanded service list with
       implicit edges baked in. Downstream validators run on that
       expanded list unchanged.
-- [ ] `source/test/bates/addon/registry_test.exs` exists, covering
+- [x] `source/test/bates/addon/registry_test.exs` exists, covering
       `lookup`, `lookup!`, `register`/`unregister` round-trip, and the
       `middleware` default.
-- [ ] `source/test/bates/config_test.exs` gains a `describe "addons"`
+- [x] `source/test/bates/config_test.exs` gains a `describe "addons"`
       block with cases enumerated in the issue plus the empty-list
       case.
-- [ ] New TOML fixtures under `source/test/fixtures/`, one per shape
+- [x] New TOML fixtures under `source/test/fixtures/`, one per shape
       tested (see Phase 3 for the list).
-- [ ] `specs/process-management.md` Addons section documents:
+- [x] `specs/process-management.md` Addons section documents:
       app-level middleware applies to addons; single-service shorthand
       + addons silently expands; empty `addons = []` is valid;
       implicit-edge ordering rule.
-- [ ] `mix format` is clean for files this branch touched.
-- [ ] All existing tests still pass.
+- [x] `mix format` is clean for files this branch touched.
+- [x] All existing tests still pass.
 
 ## Phases
 
@@ -573,3 +573,46 @@ notes for the executor:
    cross-service-environment-exports plan's execution notes warn that
    `mix format` on the whole tree pulls in unrelated diffs. Format
    only the files this branch touched.
+
+---
+
+## Execution Notes
+
+- The plan landed exactly as designed. No deviations from the four-phase
+  structure, no changes to the three new error tags, no surprises in
+  `Toml.decode/1` behavior for short-vs-table forms.
+- Stub-middleware coupling: the addon registry's `middleware` default of
+  `[addon_name]` means a stub addon registered as
+  `Bates.Addon.Registry.register("sidekick", %{command: "..."})` produces
+  an expanded service whose middleware list contains `"sidekick"`. The
+  existing `validate_middleware/1` step then tries to resolve that name
+  in `Bates.Middleware.Registry` and fails. The `setup` block in
+  `describe "addons"` therefore registers a stub `sidekick` middleware
+  alongside the addon. Worth flagging for #20: the `postgresql` addon's
+  registered middleware name(s) must already be registered in
+  `Bates.Middleware.Registry` for the loader to accept the expansion.
+- One fixture was added beyond the plan's eight:
+  `addons_with_app_middleware_config.toml`. It pairs `middleware =
+  ["asdf"]` with an addon to assert
+  `app_middleware ++ definition.middleware` concretely. Pure ergonomics.
+- Two test cases (sibling-addon implicit-edge isolation and
+  explicit-middleware override) write inline TOML to `System.tmp_dir!/0`
+  and clean up via `on_exit`. Same shape as the rest of the suite,
+  avoids creating fixture files for one-off shapes.
+- `build_applications/1` uses `Enum.reduce_while/3` with an
+  `acc ++ [application]` accumulator to preserve declared application
+  order. The list is small enough that O(n^2) append cost is irrelevant;
+  matches the readability of the `validate_*` helpers.
+- Spec addendum lives next to the existing prose in three subsections
+  (Declaring Addons, Expansion, Implicit Dependency Edge), keeping the
+  existing voice. No section restructuring.
+
+### Execution Stats
+
+| Metric | Value |
+|--------|-------|
+| Duration | ~9m |
+| Commits | 4 |
+| Files changed | 14 |
+| Tests added | 2 (1 new test file, 1 describe block in existing) |
+| PR | TBD |
