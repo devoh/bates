@@ -373,13 +373,13 @@ followed by the addon definition's own middleware list — that is,
 `app_middleware ++ addon_definition.middleware`. Addons that omit a
 middleware list default to a single entry matching the addon name.
 
-Every middleware name on an expanded addon's list must be registered
-in `Bates.Middleware.Registry` — the configuration loader's middleware
-validation runs after expansion and treats addon services like any
-other. An addon that relies on the default middleware list therefore
-must register a middleware module under its own name; an addon that
-overrides `middleware:` must point at names that are already
-registered.
+An addon is implemented as a single module that implements both
+`Bates.Addon` (exposing `definition/0`) and `Bates.Middleware`. The
+addon registry holds the module under the addon's name; middleware
+lookup falls through to the addon registry, so the addon's own name
+on its middleware list resolves to the addon module itself. Other
+names on the list must be registered in `Bates.Middleware.Registry`
+in the usual way.
 
 A name collision between an addon and a user-declared service in the
 same application is a configuration error. The error is surfaced by

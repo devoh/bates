@@ -195,25 +195,43 @@ defmodule Bates.ConfigTest do
   end
 
   describe "addons" do
-    defmodule StubAddonMiddleware do
+    defmodule StubSidekickAddon do
+      @behaviour Bates.Addon
       @behaviour Bates.Middleware
-      @impl true
+
+      @impl Bates.Addon
+      def definition, do: %{command: "bin/sidekick"}
+
+      @impl Bates.Middleware
+      def apply(invocation, _context), do: invocation
+    end
+
+    defmodule StubCompanionAddon do
+      @behaviour Bates.Addon
+      @behaviour Bates.Middleware
+
+      @impl Bates.Addon
+      def definition, do: %{command: "bin/companion"}
+
+      @impl Bates.Middleware
+      def apply(invocation, _context), do: invocation
+    end
+
+    defmodule StubCustomAddon do
+      @behaviour Bates.Addon
+      @behaviour Bates.Middleware
+
+      @impl Bates.Addon
+      def definition,
+        do: %{command: "bin/custom", middleware: ["asdf", "sidekick"]}
+
+      @impl Bates.Middleware
       def apply(invocation, _context), do: invocation
     end
 
     setup do
-      Bates.Addon.Registry.register("sidekick", %{command: "bin/sidekick"})
-
-      Bates.Middleware.Registry.register(
-        "sidekick",
-        StubAddonMiddleware
-      )
-
-      on_exit(fn ->
-        Bates.Addon.Registry.unregister("sidekick")
-        Bates.Middleware.Registry.unregister("sidekick")
-      end)
-
+      Bates.Addon.Registry.register("sidekick", StubSidekickAddon)
+      on_exit(fn -> Bates.Addon.Registry.unregister("sidekick") end)
       :ok
     end
 
@@ -251,10 +269,8 @@ defmodule Bates.ConfigTest do
     end
 
     test "does not add an implicit edge between sibling addons" do
-      Bates.Addon.Registry.register("companion", %{command: "bin/companion"})
-      Bates.Middleware.Registry.register("companion", StubAddonMiddleware)
+      Bates.Addon.Registry.register("companion", StubCompanionAddon)
       on_exit(fn -> Bates.Addon.Registry.unregister("companion") end)
-      on_exit(fn -> Bates.Middleware.Registry.unregister("companion") end)
 
       toml = """
       [myapp]
@@ -324,11 +340,7 @@ defmodule Bates.ConfigTest do
     end
 
     test "preserves an explicit middleware list from the addon definition" do
-      Bates.Addon.Registry.register("custom", %{
-        command: "bin/custom",
-        middleware: ["asdf", "sidekick"]
-      })
-
+      Bates.Addon.Registry.register("custom", StubCustomAddon)
       on_exit(fn -> Bates.Addon.Registry.unregister("custom") end)
 
       toml = """

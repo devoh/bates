@@ -2,9 +2,9 @@ defmodule Bates.Addon.Registry do
   @builtins %{}
 
   def lookup(name) when is_binary(name) do
-    case Map.fetch(all(), name) do
-      {:ok, definition} -> {:ok, normalize(name, definition)}
-      :error -> {:error, :unknown}
+    case lookup_module(name) do
+      {:ok, module} -> {:ok, normalize(name, module.definition())}
+      {:error, :unknown} = error -> error
     end
   end
 
@@ -19,6 +19,13 @@ defmodule Bates.Addon.Registry do
     end
   end
 
+  def lookup_module(name) when is_binary(name) do
+    case Map.fetch(all(), name) do
+      {:ok, module} -> {:ok, module}
+      :error -> {:error, :unknown}
+    end
+  end
+
   defp normalize(name, definition) do
     Map.put_new(definition, :middleware, [name])
   end
@@ -26,10 +33,9 @@ defmodule Bates.Addon.Registry do
   if Mix.env() == :test do
     @extra_key :extra_addons
 
-    def register(name, definition)
-        when is_binary(name) and is_map(definition) do
+    def register(name, module) when is_binary(name) and is_atom(module) do
       extra = Application.get_env(:bates, @extra_key, %{})
-      Application.put_env(:bates, @extra_key, Map.put(extra, name, definition))
+      Application.put_env(:bates, @extra_key, Map.put(extra, name, module))
       :ok
     end
 
