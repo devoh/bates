@@ -32,14 +32,14 @@ Environment Exports"). This plan turns the spec into code.
 
 ## Acceptance Criteria
 
-- [ ] `%Bates.ProcessInvocation{}` has an `exports: %{}` field with type
+- [x] `%Bates.ProcessInvocation{}` has an `exports: %{}` field with type
       `%{String.t() => String.t()}`. `compile/1` is unchanged.
-- [ ] App per-service state map (initialized in `Bates.App.init/1`) has an
+- [x] App per-service state map (initialized in `Bates.App.init/1`) has an
       `exports: %{}` field alongside `assigned_port`.
-- [ ] A `build_dependency_graph/1` private helper exists in `Bates.App`,
+- [x] A `build_dependency_graph/1` private helper exists in `Bates.App`,
       building a `:digraph` from `state.services` with edges directed
       dependent → dependency. `reverse_topological_order/1` calls it.
-- [ ] `Bates.App.build_invocation/3` seeds the initial
+- [x] `Bates.App.build_invocation/3` seeds the initial
       `ProcessInvocation.environment` with the union of each transitive
       dependency's stored `exports`. Closure computed via
       `:digraph_utils.reachable/2` (excluding the service itself), filtered
@@ -48,27 +48,27 @@ Environment Exports"). This plan turns the spec into code.
       `Map.merge(acc, dep_exports)`. Net effect: deepest exports written
       first, direct deps overwrite transitive deps, consumer middleware
       overwrites everything by running on top.
-- [ ] In `start_service/3`, the producer's `exports` are persisted to
+- [x] In `start_service/3`, the producer's `exports` are persisted to
       per-service state **only inside the `{:ok, pid, os_pid}` branch** of
       `:exec.run_link`, in both the with-port and no-port success paths.
       The `{:error, _}` branch leaves state untouched.
-- [ ] `stop_service/3` resets `exports: %{}` alongside the existing field
+- [x] `stop_service/3` resets `exports: %{}` alongside the existing field
       resets.
-- [ ] The `:check_ready` timeout branch in `handle_info/2` resets
+- [x] The `:check_ready` timeout branch in `handle_info/2` resets
       `exports: %{}` alongside its existing field resets.
-- [ ] The `:EXIT` handler in `handle_info/2` resets `exports: %{}` whenever
+- [x] The `:EXIT` handler in `handle_info/2` resets `exports: %{}` whenever
       `pid` becomes `nil` (both clean-exit "down" and crash paths).
-- [ ] Stub producer and consumer middleware modules exist under
+- [x] Stub producer and consumer middleware modules exist under
       `source/test/support/`, declaring `@behaviour Bates.Middleware`.
       Tests register them via `Bates.Middleware.Registry.register/2` and
       unregister them via `on_exit`.
-- [ ] `source/test/bates/process_invocation_test.exs` covers: `exports`
+- [x] `source/test/bates/process_invocation_test.exs` covers: `exports`
       defaults to `%{}`, custom values survive struct construction,
       `compile/1` ignores `exports`.
-- [ ] `source/test/bates/middleware_test.exs` covers a middleware that
+- [x] `source/test/bates/middleware_test.exs` covers a middleware that
       writes to `exports` going through `apply_pipeline/3` with the field
       preserved.
-- [ ] `source/test/bates/app_test.exs` covers: a producer/consumer pair
+- [x] `source/test/bates/app_test.exs` covers: a producer/consumer pair
       where the producer's middleware writes a known export and the
       consumer's middleware sees it merged into `environment`; transitive
       closure (A → B → C, A's exports reach C); same-key conflict between
@@ -76,9 +76,9 @@ Environment Exports"). This plan turns the spec into code.
       consumer middleware writing the same key overrides the seed;
       `exports` are empty after `down`; `exports` are empty after a crash
       (timeout or non-zero exit).
-- [ ] All existing tests still pass.
-- [ ] `mix format` is clean for files this branch touched.
-- [ ] `specs/process-management.md` "Service Environment Exports" section
+- [x] All existing tests still pass.
+- [x] `mix format` is clean for files this branch touched.
+- [x] `specs/process-management.md` "Service Environment Exports" section
       still matches the implementation (no changes anticipated, but
       verified).
 
@@ -458,3 +458,61 @@ None. The plan is ready as-is following the Phase 3 correction.
 ### Blockers
 
 None identified.
+
+---
+
+## Execution Notes
+
+- **Test fixture had to use port-bearing producers, not portless.** My
+  initial draft of `producer/consumer` test fixtures used portless
+  services (`hostname: nil, port: nil, middleware: ["export_producer"]`).
+  Those failed because portless services in `start_service/3` go to
+  `up` immediately but never call `start_eligible/1`, so a downstream
+  consumer that `depends_on` a portless producer never gets started.
+  This is a pre-existing limitation of the depends-on/portless
+  combination and out of scope here. Switched the fixtures to
+  port-bearing services with `middleware: ["port", "export_producer"]`
+  using `test/support/test_server.ex` as the command — the readiness
+  check then drives `start_eligible/1` and consumers come up. All
+  exports tests now pass.
+
+- **Inspecting `exports` in tests.** No public API exposes per-service
+  `exports`. Used `:sys.get_state/1` against the `App` GenServer pid
+  (resolved via `GenServer.whereis({:via, Registry, {Bates.ProcessRegistry,
+  app_name}})`) to read `state.services[name].exports` for the
+  "exports clear after down/crash" assertions and the producer
+  persistence assertion. Avoided adding a public API just for tests.
+
+- **Three stub middleware modules instead of one.** The plan suggested
+  one parameterized module would be acceptable; settled on three
+  small, single-purpose modules (`ExportProducer`,
+  `EnvironmentRecorder`, `EnvironmentOverride`) keyed by service name
+  via the `:bates` application env. Mirrors the existing
+  `MarkerMiddleware` pattern in `app_test.exs`.
+
+- **Recorder asserts specific keys, not full equality.** The
+  port-bearing producers feed `PORT` into the consumer's environment
+  too, so the `EnvironmentRecorder` snapshot is asserted with
+  per-key reads (`recorded_env("consumer")["DATABASE_URL"]`) rather
+  than `==` against an expected map.
+
+- **No spec edits.** Spec already documents the design accurately.
+
+- **No mix.exs changes.** `test/support/` was already in
+  `elixirc_paths(:test)` from prior work.
+
+- **mix format touched unrelated files.** Running `mix format` on the
+  whole tree reformatted several pre-existing files that are not in
+  scope for this plan (caddy.ex, router.ex, controllers, etc.). I
+  reverted those and committed only the format tweaks to files this
+  branch already touched.
+
+### Execution Stats
+
+| Metric | Value |
+|--------|-------|
+| Duration | ~16m |
+| Commits | 7 |
+| Files changed | 6 |
+| Tests added | 12 |
+| PR | (filled in after push) |
