@@ -229,6 +229,18 @@ defmodule Bates.ConfigTest do
       def apply(invocation, _context), do: invocation
     end
 
+    defmodule StubPortBearingAddon do
+      @behaviour Bates.Addon
+      @behaviour Bates.Middleware
+
+      @impl Bates.Addon
+      def definition,
+        do: %{command: "bin/queue -p $PORT", middleware: ["port", "queue"]}
+
+      @impl Bates.Middleware
+      def apply(invocation, _context), do: invocation
+    end
+
     setup do
       Bates.Addons.Registry.register("sidekick", StubSidekickAddon)
       on_exit(fn -> Bates.Addons.Registry.unregister("sidekick") end)
@@ -376,6 +388,39 @@ defmodule Bates.ConfigTest do
     test "returns {:error, {:duplicate_addon, app, name}} for a repeated short-form name" do
       assert Config.applications("test/fixtures/addons_duplicate_config.toml") ==
                {:error, {:duplicate_addon, "myapp", "sidekick"}}
+    end
+
+    test "sets `port: :auto` for an addon whose middleware includes `port`" do
+      Bates.Addons.Registry.register("queue", StubPortBearingAddon)
+      on_exit(fn -> Bates.Addons.Registry.unregister("queue") end)
+
+      toml = """
+      [myapp]
+      root = "/tmp/myapp"
+      addons = ["queue"]
+
+      [myapp.services.web]
+      command = "bin/rails server -p $PORT"
+      hostname = true
+      """
+
+      path = Path.join(System.tmp_dir!(), "addons_port_bearing_config.toml")
+      File.write!(path, toml)
+      on_exit(fn -> File.rm(path) end)
+
+      [{_name, _root, services}] = Config.applications(path)
+      queue = Enum.find(services, &(&1.name == "queue"))
+
+      assert queue.port == :auto
+    end
+
+    test "leaves `port` as nil for an addon whose middleware omits `port`" do
+      [{_name, _root, services}] =
+        Config.applications("test/fixtures/addons_short_form_config.toml")
+
+      sidekick = Enum.find(services, &(&1.name == "sidekick"))
+
+      assert sidekick.port == nil
     end
   end
 end

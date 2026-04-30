@@ -128,10 +128,12 @@ defmodule Bates.Config do
   end
 
   defp build_addon_service(name, definition, app_middleware) do
+    port = if "port" in definition.middleware, do: :auto, else: nil
+
     %Service{
       name: name,
       command: definition.command,
-      port: nil,
+      port: port,
       hostname: nil,
       middleware: app_middleware ++ definition.middleware,
       depends_on: []
