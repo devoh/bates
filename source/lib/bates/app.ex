@@ -249,24 +249,30 @@ defmodule Bates.App do
   # Helpers
 
   defp reverse_topological_order(state) do
-    graph = :digraph.new()
+    graph = build_dependency_graph(state.services)
 
     try do
-      Enum.each(state.services, fn {name, _service} ->
-        :digraph.add_vertex(graph, name)
-      end)
-
-      Enum.each(state.services, fn {name,
-                                    %{config: %Service{depends_on: depends_on}}} ->
-        Enum.each(depends_on, fn dependency_name ->
-          :digraph.add_edge(graph, name, dependency_name)
-        end)
-      end)
-
       :digraph_utils.topsort(graph)
     after
       :digraph.delete(graph)
     end
+  end
+
+  defp build_dependency_graph(services) do
+    graph = :digraph.new()
+
+    Enum.each(services, fn {name, _service} ->
+      :digraph.add_vertex(graph, name)
+    end)
+
+    Enum.each(services, fn {name,
+                            %{config: %Service{depends_on: depends_on}}} ->
+      Enum.each(depends_on, fn dependency_name ->
+        :digraph.add_edge(graph, name, dependency_name)
+      end)
+    end)
+
+    graph
   end
 
   defp start_eligible(state) do
