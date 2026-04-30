@@ -275,10 +275,11 @@ stored on the application's per-service runtime state alongside
 `up`, which is the gate dependents wait on.
 
 A middleware that wants to set a variable on its own service *and*
-publish it to dependents writes both `environment` and `exports`. For
-example, a hypothetical `postgresql` middleware would write `PGPORT`
-to both — `environment` so its own command line can reference it,
-`exports` so the web service that depends on it inherits it.
+publish it to dependents writes both `environment` and `exports`. The
+`postgresql` addon does this with `PGPORT` — it writes `PGPORT` to
+its own `environment` so the postgres command line can reference
+`$PORT` (and `PGPORT` for completeness), and to `exports` so every
+service that depends on the addon inherits it.
 
 Exports are not refreshed in a running consumer if its dependency
 restarts. A consumer holding a stale value — for example, an old
@@ -350,11 +351,42 @@ provide is a configuration error caught at load time.
 
 | Addon | What it provides |
 |-------|------------------|
-| `postgresql` | A local Postgres instance scoped to the application. Publishes `PGPORT` to dependents. |
+| `postgresql` | A local Postgres instance scoped to the application. Publishes `PGHOST` and `PGPORT` to dependents. |
 
 The mechanics of each addon — its command, prologue, exports, data
-location, version handling — are specified separately from this
-framework section.
+location, version handling — are specified per-addon below.
+
+#### `postgresql`
+
+A per-application Postgres server.
+
+- **Command:** `postgres -D $PGDATA -p $PORT -k $PGDATA`. The `-k`
+  flag points the Unix-domain socket directory at `$PGDATA` so the
+  socket lives alongside the data directory rather than in
+  `/tmp`.
+- **Default middleware list:** `["port", "postgresql"]`. The
+  `port` middleware allocates a port and exposes it as `$PORT` for
+  the command line; the `postgresql` middleware (the addon module
+  itself, resolved through the addon registry fall-through) sets
+  the postgres-specific environment and exports.
+- **Data directory:** `<app_root>/.bates/postgresql`. The prologue
+  creates the directory with `mkdir -p` and runs `initdb -A trust`
+  on first boot, gated on the absence of `PG_VERSION`. Subsequent
+  boots skip `initdb`.
+- **Unix socket directory:** the same path as the data directory.
+- **Exported environment:** `PGHOST=127.0.0.1` and
+  `PGPORT=<assigned port>`. These are seeded into every dependent
+  service's environment.
+- **Stale `postmaster.pid` handling:** if the file exists, the
+  prologue runs `kill -0` against the recorded PID and removes the
+  file when the PID is no longer alive. A live postgres on the same
+  data directory is left untouched.
+- **State persistence:** the data directory under
+  `.bates/postgresql/` survives addon removal and Bates restarts.
+  Removing it is a manual step.
+- **Version handling:** the addon does not pin a postgres version.
+  Whichever `postgres` and `initdb` are first on the application's
+  `$PATH` (typically via `asdf` or system packages) win.
 
 ### Expansion
 
@@ -375,11 +407,11 @@ middleware list default to a single entry matching the addon name.
 
 An addon is implemented as a single module that implements both
 `Bates.Addon` (exposing `definition/0`) and `Bates.Middleware`. The
-addon registry holds the module under the addon's name; middleware
-lookup falls through to the addon registry, so the addon's own name
-on its middleware list resolves to the addon module itself. Other
-names on the list must be registered in `Bates.Middleware.Registry`
-in the usual way.
+`Bates.Addons.Registry` holds the module under the addon's name;
+`Bates.Middleware.Registry` falls through to the addon registry on a
+lookup miss, so the addon's own name on its middleware list resolves
+to the addon module itself. Other names on the list must be
+registered in `Bates.Middleware.Registry` in the usual way.
 
 A name collision between an addon and a user-declared service in the
 same application is a configuration error. The error is surfaced by
@@ -413,9 +445,9 @@ An addon's middleware publishes exports the same way any middleware
 would; see Service Environment Exports under Middleware. Because every
 other service in the application implicitly depends on the addon,
 those exports are seeded into every sibling's environment
-automatically. A `postgresql` addon publishing `PGPORT` makes that
-variable available to every other service without any further
-configuration.
+automatically. The `postgresql` addon publishes `PGHOST` and
+`PGPORT`, making both available to every other service without any
+further configuration.
 
 ## Service Execution
 
