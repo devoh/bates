@@ -50,8 +50,7 @@ Environment Exports"). This plan turns the spec into code.
       overwrites everything by running on top.
 - [x] In `start_service/3`, the producer's `exports` are persisted to
       per-service state **only inside the `{:ok, pid, os_pid}` branch** of
-      `:exec.run_link`, in both the with-port and no-port success paths.
-      The `{:error, _}` branch leaves state untouched.
+      `:exec.run_link`. The `{:error, _}` branch leaves state untouched.
 - [x] `stop_service/3` resets `exports: %{}` alongside the existing field
       resets.
 - [x] The `:check_ready` timeout branch in `handle_info/2` resets
@@ -207,9 +206,9 @@ flow won't pass yet — that requires Phase 4.
 
 - `source/lib/bates/app.ex` — in `start_service/3`'s `{:ok, pid, os_pid}`
   branch, persist `exports: invocation.exports` to the per-service state
-  map alongside the existing `pid` / `started_at` writes. Both the
-  no-port path (line ~316) and the with-port path (line ~324) need the
-  write because they each construct their own `new_svc`.
+  map alongside the existing `pid` / `started_at` writes. The post-spawn
+  paths (port and no-port) both layer onto a single base `new_svc`, so a
+  single write to that base propagates to both branches.
 
   Concretely, change:
   ```elixir
