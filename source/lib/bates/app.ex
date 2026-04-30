@@ -313,7 +313,13 @@ defmodule Bates.App do
 
     case :exec.run_link(command, opts) do
       {:ok, pid, os_pid} ->
-        new_svc = %{service_state | pid: pid, ready: false, exit_status: nil}
+        new_svc = %{
+          service_state
+          | pid: pid,
+            ready: false,
+            exit_status: nil,
+            exports: invocation.exports
+        }
         new_pids = Map.put(state.pids, pid, service_name)
         # Also map the os_pid for stdout/stderr routing
         new_pids = Map.put(new_pids, os_pid, service_name)
