@@ -559,6 +559,8 @@ defmodule Bates.AppTest do
       }
     end
 
+    # `:sys.get_state/1` reaches into the App GenServer because there's no
+    # public API for reading per-service `exports`. Replace if one is added.
     defp service_state(app_name, service_name) do
       pid =
         GenServer.whereis({:via, Registry, {Bates.ProcessRegistry, app_name}})
