@@ -373,6 +373,14 @@ followed by the addon definition's own middleware list — that is,
 `app_middleware ++ addon_definition.middleware`. Addons that omit a
 middleware list default to a single entry matching the addon name.
 
+Every middleware name on an expanded addon's list must be registered
+in `Bates.Middleware.Registry` — the configuration loader's middleware
+validation runs after expansion and treats addon services like any
+other. An addon that relies on the default middleware list therefore
+must register a middleware module under its own name; an addon that
+overrides `middleware:` must point at names that are already
+registered.
+
 A name collision between an addon and a user-declared service in the
 same application is a configuration error. The error is surfaced by
 the configuration loader before any application is supervised.
