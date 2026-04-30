@@ -99,16 +99,9 @@ defmodule Bates.Config do
   end
 
   defp check_duplicate_addons(app_name, addon_names) do
-    Enum.reduce_while(addon_names, {:ok, MapSet.new()}, fn name, {:ok, seen} ->
-      if MapSet.member?(seen, name) do
-        {:halt, {:error, {:duplicate_addon, app_name, name}}}
-      else
-        {:cont, {:ok, MapSet.put(seen, name)}}
-      end
-    end)
-    |> case do
-      {:ok, _seen} -> :ok
-      {:error, _} = error -> error
+    case addon_names -- Enum.uniq(addon_names) do
+      [] -> :ok
+      [name | _] -> {:error, {:duplicate_addon, app_name, name}}
     end
   end
 
