@@ -266,8 +266,7 @@ defmodule Bates.App do
       :digraph.add_vertex(graph, name)
     end)
 
-    Enum.each(services, fn {name,
-                            %{config: %Service{depends_on: depends_on}}} ->
+    Enum.each(services, fn {name, %{config: %Service{depends_on: depends_on}}} ->
       Enum.each(depends_on, fn dependency_name ->
         :digraph.add_edge(graph, name, dependency_name)
       end)
@@ -321,6 +320,7 @@ defmodule Bates.App do
             exit_status: nil,
             exports: invocation.exports
         }
+
         new_pids = Map.put(state.pids, pid, service_name)
         # Also map the os_pid for stdout/stderr routing
         new_pids = Map.put(new_pids, os_pid, service_name)

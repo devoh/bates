@@ -43,7 +43,9 @@ defmodule Bates.ProcessInvocationTest do
         exports: %{"DATABASE_URL" => "postgres://localhost/db"}
       }
 
-      assert invocation.exports == %{"DATABASE_URL" => "postgres://localhost/db"}
+      assert invocation.exports == %{
+               "DATABASE_URL" => "postgres://localhost/db"
+             }
     end
   end
 end

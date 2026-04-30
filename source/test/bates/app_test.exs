@@ -711,8 +711,7 @@ defmodule Bates.AppTest do
       })
 
       config =
-        {"testapp", ".",
-         [producer("producer", command: "exit 1")]}
+        {"testapp", ".", [producer("producer", command: "exit 1")]}
 
       start_supervised!({App, config})
       :ok = App.up("testapp")
