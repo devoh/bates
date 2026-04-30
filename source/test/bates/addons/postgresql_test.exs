@@ -27,14 +27,13 @@ defmodule Bates.Addons.PostgresqlTest do
     test "appends mkdir, conditional initdb, and stale-pid guard prologue lines",
          %{invocation: invocation, context: context} do
       result = Postgresql.apply(invocation, context)
-      pgdata = "/tmp/myapp/.bates/postgresql"
 
       assert result.prologue == [
-               "mkdir -p #{pgdata}",
-               "[ -f #{pgdata}/PG_VERSION ] || initdb -A trust -D #{pgdata}",
-               "if [ -f #{pgdata}/postmaster.pid ]; then " <>
-                 "kill -0 $(head -1 #{pgdata}/postmaster.pid) 2>/dev/null || " <>
-                 "rm #{pgdata}/postmaster.pid; fi"
+               "mkdir -p \"$PGDATA\"",
+               "[ -f \"$PGDATA/PG_VERSION\" ] || initdb -A trust -D \"$PGDATA\"",
+               "if [ -f \"$PGDATA/postmaster.pid\" ]; then " <>
+                 "kill -0 $(head -1 \"$PGDATA/postmaster.pid\") 2>/dev/null || " <>
+                 "rm \"$PGDATA/postmaster.pid\"; fi"
              ]
     end
 
@@ -44,7 +43,17 @@ defmodule Bates.Addons.PostgresqlTest do
       [_mkdir, _initdb, guard] = result.prologue
 
       assert guard =~ "kill -0 $(head -1"
-      assert guard =~ "rm "
+      assert guard =~ "rm \"$PGDATA/postmaster.pid\""
+    end
+
+    test "prologue references `$PGDATA` rather than interpolating the path so " <>
+           "roots containing spaces or shell metacharacters work",
+         %{invocation: invocation, context: context} do
+      context = %{context | root: "/tmp/My App"}
+      result = Postgresql.apply(invocation, context)
+
+      refute Enum.any?(result.prologue, &String.contains?(&1, "/tmp/My App"))
+      assert Enum.all?(result.prologue, &String.contains?(&1, "$PGDATA"))
     end
 
     test "sets PGDATA, PGHOST, and PGPORT in the environment",

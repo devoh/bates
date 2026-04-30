@@ -20,18 +20,18 @@ defmodule Bates.Addons.Postgresql do
     pgdata = Path.join(Path.expand(root), @data_subdir)
 
     invocation
-    |> add_prologue(pgdata)
+    |> add_prologue()
     |> put_environment(pgdata, port)
     |> add_exports(port)
   end
 
-  defp add_prologue(%ProcessInvocation{prologue: prologue} = invocation, pgdata) do
+  defp add_prologue(%ProcessInvocation{prologue: prologue} = invocation) do
     lines = [
-      "mkdir -p #{pgdata}",
-      "[ -f #{pgdata}/PG_VERSION ] || initdb -A trust -D #{pgdata}",
-      "if [ -f #{pgdata}/postmaster.pid ]; then " <>
-        "kill -0 $(head -1 #{pgdata}/postmaster.pid) 2>/dev/null || " <>
-        "rm #{pgdata}/postmaster.pid; fi"
+      "mkdir -p \"$PGDATA\"",
+      "[ -f \"$PGDATA/PG_VERSION\" ] || initdb -A trust -D \"$PGDATA\"",
+      "if [ -f \"$PGDATA/postmaster.pid\" ]; then " <>
+        "kill -0 $(head -1 \"$PGDATA/postmaster.pid\") 2>/dev/null || " <>
+        "rm \"$PGDATA/postmaster.pid\"; fi"
     ]
 
     %{invocation | prologue: prologue ++ lines}
