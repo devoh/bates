@@ -336,6 +336,13 @@ In v1, no addon defines override fields, so the two forms produce
 identical configurations. The table form is reserved for future
 addon-specific options.
 
+An `addons = []` declaration is a valid no-op: no expansion happens
+and no implicit dependency edges are added. The single-service
+shorthand may also declare `addons = [...]`; the configuration
+silently expands into a multi-service application whose
+shorthand-derived service receives the implicit dependency edge to
+each addon.
+
 ### Available Addons
 
 Addons are built into Bates. Naming an addon that Bates does not
@@ -360,6 +367,12 @@ is a service like any other — it has a status, a port, a log buffer,
 appears on the dashboard, and participates in the application's
 start/stop lifecycle.
 
+Application-level middleware applies to expanded addon services. The
+expanded service's middleware list is the application's middleware
+followed by the addon definition's own middleware list — that is,
+`app_middleware ++ addon_definition.middleware`. Addons that omit a
+middleware list default to a single entry matching the addon name.
+
 A name collision between an addon and a user-declared service in the
 same application is a configuration error. The error is surfaced by
 the configuration loader before any application is supervised.
@@ -376,6 +389,12 @@ example above does not list `postgresql` in its `depends_on` field —
 the addon declaration is enough. This matches the typical use case
 (every service in the application needs the database up before it
 boots) and keeps configuration short.
+
+The order in which implicit edges are appended follows the addon
+declaration order. For the short form, that order is the order the
+names appear in the TOML list. For the table form, TOML decoders do
+not preserve table-key order, so Bates orders the addons
+alphabetically.
 
 To opt out, declare the dependency manually as a service rather than
 as an addon. Bates does not provide a per-service opt-out flag.
