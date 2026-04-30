@@ -1,26 +1,34 @@
 defmodule Bates.Config do
-  alias Bates.{Middleware, Service}
+  alias Bates.{Addon, Middleware, Service}
 
   @path "config.toml"
 
   def applications(path \\ @path) do
     with {:ok, toml} <- File.read(path),
-         {:ok, config} <- Toml.decode(toml) do
-      applications = Enum.map(config, &build_application/1)
-
-      with :ok <- validate_middleware(applications),
-           :ok <- validate_dependencies(applications) do
-        applications
-      end
+         {:ok, config} <- Toml.decode(toml),
+         {:ok, applications} <- build_applications(config),
+         :ok <- validate_middleware(applications),
+         :ok <- validate_dependencies(applications) do
+      applications
     else
       {:error, :enoent} -> []
       {:error, _} = error -> error
     end
   end
 
+  defp build_applications(config) do
+    Enum.reduce_while(config, {:ok, []}, fn entry, {:ok, acc} ->
+      case build_application(entry) do
+        {:ok, application} -> {:cont, {:ok, acc ++ [application]}}
+        {:error, _} = error -> {:halt, error}
+      end
+    end)
+  end
+
   defp build_application({name, options}) do
     root = Map.fetch!(options, "root")
     app_middleware = Map.get(options, "middleware", [])
+    addon_names = parse_addons(Map.get(options, "addons"))
 
     services =
       if Map.has_key?(options, "services") do
@@ -29,7 +37,17 @@ defmodule Bates.Config do
         [build_single_service(name, options, app_middleware)]
       end
 
-    {name, root, services}
+    case expand_addons(name, services, addon_names, app_middleware) do
+      {:ok, expanded} -> {:ok, {name, root, expanded}}
+      {:error, _} = error -> error
+    end
+  end
+
+  defp parse_addons(nil), do: []
+  defp parse_addons(names) when is_list(names), do: names
+
+  defp parse_addons(map) when is_map(map) do
+    map |> Map.keys() |> Enum.sort()
   end
 
   defp build_single_service(name, options, app_middleware) do
@@ -63,6 +81,78 @@ defmodule Bates.Config do
         middleware: middleware,
         depends_on: depends_on
       }
+    end)
+  end
+
+  defp expand_addons(_app_name, services, [], _app_middleware) do
+    {:ok, services}
+  end
+
+  defp expand_addons(app_name, services, addon_names, app_middleware) do
+    with :ok <- check_duplicate_addons(app_name, addon_names),
+         :ok <- check_addon_collisions(app_name, services, addon_names),
+         {:ok, addon_services} <-
+           build_addon_services(app_name, addon_names, app_middleware) do
+      updated_services = append_addon_dependencies(services, addon_names)
+      {:ok, updated_services ++ addon_services}
+    end
+  end
+
+  defp check_duplicate_addons(app_name, addon_names) do
+    Enum.reduce_while(addon_names, {:ok, MapSet.new()}, fn name, {:ok, seen} ->
+      if MapSet.member?(seen, name) do
+        {:halt, {:error, {:duplicate_addon, app_name, name}}}
+      else
+        {:cont, {:ok, MapSet.put(seen, name)}}
+      end
+    end)
+    |> case do
+      {:ok, _seen} -> :ok
+      {:error, _} = error -> error
+    end
+  end
+
+  defp check_addon_collisions(app_name, services, addon_names) do
+    service_names = MapSet.new(services, & &1.name)
+
+    case Enum.find(addon_names, &MapSet.member?(service_names, &1)) do
+      nil -> :ok
+      name -> {:error, {:addon_name_collision, app_name, name}}
+    end
+  end
+
+  defp build_addon_services(app_name, addon_names, app_middleware) do
+    Enum.reduce_while(addon_names, {:ok, []}, fn name, {:ok, acc} ->
+      case Addon.Registry.lookup(name) do
+        {:ok, definition} ->
+          service = build_addon_service(name, definition, app_middleware)
+          {:cont, {:ok, acc ++ [service]}}
+
+        {:error, :unknown} ->
+          {:halt, {:error, {:unknown_addon, app_name, name}}}
+      end
+    end)
+  end
+
+  defp build_addon_service(name, definition, app_middleware) do
+    %Service{
+      name: name,
+      command: definition.command,
+      port: nil,
+      hostname: nil,
+      middleware: app_middleware ++ definition.middleware,
+      depends_on: []
+    }
+  end
+
+  defp append_addon_dependencies(services, addon_names) do
+    Enum.map(services, fn %Service{depends_on: depends_on} = service ->
+      new_depends_on =
+        Enum.reduce(addon_names, depends_on, fn name, acc ->
+          if name in acc, do: acc, else: acc ++ [name]
+        end)
+
+      %Service{service | depends_on: new_depends_on}
     end)
   end
 
