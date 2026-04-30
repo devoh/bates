@@ -1,5 +1,5 @@
 defmodule Bates.Addons.Registry do
-  @builtins %{}
+  @builtins %{"postgresql" => Bates.Addons.Postgresql}
 
   def lookup(name) when is_binary(name) do
     case lookup_module(name) do
