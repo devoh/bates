@@ -160,7 +160,8 @@ defmodule Bates.App do
                 | pid: nil,
                   ready: false,
                   started_at: nil,
-                  exit_status: :timeout
+                  exit_status: :timeout,
+                  exports: %{}
               }
 
               new_state = %{state | pids: new_pids}
@@ -216,7 +217,7 @@ defmodule Bates.App do
       service_name ->
         svc = Map.fetch!(state.services, service_name)
         new_pids = Map.delete(state.pids, exit_pid)
-        new_svc = %{svc | pid: nil}
+        new_svc = %{svc | pid: nil, exports: %{}}
 
         {new_svc, broadcast_msg} =
           if svc.exit_status == :timeout do
@@ -377,7 +378,8 @@ defmodule Bates.App do
         ready: false,
         started_at: nil,
         exit_status: nil,
-        assigned_port: nil
+        assigned_port: nil,
+        exports: %{}
     }
 
     new_pids = Map.delete(state.pids, pid)
