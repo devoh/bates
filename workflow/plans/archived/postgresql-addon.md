@@ -31,28 +31,28 @@ ignores `port` on hostname-less services.
 
 ## Acceptance Criteria
 
-- [ ] An app with `addons = ["postgresql"]` boots a postgres service
+- [x] An app with `addons = ["postgresql"]` boots a postgres service
       with an auto-assigned port.
-- [ ] First start runs `initdb` into `<root>/.bates/postgresql/`;
+- [x] First start runs `initdb` into `<root>/.bates/postgresql/`;
       subsequent starts skip it (verified by checking for
       `PG_VERSION`).
-- [ ] A stale `postmaster.pid` (process gone) is removed in the
+- [x] A stale `postmaster.pid` (process gone) is removed in the
       prologue; a live `postmaster.pid` (process running) is left
       alone.
-- [ ] The postgres process listens on `127.0.0.1:<assigned_port>`
+- [x] The postgres process listens on `127.0.0.1:<assigned_port>`
       and on a Unix socket under `<root>/.bates/postgresql/`.
-- [ ] A sibling service that depends on the postgres addon sees
+- [x] A sibling service that depends on the postgres addon sees
       `PGHOST=127.0.0.1` and `PGPORT=<assigned_port>` in its
       environment.
-- [ ] `Service.port = :auto` triggers port allocation, regardless
+- [x] `Service.port = :auto` triggers port allocation, regardless
       of whether the service has a hostname.
-- [ ] `Bates.Addons.Registry` resolves `"postgresql"` to
+- [x] `Bates.Addons.Registry` resolves `"postgresql"` to
       `Bates.Addons.Postgresql`; cross-registry middleware lookup
       still resolves it via fall-through.
-- [ ] `mix test` passes (unit tests run, integration tests excluded).
-- [ ] `mix test --include integration` passes when `postgres` and
+- [x] `mix test` passes (unit tests run, integration tests excluded).
+- [x] `mix test --include integration` passes when `postgres` and
       `initdb` are on `$PATH`.
-- [ ] `specs/process-management.md` has a dedicated `postgresql`
+- [x] `specs/process-management.md` has a dedicated `postgresql`
       addon section and all namespace references read
       `Bates.Addons.*` (no remaining `Bates.Addon.Registry`).
 
@@ -495,3 +495,58 @@ None. All blocking items resolved during the audit.
 ### Blockers
 
 None identified.
+
+---
+
+## Execution Notes
+
+- Phase 1 went mechanical. The plan listed `source/lib/bates/addons/`
+  as a destination but the directory didn't exist; `git mv` errors
+  forced an explicit `mkdir` first.
+- Phase 2's new `app_test.exs` case relied on `test_server.ex`
+  reading `$PORT`; the `port` middleware sets that variable, so the
+  hostname-less service still gets a port assignment and reaches
+  `up` via the standard TCP readiness probe.
+- Phase 3's port-bearing test fixture (`StubPortBearingAddon`)
+  declares `middleware: ["port", "queue"]` to keep the dependent
+  middleware list resolvable. Other apps with non-trivial app-level
+  middleware would need their own fixtures.
+- Phase 4 found no surprises. The plan's gate-logic ("`port` in
+  `definition.middleware`") was sufficient.
+- Phase 5 hit two real-world snags:
+  1. The macOS default temp directory (`/var/folders/<...>/T`)
+     produces a Unix-domain socket path that exceeds the 103-byte
+     `sun_path` limit when appended with
+     `.bates/postgresql/.s.PGSQL.<port>`. The test moved its temp
+     root under `/tmp` to stay under the limit.
+  2. `:exec.run_link/2` cd's into the application root before
+     spawning, so any asdf shim lookup happens from the temp root.
+     With no `.tool-versions` there, the `postgres` shim refused to
+     run. The test resolves `postgres` and `initdb` to absolute
+     paths via `asdf which` from the test's CWD before spawning.
+  Documented both in the test's source comments so the next
+  reader doesn't relearn them.
+- Phase 5 also pre-runs `initdb` in `setup`. The compile-time
+  `:bates, :readiness_timeout` is 2 s in the test env, which isn't
+  enough for postgres' first-boot `initdb`. Pre-running it both
+  keeps the test fast and exercises the addon's "skip when
+  `PG_VERSION` exists" branch.
+- Phase 6 dropped an early "v1 does not provide a way to override
+  the addon's command" footnote because no such language existed in
+  the spec to begin with. The dedicated `postgresql` subsection
+  covers all the items called out in the plan plus a note on
+  version handling (asdf / system).
+- Reverted unrelated `mix format` adjustments to twelve unrelated
+  files (caddy, web controllers, dashboard tests, etc.) before
+  committing each phase. They're noise relative to the plan's
+  scope and would have inflated the PR diff.
+
+## Execution Stats
+
+| Metric | Value |
+|--------|-------|
+| Duration | ~18m |
+| Commits | 6 |
+| Files changed | 13 |
+| Tests added | 12 (11 unit + 1 integration) |
+| PR | #21 |
