@@ -102,5 +102,44 @@ defmodule Bates.MiddlewareTest do
 
       assert Middleware.apply_pipeline(initial, [], %{}) == initial
     end
+
+    defmodule ExportWriterA do
+      @behaviour Bates.Middleware
+      @impl true
+      def apply(invocation, _context) do
+        %{
+          invocation
+          | exports: Map.put(invocation.exports, "FROM_A", "alpha")
+        }
+      end
+    end
+
+    defmodule ExportWriterB do
+      @behaviour Bates.Middleware
+      @impl true
+      def apply(invocation, _context) do
+        %{
+          invocation
+          | exports: Map.put(invocation.exports, "FROM_B", "beta")
+        }
+      end
+    end
+
+    test "preserves exports written by middleware" do
+      initial = %ProcessInvocation{command: "true"}
+
+      result = Middleware.apply_pipeline(initial, [ExportWriterA], %{})
+
+      assert result.exports == %{"FROM_A" => "alpha"}
+    end
+
+    test "merges exports across multiple middleware" do
+      initial = %ProcessInvocation{command: "true"}
+
+      result =
+        Middleware.apply_pipeline(initial, [ExportWriterA, ExportWriterB], %{})
+
+      assert result.exports == %{"FROM_A" => "alpha", "FROM_B" => "beta"}
+    end
   end
 end

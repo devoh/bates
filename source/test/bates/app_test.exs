@@ -488,6 +488,241 @@ defmodule Bates.AppTest do
     end
   end
 
+  describe "environment exports" do
+    alias Bates.TestSupport.{
+      EnvironmentOverride,
+      EnvironmentRecorder,
+      ExportProducer
+    }
+
+    setup do
+      Phoenix.PubSub.subscribe(Bates.PubSub, "service:testapp:producer")
+      Phoenix.PubSub.subscribe(Bates.PubSub, "service:testapp:middle")
+      Phoenix.PubSub.subscribe(Bates.PubSub, "service:testapp:consumer")
+
+      Bates.Middleware.Registry.register("export_producer", ExportProducer)
+
+      Bates.Middleware.Registry.register(
+        "environment_recorder",
+        EnvironmentRecorder
+      )
+
+      Bates.Middleware.Registry.register(
+        "environment_override",
+        EnvironmentOverride
+      )
+
+      on_exit(fn ->
+        Bates.Middleware.Registry.unregister("export_producer")
+        Bates.Middleware.Registry.unregister("environment_recorder")
+        Bates.Middleware.Registry.unregister("environment_override")
+        Application.delete_env(:bates, :export_producer_exports)
+        Application.delete_env(:bates, :environment_recorder)
+        Application.delete_env(:bates, :environment_override)
+      end)
+
+      :ok
+    end
+
+    # Producers must boot a TCP listener so the readiness check can fire
+    # `start_eligible/1` for downstream consumers. `test_server.ex` boots
+    # on `$PORT`; the `port` middleware sets that env var.
+    defp producer(name, opts \\ []) do
+      depends_on = Keyword.get(opts, :depends_on, [])
+
+      command =
+        Keyword.get(opts, :command, "elixir test/support/test_server.ex")
+
+      %Service{
+        name: name,
+        command: command,
+        port: nil,
+        hostname: "#{name}.testapp.test",
+        middleware: ["port", "export_producer"],
+        depends_on: depends_on
+      }
+    end
+
+    defp consumer(name, opts) do
+      depends_on = Keyword.fetch!(opts, :depends_on)
+
+      middleware =
+        Keyword.get(opts, :middleware, ["port", "environment_recorder"])
+
+      %Service{
+        name: name,
+        command: "elixir test/support/test_server.ex",
+        port: nil,
+        hostname: "#{name}.testapp.test",
+        middleware: middleware,
+        depends_on: depends_on
+      }
+    end
+
+    defp service_state(app_name, service_name) do
+      pid =
+        GenServer.whereis({:via, Registry, {Bates.ProcessRegistry, app_name}})
+
+      :sys.get_state(pid).services |> Map.fetch!(service_name)
+    end
+
+    defp recorded_env(service_name) do
+      Application.get_env(:bates, :environment_recorder, %{})
+      |> Map.get(service_name, %{})
+    end
+
+    test "consumer's seeded environment includes the direct dep's exports" do
+      Application.put_env(:bates, :export_producer_exports, %{
+        "producer" => %{"DATABASE_URL" => "postgres://localhost/db"}
+      })
+
+      config =
+        {"testapp", ".",
+         [
+           producer("producer"),
+           consumer("consumer", depends_on: ["producer"])
+         ]}
+
+      start_supervised!({App, config})
+      :ok = App.up("testapp")
+
+      assert_eventually(fn -> App.status("testapp") == "up" end)
+
+      assert recorded_env("consumer")["DATABASE_URL"] ==
+               "postgres://localhost/db"
+    end
+
+    test "transitive exports reach the deepest consumer" do
+      Application.put_env(:bates, :export_producer_exports, %{
+        "producer" => %{"FROM_PRODUCER" => "p"},
+        "middle" => %{"FROM_MIDDLE" => "m"}
+      })
+
+      config =
+        {"testapp", ".",
+         [
+           producer("producer"),
+           producer("middle", depends_on: ["producer"]),
+           consumer("consumer", depends_on: ["middle"])
+         ]}
+
+      start_supervised!({App, config})
+      :ok = App.up("testapp")
+
+      assert_eventually(fn -> App.status("testapp") == "up" end)
+
+      env = recorded_env("consumer")
+      assert env["FROM_PRODUCER"] == "p"
+      assert env["FROM_MIDDLE"] == "m"
+    end
+
+    test "direct dep overrides transitive dep on same key" do
+      Application.put_env(:bates, :export_producer_exports, %{
+        "producer" => %{"SHARED" => "from-producer"},
+        "middle" => %{"SHARED" => "from-middle"}
+      })
+
+      config =
+        {"testapp", ".",
+         [
+           producer("producer"),
+           producer("middle", depends_on: ["producer"]),
+           consumer("consumer", depends_on: ["middle"])
+         ]}
+
+      start_supervised!({App, config})
+      :ok = App.up("testapp")
+
+      assert_eventually(fn -> App.status("testapp") == "up" end)
+
+      assert recorded_env("consumer")["SHARED"] == "from-middle"
+    end
+
+    test "consumer middleware overrides the seeded value" do
+      Application.put_env(:bates, :export_producer_exports, %{
+        "producer" => %{"SHARED" => "from-producer"}
+      })
+
+      Application.put_env(:bates, :environment_override, %{
+        "consumer" => %{"SHARED" => "from-consumer"}
+      })
+
+      config =
+        {"testapp", ".",
+         [
+           producer("producer"),
+           consumer(
+             "consumer",
+             depends_on: ["producer"],
+             middleware: [
+               "port",
+               "environment_override",
+               "environment_recorder"
+             ]
+           )
+         ]}
+
+      start_supervised!({App, config})
+      :ok = App.up("testapp")
+
+      assert_eventually(fn -> App.status("testapp") == "up" end)
+
+      assert recorded_env("consumer")["SHARED"] == "from-consumer"
+    end
+
+    test "exports persist on the producer state while running" do
+      Application.put_env(:bates, :export_producer_exports, %{
+        "producer" => %{"DATABASE_URL" => "postgres://localhost/db"}
+      })
+
+      config = {"testapp", ".", [producer("producer")]}
+
+      start_supervised!({App, config})
+      :ok = App.up("testapp")
+
+      assert_eventually(fn -> App.status("testapp") == "up" end)
+
+      assert service_state("testapp", "producer").exports == %{
+               "DATABASE_URL" => "postgres://localhost/db"
+             }
+    end
+
+    test "exports clear after down" do
+      Application.put_env(:bates, :export_producer_exports, %{
+        "producer" => %{"DATABASE_URL" => "postgres://localhost/db"}
+      })
+
+      config = {"testapp", ".", [producer("producer")]}
+
+      start_supervised!({App, config})
+      :ok = App.up("testapp")
+
+      assert_eventually(fn -> App.status("testapp") == "up" end)
+      assert service_state("testapp", "producer").exports != %{}
+
+      :ok = App.down("testapp")
+
+      assert service_state("testapp", "producer").exports == %{}
+    end
+
+    test "exports clear after a crash" do
+      Application.put_env(:bates, :export_producer_exports, %{
+        "producer" => %{"DATABASE_URL" => "postgres://localhost/db"}
+      })
+
+      config =
+        {"testapp", ".",
+         [producer("producer", command: "exit 1")]}
+
+      start_supervised!({App, config})
+      :ok = App.up("testapp")
+
+      assert_receive {:status, "crashed", _details}, 5_000
+
+      assert service_state("testapp", "producer").exports == %{}
+    end
+  end
+
   defp assert_eventually(fun, attempts \\ 50) do
     Bates.TestHelpers.assert_eventually(fun, attempts)
   end
