@@ -549,4 +549,4 @@ None identified.
 | Commits | 6 |
 | Files changed | 13 |
 | Tests added | 12 (11 unit + 1 integration) |
-| PR | #21 |
+| PR | #26 |
