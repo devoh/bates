@@ -1,5 +1,5 @@
 defmodule Bates.Config do
-  alias Bates.{Addon, Middleware, Service}
+  alias Bates.{Addons, Middleware, Service}
 
   @path "config.toml"
 
@@ -116,7 +116,7 @@ defmodule Bates.Config do
 
   defp build_addon_services(app_name, addon_names, app_middleware) do
     Enum.reduce_while(addon_names, {:ok, []}, fn name, {:ok, acc} ->
-      case Addon.Registry.lookup(name) do
+      case Addons.Registry.lookup(name) do
         {:ok, definition} ->
           service = build_addon_service(name, definition, app_middleware)
           {:cont, {:ok, acc ++ [service]}}

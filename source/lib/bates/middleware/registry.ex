@@ -8,7 +8,7 @@ defmodule Bates.Middleware.Registry do
   def lookup(name) when is_binary(name) do
     case Map.fetch(all(), name) do
       {:ok, module} -> {:ok, module}
-      :error -> Bates.Addon.Registry.lookup_module(name)
+      :error -> Bates.Addons.Registry.lookup_module(name)
     end
   end
 

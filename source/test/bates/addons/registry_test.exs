@@ -1,7 +1,7 @@
-defmodule Bates.Addon.RegistryTest do
+defmodule Bates.Addons.RegistryTest do
   use ExUnit.Case, async: true
 
-  alias Bates.Addon.Registry
+  alias Bates.Addons.Registry
 
   defmodule StubAddon do
     @behaviour Bates.Addon

@@ -230,8 +230,8 @@ defmodule Bates.ConfigTest do
     end
 
     setup do
-      Bates.Addon.Registry.register("sidekick", StubSidekickAddon)
-      on_exit(fn -> Bates.Addon.Registry.unregister("sidekick") end)
+      Bates.Addons.Registry.register("sidekick", StubSidekickAddon)
+      on_exit(fn -> Bates.Addons.Registry.unregister("sidekick") end)
       :ok
     end
 
@@ -269,8 +269,8 @@ defmodule Bates.ConfigTest do
     end
 
     test "does not add an implicit edge between sibling addons" do
-      Bates.Addon.Registry.register("companion", StubCompanionAddon)
-      on_exit(fn -> Bates.Addon.Registry.unregister("companion") end)
+      Bates.Addons.Registry.register("companion", StubCompanionAddon)
+      on_exit(fn -> Bates.Addons.Registry.unregister("companion") end)
 
       toml = """
       [myapp]
@@ -340,8 +340,8 @@ defmodule Bates.ConfigTest do
     end
 
     test "preserves an explicit middleware list from the addon definition" do
-      Bates.Addon.Registry.register("custom", StubCustomAddon)
-      on_exit(fn -> Bates.Addon.Registry.unregister("custom") end)
+      Bates.Addons.Registry.register("custom", StubCustomAddon)
+      on_exit(fn -> Bates.Addons.Registry.unregister("custom") end)
 
       toml = """
       [myapp]

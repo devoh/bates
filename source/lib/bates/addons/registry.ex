@@ -1,4 +1,4 @@
-defmodule Bates.Addon.Registry do
+defmodule Bates.Addons.Registry do
   @builtins %{}
 
   def lookup(name) when is_binary(name) do
