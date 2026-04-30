@@ -1,5 +1,12 @@
 # Plan: Postgresql Addon
 
+### Revision Log
+
+| Date | What Changed |
+|------|--------------|
+| 2026-04-30 | Plan created from accepted proposal `2026-04-30-postgresql-addon.md`. |
+| 2026-04-30 | Audit clarifications: Phase 2 clause ordering, Phase 3 gate-logic note, Phase 6 spec enumeration. |
+
 ## Goal
 
 Ship the `postgresql` addon — a per-app Postgres instance that
@@ -115,8 +122,12 @@ of hostname.
     ```elixir
     defp assign_port(%Service{port: :auto}), do: Bates.PortNumber.next()
     ```
-  - Place it before the integer clause for symmetry, or after — any
-    order works since `:auto` and `is_integer` are disjoint.
+  - **Clause order (matters):** insert the `:auto` clause AFTER the
+    `is_integer(port)` clause and BEFORE the hostname clause, so
+    the final order is: (1) integer, (2) `:auto`, (3) hostname,
+    (4) fallback. The `:auto` and `is_integer` clauses are
+    technically disjoint, but keeping integer first preserves the
+    existing reading order and avoids any future surprise.
 - **Edit:** `source/test/bates/app_test.exs`
   - Add a test asserting `port: :auto` triggers allocation on a
     hostname-less service.
@@ -160,6 +171,14 @@ middleware list contains `"port"`, the resulting `%Service{}` has
       }
     end
     ```
+  - **Gate-logic note:** the presence of `"port"` in the addon's
+    middleware list is the signal to set `port: :auto`. An addon
+    that lists `"port"` is by construction declaring it wants the
+    `Bates.Middleware.Port` to populate `$PORT` for its command
+    line, which only makes sense if a port has been allocated.
+    Future work (not in this plan) may introduce explicit
+    `port: <integer>` overrides via the TOML table form for
+    addons; for now `:auto` is the only port mode for addons.
 - **Edit:** `source/test/bates/config_test.exs`
   - Extend the `describe "addons"` block (the existing fixtures use
     `StubSidekickAddon`) with a stub addon whose definition
@@ -286,6 +305,13 @@ without postgres on `$PATH` aren't blocked.
 Update `specs/process-management.md` to cite `postgresql` as a real
 addon, document the new behaviors, and reflect the namespace rename.
 
+### Spec scope
+
+A `grep -rl -E "Bates\.Addon|addons|postgresql" specs/` at plan time
+returned only `specs/process-management.md`. Re-run the grep at
+execution time to confirm no other spec has picked up addon
+references; if any have, update them too.
+
 ### Files
 
 - **Edit:** `specs/process-management.md`
@@ -401,3 +427,71 @@ discovered during implementation.
 - `specs/process-management.md` lines 60, 279, 314, 321, 328, 339,
   341, 353, 363, 364, 377, 396, 404, 416 currently mention addons
   or `postgresql`. Phase 6 updates these.
+
+---
+
+## Readiness Audit
+
+### Audit Log
+
+| Timestamp | Verdict | Summary |
+|-----------|---------|---------|
+| 2026-04-30 | READY FOR AUTONOMOUS EXECUTION | All prerequisite code verified present. POC gaps for `postgres -k` and `Bates.Middleware.Port` resolved by inline checks. Plan clarifications (clause ordering, gate logic, spec scope) applied. |
+
+### Verdict: READY FOR AUTONOMOUS EXECUTION
+
+All prerequisites exist; remaining gaps are mechanical and were
+resolved by clarifying the plan text. `/execute-plan` can proceed.
+
+### Input Data
+
+| Input | Status | Notes |
+|-------|--------|-------|
+| Stub middleware patterns | Ready | `source/test/support/stub_middleware.ex` has `EnvironmentRecorder` and `ExportProducer`; reusable for postgres tests. |
+| Addon config fixtures | Ready | Multiple addon TOML fixtures exist; pattern established. |
+| `postgres` / `initdb` on PATH | Ready | Available via asdf shims on the dev machine; integration test can assume `postgres`/`initdb` resolvable. |
+| Integration tag exclusion | Plan covers | Phase 5 adds `ExUnit.start(exclude: [:integration])` to `test_helper.exs`. |
+
+### Dependencies
+
+| Dependency | Status | Notes |
+|------------|--------|-------|
+| `Bates.Addon` behaviour | Installed | `source/lib/bates/addon.ex`. |
+| `Bates.Addon.Registry` | Installed | `source/lib/bates/addon/registry.ex` (renamed in Phase 1). |
+| `Bates.Middleware.Registry` fall-through to addon registry | Installed | Verified at `source/lib/bates/middleware/registry.ex:11`. |
+| `Bates.Service` struct | Installed | `port`, `hostname`, `middleware`, `depends_on` present at `source/lib/bates/service.ex`. |
+| `Bates.App.assign_port/1` | Installed | `source/lib/bates/app.ex:511–516`. Phase 2 adds the `:auto` clause. |
+| `Bates.PortNumber.next/0` | Installed | `source/lib/bates/port_number.ex`. |
+| `Bates.ProcessInvocation` | Installed | `prologue`, `environment`, `exports`, `command` fields; `compile/1` joins with `;` and prepends `exec`. |
+| `Bates.Config` addon expansion | Installed | `expand_addons/4`, `build_addon_service/3` at `source/lib/bates/config.ex`. Phase 3 updates `build_addon_service/3`. |
+| `Bates.App.seed_environment/2` | Installed | `source/lib/bates/app.ex:461–478`. Walks dependency closure and merges exports. |
+| `mix.exs` deps | Ready | `erlexec`, `toml`, etc. present; no new deps needed. |
+
+### Open Questions
+
+| # | Question | Blocking? | Notes |
+|---|----------|-----------|-------|
+| 1 | Clause ordering for `:auto` in `assign_port/1` | No | Resolved in Phase 2 text: insert AFTER the integer clause, BEFORE the hostname clause. |
+| 2 | Phase 3 gate logic (`"port" in definition.middleware`) | No | Resolved in Phase 3 text: an addon that lists `"port"` is by construction declaring it wants `$PORT` populated, which only makes sense with a port allocated. Future TOML overrides are out of scope. |
+| 3 | Does `postgres -k DIR` work on the dev machine? | No | Verified by inline POC: `postgres --help` reports `-k DIRECTORY  Unix-domain socket location`. |
+| 4 | Does `Bates.Middleware.Port` set `PORT` (uppercase)? | No | Verified by reading `source/lib/bates/middleware/port.ex:9` — sets `"PORT"`. Matches `-p $PORT` in addon command. |
+| 5 | Does `initdb -A trust` work on the dev machine? | No | Verified by inline POC: `initdb --help` reports `-A, --auth=METHOD`. |
+| 6 | Does `:gen_tcp.connect/4` poll work against postgres' staged ready state? | No | Existing `Bates.App.check_ready/2` is the standard readiness path; integration test in Phase 5 will catch any flap. |
+
+### POC Gaps
+
+| # | Assumption | Status | Effort |
+|---|------------|--------|--------|
+| 1 | `postgres -k DIR` accepts socket directory | Confirmed inline (`postgres --help`) | quick |
+| 2 | `initdb -A trust` is the right auth flag | Confirmed inline (`initdb --help`) | quick |
+| 3 | `Bates.Middleware.Port` sets `PORT` uppercase | Confirmed inline (`source/lib/bates/middleware/port.ex:9`) | quick |
+| 4 | `:gen_tcp.connect/4` doesn't flap during postgres startup | Deferred to Phase 5 integration test | medium |
+| 5 | `seed_environment/2` propagates addon exports identically to regular service exports | Deferred to Phase 5 integration test | medium |
+
+### Pre-Work
+
+None. All blocking items resolved during the audit.
+
+### Blockers
+
+None identified.
