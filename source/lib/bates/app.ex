@@ -63,6 +63,7 @@ defmodule Bates.App do
            ready: false,
            started_at: nil,
            exit_status: nil,
+           exports: %{},
            log_buffer: :queue.new(),
            log_count: 0
          }}

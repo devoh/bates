@@ -1,10 +1,11 @@
 defmodule Bates.ProcessInvocation do
   @enforce_keys [:command]
-  defstruct prologue: [], environment: %{}, command: nil
+  defstruct prologue: [], environment: %{}, exports: %{}, command: nil
 
   @type t :: %__MODULE__{
           prologue: [String.t()],
           environment: %{String.t() => String.t()},
+          exports: %{String.t() => String.t()},
           command: String.t()
         }
 
