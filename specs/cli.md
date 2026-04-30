@@ -72,11 +72,52 @@ running.
 
 Stops then starts an application. Requires the server to be running.
 
+### `bates env <name>`
+
+Prints shell-eval'able `export` lines for the union of exports
+published by every service in the application. In v1, this is
+effectively the addon exports (e.g., `PGHOST`, `PGPORT` from the
+`postgresql` addon). Requires the server to be running and the
+application to be `up`; exports do not exist until services start.
+
+```
+$ bates env myapp
+export PGHOST='127.0.0.1'
+export PGPORT='52345'
+```
+
+Output uses POSIX `export KEY='value'` syntax with single-quoted
+values; embedded single quotes are escaped (`'\''`). Compatible with
+bash and zsh. No alternate shell flavors are emitted in v1.
+
+Intended for use in a project's `.envrc` so a console started in the
+application directory inherits the same connection details its
+services see:
+
+```bash
+# .envrc
+eval "$(bates env myapp)"
+```
+
+If Bates is not running, the application does not exist, or the
+application is not `up`, the command exits non-zero with a message on
+stderr and emits no output on stdout. Callers that want resilience in
+`.envrc` (e.g., before Bates has been started for the day) can wrap
+the call:
+
+```bash
+eval "$(bates env myapp 2>/dev/null || true)"
+```
+
+`direnv` caches `.envrc` evaluation; running `direnv reload` picks up
+exports that changed since the shell loaded the file (for example,
+after a stop/start cycle assigned a fresh `PGPORT`).
+
 ## Server Communication
 
-Control commands (`status`, `up`, `down`, `restart`) communicate with
-the running server via the JSON API on `bates.test`. If the server
-is not running, they exit with a clear error message:
+Control commands (`status`, `up`, `down`, `restart`, `env`)
+communicate with the running server via the JSON API on `bates.test`.
+If the server is not running, they exit with a clear error message:
 
 ```
 Bates is not running. Start it with: bates start

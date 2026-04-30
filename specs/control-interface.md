@@ -137,6 +137,30 @@ POST bates.test/processes/<name>/restart
 → 422  {"name": "myapp", "error": "..."}
 ```
 
+**Get application environment exports:**
+
+```
+GET bates.test/processes/<name>/env
+
+→ 200
+{
+  "name": "myapp",
+  "exports": {
+    "PGHOST": "127.0.0.1",
+    "PGPORT": "52345"
+  }
+}
+→ 422  {"name": "myapp", "error": "application is not up"}
+→ 404  {"error": "unknown application: myapp"}
+```
+
+Returns the union of exports published by every service in the
+application, computed from each service's settled process invocation.
+Only available when the application is `up`; exports do not exist
+until services have started and their middleware has run. If two
+services export the same key, last-writer-wins by service start
+order.
+
 **Get application logs:**
 
 ```
