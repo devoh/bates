@@ -104,6 +104,29 @@ defmodule Bates.AppTest do
     assert App.service_status("testapp", "worker") == "up"
   end
 
+  test "service with `port: :auto` and no hostname is assigned a port" do
+    config =
+      {"testapp", ".",
+       [
+         %Service{
+           name: "worker",
+           command: "elixir test/support/test_server.ex",
+           port: :auto,
+           hostname: nil,
+           middleware: ["port"]
+         }
+       ]}
+
+    start_supervised!({App, config})
+    :ok = App.up("testapp")
+
+    assert_eventually(fn -> App.status("testapp") == "up" end)
+
+    [service] = App.services("testapp")
+    assert is_integer(service.port)
+    assert service.port > 0
+  end
+
   test "services/1 returns service list with nil port when stopped" do
     config = single_service_config()
     start_supervised!({App, config})

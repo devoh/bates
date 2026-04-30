@@ -510,6 +510,8 @@ defmodule Bates.App do
 
   defp assign_port(%Service{port: port}) when is_integer(port), do: port
 
+  defp assign_port(%Service{port: :auto}), do: Bates.PortNumber.next()
+
   defp assign_port(%Service{hostname: hostname}) when not is_nil(hostname),
     do: Bates.PortNumber.next()
 
