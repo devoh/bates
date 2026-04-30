@@ -437,7 +437,8 @@ defmodule Bates.App do
     validate_routable_middleware!(config)
 
     modules = Enum.map(config.middleware, &Middleware.Registry.lookup!/1)
-    initial = %ProcessInvocation{command: config.command}
+    seed = seed_environment(config, state)
+    initial = %ProcessInvocation{command: config.command, environment: seed}
 
     context = %{
       assigned_port: assigned_port,
@@ -447,6 +448,25 @@ defmodule Bates.App do
     }
 
     Middleware.apply_pipeline(initial, modules, context)
+  end
+
+  defp seed_environment(%Service{name: name}, state) do
+    graph = build_dependency_graph(state.services)
+
+    try do
+      closure = MapSet.new(:digraph_utils.reachable([name], graph) -- [name])
+
+      graph
+      |> :digraph_utils.topsort()
+      |> Enum.filter(&MapSet.member?(closure, &1))
+      |> Enum.reverse()
+      |> Enum.reduce(%{}, fn dependency_name, acc ->
+        dependency_state = Map.fetch!(state.services, dependency_name)
+        Map.merge(acc, dependency_state.exports)
+      end)
+    after
+      :digraph.delete(graph)
+    end
   end
 
   defp validate_routable_middleware!(%Service{hostname: nil}), do: :ok
