@@ -5,6 +5,7 @@
 **Author:** Tyler + Claude
 **Origin:** https://github.com/tylerhunt/bates/issues/20
 **Synced:** 2026-04-30 (issue body, last updated 2026-04-29; no comments)
+**Refined:** 2026-04-30 (all 11 open questions resolved)
 
 ## Summary
 
@@ -57,10 +58,65 @@ Settled directly in the issue body:
   connections only after it is fully ready, so the existing
   `:gen_tcp.connect/4` poll in `Bates.App.check_ready/2` doesn't
   need any changes — *provided the service actually gets a port
-  assigned* (see Open Question 1 below).
+  assigned* (see "Port allocation" below).
 - **Test cases.** First start runs `initdb`; second start reuses
   the existing data directory; expanded service publishes `PGPORT`
   to dependents; clean stop on `down` (no orphaned daemons).
+
+Settled during refinement (2026-04-30):
+
+- **Port allocation.** `Service.port` becomes a tri-state
+  `:auto | integer | nil`. `Bates.App.assign_port/1` gains a clause
+  for `:auto` that allocates the next available port. The postgres
+  addon's middleware list is `["port", "postgresql"]` so
+  `Bates.Middleware.Port` populates `$PORT` for the command line.
+  This aligns the code with the spec's documented `port = "auto"`
+  TOML behavior.
+- **Module location and namespace.** Addons live in their own
+  namespace: `Bates.Addons.*`. This proposal renames
+  `Bates.Addon.Registry` to `Bates.Addons.Registry` (moving
+  `source/lib/bates/addon/registry.ex` to
+  `source/lib/bates/addons/registry.ex`) and adds
+  `Bates.Addons.Postgresql` at
+  `source/lib/bates/addons/postgresql.ex`. The `Bates.Addon`
+  behaviour stays at `source/lib/bates/addon.ex` (singular: there
+  is one behaviour definition, many addons).
+- **Test strategy.** Unit tests assert the resulting
+  `ProcessInvocation` (prologue, environment, exports) and run
+  always. An integration test tagged `@tag :integration` boots
+  the addon under a real config, asserts readiness reaches `up`,
+  connects via libpq, and asserts a dependent service sees
+  `PGHOST`/`PGPORT`. Excluded from `mix test` by default; opt in
+  with `mix test --include integration`.
+- **Unix socket directory.** Scoped under `PGDATA`. The command
+  becomes `postgres -D $PGDATA -p $PORT -k $PGDATA`. Avoids `/tmp`
+  collisions when multiple Bates apps run postgres; clients that
+  prefer sockets can connect via the directory path.
+- **Default database.** None. The addon brings up the cluster;
+  apps create their own databases (`mix ecto.create`, `db:create`,
+  etc.).
+- **Exported environment variables.** Minimal: `PGHOST=127.0.0.1`
+  and `PGPORT=<assigned>`. Clients that want a `DATABASE_URL` can
+  build one from these; the addon stays narrow.
+- **Cleanup on app removal.** Document only — `.bates/<addon>/`
+  state persists until manually removed. No CLI command.
+- **Postgres version pinning.** Deferred. The addon uses whatever
+  `postgres`/`initdb` are on `$PATH`. Users who want a specific
+  version add `"asdf"` to their service's middleware list and pin
+  via `.tool-versions`.
+- **Stale `postmaster.pid` recovery.** Guarded prologue step
+  removes `postmaster.pid` only when its recorded PID is gone:
+  `kill -0 $PID 2>/dev/null || rm postmaster.pid`. Strictly safer
+  than unconditional removal; improves dev UX after crashes and
+  reboots.
+- **Cold-start latency.** Accept the ~5–7s first-boot tax (one-time
+  per `PGDATA`). Subsequent boots skip `initdb` and are ~1–2s.
+  Documented; no eager initialization.
+- **Spec updates.** Add a dedicated `postgresql` section to
+  `specs/process-management.md` (command, default middleware,
+  exported env vars, `PGDATA` location, socket directory,
+  stale-pid handling). Update namespace references throughout
+  (`Bates.Addon.Registry` to `Bates.Addons.Registry`).
 
 ---
 
@@ -82,8 +138,9 @@ Settled directly in the issue body:
   module itself.
 - `source/lib/bates/config.ex` — `expand_addons/4` builds the
   `%Bates.Service{}` from the addon definition; `build_addon_service/3`
-  hard-codes `port: nil, hostname: nil` (relevant to Open Question
-  1 below).
+  hard-codes `port: nil, hostname: nil` (this proposal updates it
+  to set `port: :auto` when the addon's middleware list includes
+  `"port"`).
 
 ### Service lifecycle
 
@@ -143,7 +200,7 @@ Settled directly in the issue body:
 ### The addon module
 
 ```elixir
-defmodule Bates.Addon.Postgresql do
+defmodule Bates.Addons.Postgresql do
   @behaviour Bates.Addon
   @behaviour Bates.Middleware
 
@@ -152,8 +209,8 @@ defmodule Bates.Addon.Postgresql do
   @impl Bates.Addon
   def definition do
     %{
-      command: "postgres -D $PGDATA -p $PORT",
-      middleware: ["postgresql"]
+      command: "postgres -D $PGDATA -p $PORT -k $PGDATA",
+      middleware: ["port", "postgresql"]
     }
   end
 
@@ -169,30 +226,40 @@ defmodule Bates.Addon.Postgresql do
             [
               "mkdir -p #{pgdata}",
               # idempotent: only initdb if cluster doesn't already exist
-              "[ -f #{pgdata}/PG_VERSION ] || initdb -A trust -D #{pgdata}"
+              "[ -f #{pgdata}/PG_VERSION ] || initdb -A trust -D #{pgdata}",
+              # remove stale postmaster.pid only if its recorded PID is gone
+              "if [ -f #{pgdata}/postmaster.pid ]; then " <>
+                "kill -0 $(head -1 #{pgdata}/postmaster.pid) 2>/dev/null || " <>
+                "rm #{pgdata}/postmaster.pid; fi"
             ],
         environment:
           invocation.environment
           |> Map.put("PGDATA", pgdata)
-          |> Map.put("PGPORT", to_string(port))
-          |> Map.put("PGHOST", "localhost"),
+          |> Map.put("PGHOST", "127.0.0.1")
+          |> Map.put("PGPORT", to_string(port)),
         exports:
           invocation.exports
-          |> Map.put("PGHOST", "localhost")
+          |> Map.put("PGHOST", "127.0.0.1")
           |> Map.put("PGPORT", to_string(port))
-          # ...PGUSER, PGDATABASE, DATABASE_URL — see Open Question 4
     }
   end
 end
 ```
 
+`Bates.Middleware.Port` runs first per the addon's middleware list
+and sets `$PORT` (used by the command line). The addon middleware
+adds `PGDATA`, `PGHOST`, and `PGPORT` to the postgres process's
+environment and publishes `PGHOST`/`PGPORT` as exports for sibling
+services.
+
 ### Registry registration
 
-`Bates.Addon.Registry.@builtins` gains one entry:
+`Bates.Addons.Registry.@builtins` (renamed from `Bates.Addon.Registry`
+as part of this work) gains one entry:
 
 ```elixir
 @builtins %{
-  "postgresql" => Bates.Addon.Postgresql
+  "postgresql" => Bates.Addons.Postgresql
 }
 ```
 
@@ -201,11 +268,12 @@ no separate `Bates.Middleware.Registry` entry is needed.
 
 ### Default middleware list
 
-The addon definition's `middleware: ["postgresql"]` means the only
-middleware that runs by default is the addon module itself. The
-user opts into asdf (and therefore version pinning via
-`.tool-versions`) by adding `middleware = ["asdf"]` at the
-application level, which prepends to the addon's list:
+The addon definition's `middleware: ["port", "postgresql"]` runs
+`Bates.Middleware.Port` (to populate `$PORT` from the assigned
+port) followed by the addon module itself. The user opts into asdf
+(and therefore version pinning via `.tool-versions`) by adding
+`middleware = ["asdf"]` at the application level, which prepends to
+the addon's list:
 
 ```toml
 [myapp]
@@ -214,17 +282,25 @@ middleware = ["asdf"]
 addons = ["postgresql"]
 ```
 
-This produces a postgres service with middleware `["asdf",
+This produces a postgres service with middleware `["asdf", "port",
 "postgresql"]`. Without the app-level declaration, the system
 `postgres` is used.
 
 ### Port assignment
 
-Postgres needs an auto-assigned port (so multiple Bates apps coexist)
-but **must not** be routed through Caddy (it's not HTTP). The
-current `assign_port/1` only auto-assigns when a service has a
-hostname. Resolving this is **Open Question 1** below — the addon
-itself can't ship until that decision is made.
+Postgres needs an auto-assigned port (so multiple Bates apps
+coexist) but **must not** be routed through Caddy (it's not HTTP).
+The current `assign_port/1` only auto-assigns when a service has a
+hostname. This proposal extends `Service.port` to a tri-state
+`:auto | integer | nil` and adds an `assign_port/1` clause that
+allocates the next available port for `:auto`. The addon definition
+sets `Service.port` (via `Config.expand_addons`/`build_addon_service`)
+to `:auto`, and the `["port", "postgresql"]` middleware list ensures
+`Bates.Middleware.Port` populates `$PORT` for the command line.
+
+This change also closes a long-standing gap between the spec's
+documented `port = "auto"` TOML behavior and the actual code, which
+ignores `port` on hostname-less services.
 
 ### TOML user experience
 
@@ -239,7 +315,7 @@ hostname = true
 ```
 
 That's the whole user-facing change. The web service's environment
-gets `PGHOST=localhost`, `PGPORT=<auto>`, etc. via the existing
+gets `PGHOST=127.0.0.1` and `PGPORT=<assigned>` via the existing
 exports-seeding path.
 
 ---
@@ -249,8 +325,8 @@ exports-seeding path.
 1. Per-application Postgres clusters with no global daemon and no
    port collisions across projects.
 2. Zero-configuration database connection for sibling services —
-   `PGHOST`, `PGPORT`, and `PGUSER`/`PGDATABASE` (TBD) are seeded
-   into every service's environment automatically via #18.
+   `PGHOST` and `PGPORT` are seeded into every service's environment
+   automatically via #18.
 3. The first end-to-end exercise of #16 + #18 + #19 together,
    which validates the trio against a real workload (instead of
    the synthetic exports tests we have today).
@@ -262,113 +338,51 @@ exports-seeding path.
 
 In:
 
-- New module `source/lib/bates/addon/postgresql.ex`.
-- One new entry in `Bates.Addon.Registry.@builtins`.
-- The port-assignment fix selected from Open Question 1
-  (whichever option lands).
-- New tests under `source/test/bates/addon/postgresql_test.exs`
-  exercising the middleware unit (prologue idempotence, env/export
-  contents).
-- Integration tests under `source/test/bates/app_test.exs` (or a
-  new file) that boot a real Postgres via `initdb` + `postgres`
-  and verify TCP readiness, log flow, and exports propagation to
-  a dependent. These will be tagged so a developer without
-  Postgres on `PATH` can skip them.
-- Spec update: cite `postgresql` as a concrete addon in
-  `specs/process-management.md`.
+- Tri-state `Service.port` (`:auto | integer | nil`) in
+  `source/lib/bates/service.ex`, with a new `Bates.App.assign_port/1`
+  clause that allocates a port for `:auto`.
+- Rename `Bates.Addon.Registry` to `Bates.Addons.Registry`: move
+  `source/lib/bates/addon/registry.ex` to
+  `source/lib/bates/addons/registry.ex` and update all references
+  (`source/lib/bates/middleware/registry.ex`, tests, specs).
+- New module `Bates.Addons.Postgresql` at
+  `source/lib/bates/addons/postgresql.ex`.
+- One new entry in `Bates.Addons.Registry.@builtins`.
+- `Config.expand_addons` / `build_addon_service` updated to
+  populate `Service.port = :auto` for addon services that need a
+  port (driven off the addon definition's middleware list
+  containing `"port"`).
+- Unit tests at `source/test/bates/addons/postgresql_test.exs`
+  asserting the middleware's effect on `ProcessInvocation`
+  (prologue idempotence, stale-pid guard, env keys, export keys,
+  socket directory flag). Always run.
+- Integration test (new file or `source/test/bates/app_test.exs`)
+  tagged `@tag :integration` that boots a real postgres via
+  `initdb` + `postgres`, verifies TCP readiness, log flow, and
+  exports propagation to a dependent. Excluded from `mix test` by
+  default; opt in with `mix test --include integration`.
+- Spec update: dedicated `postgresql` section in
+  `specs/process-management.md`; namespace updates throughout
+  (`Bates.Addon.Registry` → `Bates.Addons.Registry`).
 
 Out:
 
-- A CLI command to clean up addon data directories on app
-  removal (Open Question 5).
+- A CLI command to clean up addon data directories on app removal.
+  Documented behavior is "state persists until manually removed."
 - Explicit version override on the addon definition; users get
-  `asdf` or system Postgres (Open Question 2).
+  `asdf` or system postgres.
+- Default database creation; apps run their own
+  `mix ecto.create` / `db:create`.
+- Additional exported env vars (`PGUSER`, `PGDATABASE`,
+  `DATABASE_URL`); exports stay minimal at `PGHOST` and `PGPORT`.
 - Other addons (`redis`, etc.).
-- Multi-instance support (more than one Postgres per app).
+- Multi-instance support (more than one postgres per app).
+- Eager initialization or a `bates prepare` CLI; first-boot
+  latency is accepted.
 
 ---
 
 ## Open Questions
 
-1. **Port assignment for hostname-less addon services.** The
-   current `Bates.App.assign_port/1` only auto-assigns a port
-   when the service has a hostname. The postgres addon has no
-   hostname (it's not HTTP) but needs an auto-assigned port for
-   `-p $PORT`. Three options:
-   - **A. Set `hostname` on addon services anyway.** Cheap but
-     creates a useless Caddy route that will silently 404. Wastes
-     one port per addon for no benefit.
-   - **B. Extend the addon definition to carry a port hint.**
-     Add `port: :auto` (or similar) to the addon definition shape;
-     have `Config.expand_addons` set `Service.port` to a sentinel
-     that `assign_port/1` honors. Localized change.
-   - **C. Trigger auto-assignment from the middleware list.**
-     If `"port"` is on a service's middleware list, allocate a
-     port. Aligns with the spec's claim that "a service with a
-     `port` but no `hostname` is valid" (process-management.md
-     line 76). Wider blast radius — touches existing services'
-     port behavior — but eliminates the inconsistency.
-   - **Recommendation:** B, with the addon's middleware list
-     including `"port"` so the `Bates.Middleware.Port` runs and
-     populates `$PORT` for the command line. C is conceptually
-     cleaner but mixes concerns and risks regressing existing
-     services. A is the worst of all.
-
-2. **Unix socket directory.** Postgres opens a Unix socket at a
-   default system path (`/tmp` or `/var/run/postgresql`), which
-   collides if multiple Bates apps run Postgres concurrently.
-   Options:
-   - **A. Scope under the data dir.** `-c
-     unix_socket_directories=<root>/.bates/postgresql/sockets`.
-     Friendly to tools that prefer sockets; makes
-     `psql -h <root>/.bates/postgresql/sockets` work locally.
-   - **B. Disable sockets entirely.** `-c
-     unix_socket_directories=''`. Forces TCP-only. Simpler but
-     less convenient for ad-hoc `psql` from the project dir.
-   - **Issue author leans toward A** ("probably scope"). Confirm
-     the lean.
-
-3. **Default user, database, and auth.** `initdb -A trust` makes
-   the cluster password-less (correct for local dev). The default
-   user is the OS user. Sub-questions:
-   - Should the addon also create a database named after the
-     application (e.g., `myapp`)? Pros: zero-config consumers can
-     just `psql $DATABASE_URL`. Cons: now the addon does work
-     beyond starting the cluster, and "named after the app" is a
-     new coupling to expose to the middleware (it knows app_name
-     from context, so this is doable).
-   - **Recommendation:** Yes. Create `<app_name>` as a database
-     on first start, alongside `initdb`. The user's app needs *a*
-     database, and creating the most-likely-correct one removes
-     a step. They can ignore it and create their own if they
-     want.
-
-4. **Which environment variables to export.** At minimum `PGPORT`
-   and `PGHOST` (without `PGHOST=localhost`, libpq tries the Unix
-   socket and fails or hits the wrong cluster). Likely candidates
-   beyond that: `PGUSER` (the OS user), `PGDATABASE` (whatever
-   #3 decides), `DATABASE_URL`
-   (`postgres://<user>@localhost:<port>/<db>` — Rails-style
-   convention).
-   - **Recommendation:** Export all of them. They're cheap; users
-     can ignore the ones they don't need; Rails/Phoenix/etc.
-     pick up `DATABASE_URL` automatically.
-
-5. **Cleanup on app removal.** When an application is removed
-   from `config.toml`, its `<root>/.bates/postgresql` directory
-   stays on disk. Options:
-   - **A. Document and live with it.** Consistent with not
-     auto-managing user files. The user can `rm -rf .bates/`
-     when they're done.
-   - **B. Add a CLI command.** `bates clean <app>` or similar.
-     New scope, but rescues users from gotchas around stale
-     clusters with the wrong Postgres version.
-   - **Recommendation:** A. CLI is a separate proposal if it
-     turns out to matter.
-
-6. **Version handling, explicit override.** The issue author
-   floats whether to add an explicit `version` field to the addon
-   definition (so users can pin Postgres without `.tool-versions`).
-   - **Recommendation:** Defer. Document the asdf integration in
-     the spec; revisit if users actually ask for a non-asdf
-     pinning mechanism.
+None. All resolved during refinement on 2026-04-30; see the
+**Decided** section above.
