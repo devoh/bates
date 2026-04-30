@@ -1,6 +1,6 @@
 # Postgresql Addon - Proposal
 
-**Status:** Draft
+**Status:** Accepted
 **Date:** 2026-04-30
 **Author:** Tyler + Claude
 **Origin:** https://github.com/tylerhunt/bates/issues/20
