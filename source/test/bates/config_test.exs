@@ -193,4 +193,177 @@ defmodule Bates.ConfigTest do
                {:error, {:dependency_cycle, "myapp", ["web"]}}
     end
   end
+
+  describe "addons" do
+    defmodule StubAddonMiddleware do
+      @behaviour Bates.Middleware
+      @impl true
+      def apply(invocation, _context), do: invocation
+    end
+
+    setup do
+      Bates.Addon.Registry.register("sidekick", %{command: "bin/sidekick"})
+
+      Bates.Middleware.Registry.register(
+        "sidekick",
+        StubAddonMiddleware
+      )
+
+      on_exit(fn ->
+        Bates.Addon.Registry.unregister("sidekick")
+        Bates.Middleware.Registry.unregister("sidekick")
+      end)
+
+      :ok
+    end
+
+    test "expands a short-form addon into a service with the registry's command" do
+      [{_name, _root, services}] =
+        Config.applications("test/fixtures/addons_short_form_config.toml")
+
+      sidekick = Enum.find(services, &(&1.name == "sidekick"))
+
+      assert sidekick.command == "bin/sidekick"
+      assert sidekick.port == nil
+      assert sidekick.hostname == nil
+      assert sidekick.depends_on == []
+    end
+
+    test "short and table forms produce identical service maps" do
+      [{_, _, short_services}] =
+        Config.applications("test/fixtures/addons_short_form_config.toml")
+
+      [{_, _, table_services}] =
+        Config.applications("test/fixtures/addons_table_form_config.toml")
+
+      assert Enum.sort_by(short_services, & &1.name) ==
+               Enum.sort_by(table_services, & &1.name)
+    end
+
+    test "appends an implicit depends_on edge to every non-addon service" do
+      [{_name, _root, services}] =
+        Config.applications("test/fixtures/addons_short_form_config.toml")
+
+      service_map = Map.new(services, &{&1.name, &1})
+
+      assert "sidekick" in service_map["web"].depends_on
+      assert "sidekick" in service_map["worker"].depends_on
+    end
+
+    test "does not add an implicit edge between sibling addons" do
+      Bates.Addon.Registry.register("companion", %{command: "bin/companion"})
+      Bates.Middleware.Registry.register("companion", StubAddonMiddleware)
+      on_exit(fn -> Bates.Addon.Registry.unregister("companion") end)
+      on_exit(fn -> Bates.Middleware.Registry.unregister("companion") end)
+
+      toml = """
+      [myapp]
+      root = "/tmp/myapp"
+      addons = ["sidekick", "companion"]
+
+      [myapp.services.web]
+      command = "bin/rails server -p $PORT"
+      hostname = true
+      """
+
+      path = Path.join(System.tmp_dir!(), "addons_siblings_config.toml")
+      File.write!(path, toml)
+      on_exit(fn -> File.rm(path) end)
+
+      [{_name, _root, services}] = Config.applications(path)
+      service_map = Map.new(services, &{&1.name, &1})
+
+      assert service_map["sidekick"].depends_on == []
+      assert service_map["companion"].depends_on == []
+    end
+
+    test "preserves user-declared depends_on alongside the appended addon edge" do
+      [{_name, _root, services}] =
+        Config.applications(
+          "test/fixtures/addons_with_existing_depends_on_config.toml"
+        )
+
+      web = Enum.find(services, &(&1.name == "web"))
+
+      assert web.depends_on == ["worker", "sidekick"]
+    end
+
+    test "expands single-service shorthand combined with addons" do
+      [{_name, _root, services}] =
+        Config.applications(
+          "test/fixtures/addons_single_service_shorthand_config.toml"
+        )
+
+      service_map = Map.new(services, &{&1.name, &1})
+
+      assert Map.has_key?(service_map, "testapp")
+      assert Map.has_key?(service_map, "sidekick")
+      assert "sidekick" in service_map["testapp"].depends_on
+    end
+
+    test "treats addons = [] as a no-op" do
+      [{_name, _root, services}] =
+        Config.applications("test/fixtures/addons_empty_list_config.toml")
+
+      assert Enum.map(services, & &1.name) |> Enum.sort() == ["web", "worker"]
+
+      Enum.each(services, fn service ->
+        assert service.depends_on == []
+      end)
+    end
+
+    test "concatenates app-level middleware with the addon definition's middleware" do
+      [{_name, _root, services}] =
+        Config.applications(
+          "test/fixtures/addons_with_app_middleware_config.toml"
+        )
+
+      sidekick = Enum.find(services, &(&1.name == "sidekick"))
+
+      assert sidekick.middleware == ["asdf", "sidekick"]
+    end
+
+    test "preserves an explicit middleware list from the addon definition" do
+      Bates.Addon.Registry.register("custom", %{
+        command: "bin/custom",
+        middleware: ["asdf", "sidekick"]
+      })
+
+      on_exit(fn -> Bates.Addon.Registry.unregister("custom") end)
+
+      toml = """
+      [myapp]
+      root = "/tmp/myapp"
+      addons = ["custom"]
+
+      [myapp.services.web]
+      command = "bin/rails server -p $PORT"
+      hostname = true
+      """
+
+      path = Path.join(System.tmp_dir!(), "addons_explicit_middleware.toml")
+      File.write!(path, toml)
+      on_exit(fn -> File.rm(path) end)
+
+      [{_name, _root, services}] = Config.applications(path)
+      custom = Enum.find(services, &(&1.name == "custom"))
+
+      assert custom.middleware == ["asdf", "sidekick"]
+    end
+
+    test "returns {:error, {:unknown_addon, app, name}} for an unregistered addon" do
+      assert Config.applications("test/fixtures/addons_unknown_config.toml") ==
+               {:error, {:unknown_addon, "myapp", "nonexistent"}}
+    end
+
+    test "returns {:error, {:addon_name_collision, app, name}} when an addon collides with a service" do
+      assert Config.applications("test/fixtures/addons_collision_config.toml") ==
+               {:error, {:addon_name_collision, "myapp", "sidekick"}}
+    end
+
+    test "returns {:error, {:duplicate_addon, app, name}} for a repeated short-form name" do
+      assert Config.applications("test/fixtures/addons_duplicate_config.toml") ==
+               {:error, {:duplicate_addon, "myapp", "sidekick"}}
+    end
+  end
 end

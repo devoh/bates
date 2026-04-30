@@ -1,0 +1,8 @@
+[myapp]
+root = "/tmp/myapp"
+middleware = ["asdf"]
+addons = ["sidekick"]
+
+[myapp.services.web]
+command = "bin/rails server -p $PORT"
+hostname = true

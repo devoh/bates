@@ -1,0 +1,10 @@
+[myapp]
+root = "/tmp/myapp"
+addons = ["sidekick"]
+
+[myapp.services.web]
+command = "bin/rails server -p $PORT"
+hostname = true
+
+[myapp.services.worker]
+command = "bin/sidekiq"

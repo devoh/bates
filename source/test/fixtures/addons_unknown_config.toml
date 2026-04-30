@@ -1,0 +1,7 @@
+[myapp]
+root = "/tmp/myapp"
+addons = ["nonexistent"]
+
+[myapp.services.web]
+command = "bin/rails server -p $PORT"
+hostname = true

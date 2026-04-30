@@ -1,0 +1,4 @@
+[testapp]
+command = "bin/rails server"
+root = "."
+addons = ["sidekick"]
