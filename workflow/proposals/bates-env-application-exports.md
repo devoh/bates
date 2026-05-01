@@ -5,22 +5,25 @@
 **Author:** Tyler + Claude
 **Origin:** https://github.com/tylerhunt/bates/issues/27
 **Synced:** 2026-04-30 (no comments on issue)
+**Refined:** 2026-04-30
 
 ## Summary
 
-Add `bates env <name>` and the `GET /processes/<name>/env` control endpoint
-that backs it. The endpoint returns the union of exports published by every
-service in the application as a shell-eval'able envelope, primarily for use
-in a project's `.envrc` so a console started in the application directory
-inherits the same connection details its services see (e.g., `$PGHOST` and
-`$PGPORT` from the `postgresql` addon).
+Add `bates env <name>` and extend the existing `POST /processes/<name>/start`
+control endpoint to return the union of exports published by every service
+in the application. The endpoint blocks until exports settle (process spawn
+time, well before TCP readiness) and returns them as JSON. The CLI is a
+thin formatter that turns that JSON into shell-eval'able `export` lines,
+primarily for use in a project's `.envrc` so a console started in the
+application directory inherits the same connection details its services
+see (e.g., `$PGHOST` and `$PGPORT` from the `postgresql` addon).
 
-This proposal departs from the issue's "422 when not up" stance: the
-endpoint triggers application boot when the app is `down` and unblocks as
-soon as exports are settled — which happens at service spawn time, well
-before services finish binding. This makes direnv's first `cd`-in
-evaluation produce real values instead of nothing, removing the need for
-`direnv reload` in the common case.
+This proposal departs from the issue's "422 when not up" stance and from
+its original separate `GET /env` endpoint: the existing start endpoint is
+extended to carry exports in its response, triggering boot when the app is
+`down` and unblocking as soon as exports are settled. This makes direnv's
+first `cd`-in evaluation produce real values instead of nothing, removing
+the need for `direnv reload` in the common case.
 
 ---
 
@@ -50,8 +53,7 @@ point.
 
 The fundamentals from issue #27 stand:
 
-- A single command `bates env <name>` and a single endpoint `GET
-  bates.test/processes/<name>/env`.
+- A single command `bates env <name>`.
 - App-level union only. No service-level form (`bates env myapp:web`) in
   v1; revisit if a real use case appears.
 - Output is POSIX `export KEY='value'` lines with single-quoted values and
@@ -63,7 +65,7 @@ The fundamentals from issue #27 stand:
   for shells that evaluated before exports changed (e.g., a `restart`
   changed `$PGPORT`).
 
-The design refinement (this conversation, 2026-04-30):
+The design refinements (this conversation, 2026-04-30):
 
 - **Trigger boot on demand.** When the endpoint is hit and the app is
   `down`, it triggers `App.up/1` the same way the loading page does, then
@@ -72,22 +74,61 @@ The design refinement (this conversation, 2026-04-30):
   per-service state inside the `{:ok, pid, _}` branch of `:exec.run_link`
   in `start_service/3` — i.e., at the moment of process spawn, before TCP
   readiness polling. The endpoint returns when every service in the app
-  has reached that point (or has finished its export-producing path),
-  not when every service is responding.
-- **No middleware purity contract needed.** The user originally explored a
-  pre-allocation / static-exports path that would let `bates env` return
-  without booting at all. That requires a new "compute exports without
-  invocation" contract on every middleware. The chosen path doesn't —
-  middleware runs once, normally, and emits exports as a side effect of
-  spawning the OS process. The endpoint reads what it produced.
+  has reached that point, not when every service is responding.
+- **No middleware purity contract needed.** A pre-allocation /
+  static-exports path was considered and rejected; it would require a new
+  "compute exports without invocation" contract on every middleware. The
+  chosen path runs middleware once, normally, and emits exports as a side
+  effect of spawning the OS process.
 - **#17 stays out of scope.** Stable ports across stop/start cycles
-  (#17) is a complementary improvement to direnv UX but is independent
-  of this proposal. With both in place: first `cd`-in triggers boot and
-  returns exports (this proposal); subsequent stop/start cycles preserve
-  `$PGPORT` so the shell stays valid (#17).
-- **Existing `up` UX.** When the app is already `up`, the endpoint reads
-  per-service `exports` directly from state and returns immediately. This
-  is the path described in #27 and is unchanged.
+  (#17) is a complementary improvement to direnv UX but is independent.
+  With both in place: first `cd`-in triggers boot and returns exports
+  (this proposal); subsequent stop/start cycles preserve `$PGPORT` so the
+  shell stays valid (#17).
+
+The design refinements (refinement Q&A, 2026-04-30):
+
+- **CLI scope.** Ship a minimum CLI scaffold (`lib/bates/cli.ex` + an
+  `env` subcommand module) just sufficient to dispatch `bates env <app>`.
+  Broader subcommands (`status`/`up`/`down`/`restart`) deferred to #6 or
+  a related effort, but the dispatcher introduced here is the seed they
+  extend.
+- **PubSub broadcast shape.** A new per-app `{:exports_settled, exports}`
+  message on the existing `"app:<app>"` topic, fired once the App
+  GenServer has aggregated exports from every service. Consumers
+  subscribe to one topic and get the merged map atomically.
+- **No new env endpoint.** `GET /env/:app` is dropped from the design.
+  Instead, the existing `POST /processes/<name>/start` endpoint is
+  extended to block until exports settle and return them in its
+  response. `bates env` becomes a thin formatter over that endpoint.
+- **Response body is JSON.** Successful response: `{"status": "up",
+  "exports": {...}}`. Error responses follow the same JSON shape
+  (`{"status": "...", "reason": "..."}`). API endpoints in Bates always
+  return JSON; plain-text or empty bodies are not used, even for errors.
+- **Empty exports is a success.** When the merged exports map is empty
+  (no middleware contributes any), the endpoint returns `{"status":
+  "up", "exports": {}}` and the CLI prints nothing and exits 0. This is
+  not an error condition.
+- **Subscribe → check → trigger → wait.** The controller mirrors the
+  `loading_controller.ex` pattern to avoid a subscribe/event race:
+  subscribe to `"app:<app>"`, read current state from the App GenServer,
+  return immediately if the app is `up` with exports populated (or 422
+  if `crashed`); otherwise call `App.up/1` (idempotent) and enter a
+  receive loop waiting for `{:exports_settled, exports}` with a 60s
+  timeout.
+- **Concurrency safety.** Concurrent calls to the endpoint while the app
+  is `down` are safe by design: `App.up/1` is idempotent, and PubSub
+  fan-out delivers the same `{:exports_settled, ...}` event to every
+  subscribed caller. Implementation must verify `App.up/1` idempotency
+  (already presumed by the loading page).
+- **CLI progress feedback.** When the app isn't already `up`, the CLI
+  emits a single line `bates: starting <app>...` to stderr on entry so
+  the user sees something is happening (direnv prefixes stderr with
+  `direnv:`). Skip when the app is already `up` and the response is
+  instant.
+- **Transport is HTTPS via Caddy.** The CLI talks to the existing API
+  surface through Caddy with the local CA already in the user's trust
+  store. No localhost-only HTTP backdoor or Unix socket added.
 
 ---
 
@@ -113,8 +154,9 @@ The design refinement (this conversation, 2026-04-30):
 
 **App control surface:** the existing `App.up/1`, `App.down/1`,
 `App.status/1`, `App.services/1` calls live in `source/lib/bates/app.ex`.
-A new call (or `handle_call`) is the right place to read the union of
-exports synchronously, with a way to indicate "still pending."
+A new aggregation path is needed: when the App GenServer has observed
+every service writing its exports, it computes the union and broadcasts
+`{:exports_settled, exports}` once on the `"app:<app>"` topic.
 
 **PubSub topology:** `source/lib/bates/app.ex` lines 419-429.
 
@@ -123,48 +165,50 @@ exports synchronously, with a way to indicate "still pending."
   `{:status, "up"}`, `{:status, "crashed", reason}`, `{:status, "down"}`.
 - `broadcast_app(app, msg)` broadcasts on `"app:<app>"`. Existing: same
   status messages with `derive_status/1`.
-- A new `{:exports_settled, exports}` service-level broadcast is the
-  natural fit.
+- A new `{:exports_settled, exports}` app-level broadcast is added,
+  fired once after every service has written its exports (or terminal-
+  failed during start).
 
 **Loading page (precedent for trigger-and-wait):**
 `source/lib/bates_web/controllers/loading_controller.ex` and
 `specs/control-interface.md` Loading Page section. The pattern is:
-subscribe to PubSub → trigger `App.up/1` → block in a receive loop
-waiting for the right message → respond. The new env endpoint follows
-the same skeleton, just with a different waiting target and a different
-response shape.
+subscribe to PubSub → check current state (return immediately if
+already terminal) → trigger `App.up/1` → block in a receive loop waiting
+for the right message → respond. The new endpoint behavior follows the
+same skeleton with `{:exports_settled, ...}` as the unblock target.
 
 **Existing control endpoints:**
 `source/lib/bates_web/controllers/process_controller.ex` and
 `source/lib/bates_web/router.ex`. The endpoint registry currently has
 `/status`, `/processes/:name/start`, `/processes/:name/stop`,
-`/processes/:name/restart`, `/processes/:name/logs`. `GET
-/processes/:name/env` slots in next to those, with a controller action
-that mirrors loading-page semantics.
+`/processes/:name/restart`, `/processes/:name/logs`. This proposal
+extends the `start` action's response shape and waiting semantics.
 
 **CLI entrypoint (does not exist yet):** issue #6 covers `bates`
-subcommands generally. There is no `lib/bates/cli/` module yet — `bates
-status`, `bates up`, `bates down`, `bates restart`, and `bates env` are
-all CLI commands the codebase doesn't have. This proposal scopes only
-the env command's CLI; adding the surrounding subcommand framework
-should be tackled as part of #6 or a related effort.
+subcommands generally. There is no `lib/bates/cli/` module yet. This
+proposal introduces a minimal dispatcher (`lib/bates/cli.ex`) plus the
+`env` subcommand module. The dispatcher is shaped so #6 can extend it
+with `status`/`up`/`down`/`restart` later without rework.
 
 **Spec files affected:**
 
 - `specs/cli.md` lines 75-114 already document `bates env <name>` with
   the original "must be `up`" semantics. This proposal updates that
-  section.
-- `specs/control-interface.md` lines 140-162 already document `GET
-  /processes/<name>/env` with the same original semantics. Same update.
-- `specs/process-management.md` describes the lifecycle and exports
-  mechanism; no spec change needed there beyond, possibly, naming the
-  exports-settled point in the lifecycle.
+  section to reflect the new trigger-and-wait, JSON-over-`/start`
+  contract.
+- `specs/control-interface.md` lines 140-162 already document a separate
+  env endpoint with the same original semantics. Update to reflect the
+  removal of the separate endpoint and the extended `/start` response
+  shape.
+- `specs/process-management.md` is not updated. The new
+  `{:exports_settled, ...}` broadcast is an internal implementation
+  detail, not a user-facing contract.
 
 **Tests:**
 
 - `source/test/bates/app_test.exs` has the integration patterns
   (`start_supervised!`, `assert_eventually`) for app lifecycle tests; new
-  cases for the early-exports broadcast belong here.
+  cases for the exports-settled broadcast belong here.
 - `source/test/bates_web/controllers/process_controller_test.exs` has
   the patterns for control endpoint tests.
 
@@ -174,40 +218,36 @@ should be tackled as part of #6 or a related effort.
 
 ### Lifecycle event
 
-A new PubSub message on the per-service topic:
+A new PubSub message on the per-app topic `"app:<name>"`:
 
 ```elixir
 {:exports_settled, exports}
 ```
 
-Broadcast in `start_service/3` immediately after the existing
-`{:status, "starting"}` broadcast (or merged into a single
-`{:status, "starting", exports}` — see Open Questions). Carries the
-service's exports map. Fires for every successfully-spawned service
-including ports-less ones.
-
-A service is considered "settled" once it has either:
-
-- Broadcast `{:exports_settled, _}` (it spawned), or
-- Broadcast `{:status, "crashed", _}` (it failed during build/spawn).
+The App GenServer broadcasts this once after every service has either
+written its exports (successful spawn — `app.ex:321`) or failed
+terminally during start (e.g., `:crashed`). The payload is the merged
+union of all service exports. Conflict resolution if two services
+export the same key: last-writer-wins by service start order, as
+already specified in `specs/control-interface.md`.
 
 ### Endpoint
 
-`GET bates.test/processes/<name>/env` becomes:
+`POST /processes/<name>/start` is extended:
 
 | App state at request | Behavior |
 |----------------------|----------|
-| Unknown | `404 {"error": "unknown application: <name>"}` |
-| `down` | Trigger `App.up/1`, subscribe to per-service topics, block until every service is settled, then union exports and return `200`. |
+| Unknown | `404 {"status": "unknown", "reason": "unknown application: <name>"}` |
+| `down` | Trigger `App.up/1`, subscribe to `"app:<name>"`, block until `{:exports_settled, exports}`, then return `200 {"status": "up", "exports": {...}}`. |
 | `starting` (already booting) | Same as `down` — subscribe and join the wait. |
-| `partial` or `crashed` (any service in `:crashed`) | `422 {"name": ..., "error": "service <svc> failed: <reason>"}`. |
-| `up` | Read exports from per-service state and return `200` immediately (the existing #27 path). |
+| `up` | Read current exports from App state and return `200 {"status": "up", "exports": {...}}` immediately. |
+| `crashed` (any service crashed during start) | `422 {"status": "crashed", "reason": "<service> failed: <reason>"}`. |
 
-Successful response shape unchanged from #27:
+Successful response shape:
 
 ```json
 {
-  "name": "myapp",
+  "status": "up",
   "exports": {
     "PGHOST": "127.0.0.1",
     "PGPORT": "52345"
@@ -215,33 +255,59 @@ Successful response shape unchanged from #27:
 }
 ```
 
-Conflict resolution if two services export the same key:
-last-writer-wins by service start order, as already specified in
-`specs/control-interface.md`.
+Empty exports is a success: `{"status": "up", "exports": {}}`. The CLI
+prints nothing and exits 0.
 
 Timeout: bound the wait by the existing `@readiness_timeout` (60s).
 If the wait expires without all services settling, return
-`504 {"name": ..., "error": "timed out waiting for exports"}`.
+`504 {"status": "timeout", "reason": "timed out waiting for exports"}`.
+
+### Controller behavior (subscribe → check → trigger → wait)
+
+To avoid a subscribe/event race, the controller mirrors
+`loading_controller.ex`:
+
+1. Subscribe to `"app:<name>"`.
+2. Read current app state and exports from the App GenServer.
+3. If `up` with exports populated → return immediately (and unsubscribe).
+4. If `crashed` → return 422 immediately.
+5. Otherwise: call `App.up/1` (idempotent — safe even if `starting` or
+   `up`).
+6. Enter a receive loop waiting for `{:exports_settled, exports}` with a
+   60s timeout. Return `504` on timeout.
+
+Concurrent callers are safe by design: `App.up/1` idempotency means a
+second call doesn't re-spawn anything, and PubSub fan-out delivers the
+same `{:exports_settled, ...}` to every subscribed caller. Verify
+idempotency in implementation; the loading page already presumes it.
 
 ### CLI
 
-`bates env <name>` — thin wrapper around the endpoint:
+Introduce a minimal dispatcher (`lib/bates/cli.ex`) and an `env`
+subcommand module. Scope here is just enough for `bates env <name>`;
+broader subcommands deferred to #6.
 
-- Calls `GET /processes/<name>/env`.
-- On `200`: format each `KEY=value` pair as `export KEY='value'` with
-  `'\''` escaping for embedded single quotes; write to stdout.
-- On any non-2xx or transport error: write a concise message to stderr,
-  exit non-zero, emit nothing on stdout. Same failure-mode contract as
-  #27.
+`bates env <name>` behavior:
 
-### Side-effecting GET
+- Calls `POST /processes/<name>/start` over HTTPS via Caddy (system
+  trust store).
+- If the app isn't already `up`, write a single line
+  `bates: starting <name>...` to stderr on entry. (Skip when `up` —
+  response is instant.)
+- On `200`: format each `KEY=value` pair in `exports` as
+  `export KEY='value'` with `'\''` escaping for embedded single quotes;
+  write to stdout. Empty `exports` → no stdout output, exit 0.
+- On any non-2xx: write the response body's `reason` (or a concise fallback)
+  to stderr, exit non-zero, emit nothing on stdout.
+- On transport error: write a concise message to stderr, exit non-zero,
+  emit nothing on stdout.
 
-The endpoint's `GET` triggers boot when needed. This deviates from strict
-REST hygiene, but it matches the loading page's pattern (also a `GET`
-that triggers boot via DNS-driven flow), and it's exactly the contract
-the headline consumer (direnv `eval`) needs from a single command. The
-side effect is bounded and idempotent: starting an already-up or
-already-starting app is a no-op.
+### Side-effecting POST
+
+The endpoint's side effect (triggering `App.up/1` when `down`) is
+explicit in the verb (`POST`), unlike the original design which used
+`GET`. The `bates env` CLI is the headline caller and gets idempotent
+"start me and tell me my env" semantics from a single request.
 
 ---
 
@@ -256,9 +322,11 @@ already-starting app is a no-op.
    `psql` from the app dir) gets a single source of truth for
    addon-supplied connection details.
 4. The PubSub `:exports_settled` event is also useful internally:
-   future features that need to know "has this service produced its
+   future features that need to know "has this app produced its
    exports yet" (live-updating dashboard, observability) can subscribe
    without hand-rolling state inspection.
+5. A minimal CLI dispatcher exists, ready to host the `status`/`up`/
+   `down`/`restart` subcommands in #6 without throwaway scaffolding.
 
 ---
 
@@ -266,16 +334,22 @@ already-starting app is a no-op.
 
 In scope:
 
-- New `{:exports_settled, exports}` PubSub broadcast emitted from
-  `start_service/3` immediately after the existing `{:status, "starting"}`
-  broadcast (including for ports-less services that go directly to `up`).
-- New control endpoint `GET /processes/<name>/env` returning the union
-  of per-service exports, with the trigger-and-wait semantics described
-  above, including the 404 / 422 / 504 / 200 cases.
-- New CLI command `bates env <name>` per `specs/cli.md`.
+- New `{:exports_settled, exports}` PubSub broadcast on the
+  `"app:<name>"` topic, fired once by the App GenServer after every
+  service has written its exports (or terminal-failed during start).
+- Extension of `POST /processes/<name>/start` to block until exports
+  settle and return JSON `{"status": "up", "exports": {...}}` (or
+  `{"status": "crashed"|"timeout"|"unknown", "reason": "..."}` on
+  failure).
+- Subscribe → check → trigger → wait controller pattern, mirroring
+  `loading_controller.ex`.
+- Verify `App.up/1` idempotency under concurrent callers.
+- Minimal CLI dispatcher (`lib/bates/cli.ex`) plus `env` subcommand
+  module. Output formatting, exit codes, stderr-only error reporting,
+  single `bates: starting <name>...` progress line on cold-boot.
 - Spec updates to `specs/cli.md` and `specs/control-interface.md`
-  reflecting the trigger-boot, wait-for-settled semantics (replacing
-  the original 422-when-not-up text).
+  reflecting the new contract (replacing the original 422-when-not-up
+  text and the separate-env-endpoint text).
 - Tests:
   - `bates env` against an `up` application returns the union of
     exports and exits 0 with formatted output.
@@ -285,12 +359,15 @@ In scope:
   - `bates env` against an unknown application returns 404 / non-zero.
   - `bates env` against an application where a service crashes during
     boot returns 422 / non-zero with stderr-only output.
-  - `bates env` honors the readiness timeout (504).
+  - `bates env` honors the 60s timeout (504 / non-zero).
+  - Empty-exports success path: `{"status": "up", "exports": {}}` →
+    CLI prints nothing, exits 0.
   - Output formatting: embedded single quotes in export values are
     escaped correctly.
   - PubSub broadcast: a stub middleware that publishes a known export
-    triggers `{:exports_settled, %{...}}` on the service topic at the
-    right moment.
+    triggers `{:exports_settled, %{...}}` on the `"app:<name>"` topic at
+    the right moment.
+  - Concurrent callers receive the same exports without re-spawn.
 
 Out of scope:
 
@@ -298,57 +375,25 @@ Out of scope:
   separate proposal.
 - A static-export contract / dry-runnable middleware that would let
   `bates env` return without booting services at all. Not needed for
-  the direnv use case; revisit if a future feature wants pre-boot
-  export inspection.
+  the direnv use case.
 - Service-level scoping (`bates env myapp:web`). #27 already deferred
   this.
 - Push-based refresh of exports into already-evaluated shells. #27
   already deferred this; `direnv reload` is the recovery path.
 - Shell flavors beyond bash/zsh.
-- Authentication on the env endpoint. Bates's control interface is
+- Authentication on the endpoint. Bates's control interface is
   bound to localhost; consistent with existing endpoints.
+- A localhost-only HTTP backdoor or Unix domain socket transport for
+  the CLI. HTTPS via Caddy is the only transport.
+- Spec changes to `specs/process-management.md`. The new PubSub event
+  is an internal implementation detail.
+- Broader CLI subcommands (`status`, `up`, `down`, `restart`). Deferred
+  to #6, which extends the dispatcher introduced here.
 
 ---
 
 ## Open Questions
 
-1. **Broadcast shape: separate or merged?**
-   Two options for the new PubSub event:
-   - `{:exports_settled, exports}` as a distinct message broadcast right
-     after `{:status, "starting"}`.
-   - Extend the existing message: `{:status, "starting", exports}` (and
-     `{:status, "up", exports}` for ports-less services).
-
-   Distinct is cleaner semantically (status changes and export-readiness
-   are different concerns) and avoids reshaping a message that has
-   existing subscribers. Extending is one fewer broadcast on the wire.
-   Recommend distinct unless we discover a downstream consumer that
-   genuinely wants them coupled.
-
-2. **422 detail when a service crashes.**
-   What level of detail is appropriate in the response body when a
-   service crashes during boot? Just the service name and a short
-   reason (`"timed out waiting for port"`), or the recent log lines too?
-   The latter would help direnv users diagnose without a separate
-   `bates logs` call. Recommend the short reason for v1 — anything
-   richer can be a follow-up.
-
-3. **Trigger-on-GET vs explicit start.**
-   The proposal has `GET /env` trigger boot if the app is down. An
-   alternative is to require an explicit `POST /processes/<name>/start`
-   first and have `GET /env` 422 if the app is down. The CLI would
-   call both:
-   ```
-   bates env myapp  →  POST /start → poll → GET /env
-   ```
-   That's cleaner REST but pushes orchestration into every CLI client.
-   Recommend keeping trigger-on-GET to match the loading page's
-   precedent and keep the endpoint usable from a single `eval` line.
-
-4. **Empty-exports response.**
-   For an app whose services produce no exports (e.g., a single Rails
-   service with no addons), the endpoint returns `200 {"name": "myapp",
-   "exports": {}}` and the CLI emits zero `export` lines. Is that the
-   right behavior, or should we 422 / emit a comment? Recommend the
-   empty success — it's the most direnv-friendly and matches "the union
-   of exports is the empty map" literally.
+None remaining. All four of the original open questions were resolved
+during the 2026-04-30 refinement Q&A and folded into the **Decided**
+section above.
