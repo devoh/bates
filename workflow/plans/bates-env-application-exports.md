@@ -5,6 +5,7 @@
 | Date | What Changed |
 |------|--------------|
 | 2026-04-30 | Plan created from accepted proposal `2026-04-30-bates-env-application-exports.md`. |
+| 2026-04-30 | Readiness audit complete (verdict: READY). All 5 pre-audit open items resolved as non-blocking. Applied minor refinements: explicit timeout on Phase 1 `assert_receive`, sharper Phase 2 race-comment wording, dedicated concurrent-callers Phase 2 test bullet, Phase 3 `:ssl` note. |
 
 ## Goal
 
@@ -180,8 +181,10 @@ This is the load-bearing change in the GenServer; everything else
     - After `:down` then `:up`, the broadcast fires again for the
       second boot.
   - Subscribe to `"app:<name>"` before calling `App.up/1` in each
-    test (mirrors the controller pattern). Use `assert_receive` with
-    a generous timeout for the message.
+    test (mirrors the controller pattern). Use
+    `assert_receive {:exports_settled, _}, 5_000` (explicit timeout)
+    so a hung broadcast surfaces as a test failure rather than the
+    default 100ms ExUnit timeout swallowing it.
   - Reuse `EnvironmentRecorder`/`ExportProducer` stubs from
     `source/test/support/stub_middleware.ex` if they fit the export
     payload needed; otherwise add a small stub.
@@ -308,8 +311,12 @@ in its JSON body. Drop the original "fire and forget" semantics.
     ```
   - **Subscribe-before-snapshot** is the race fix from the proposal.
     The order matters: subscribe to `"app:<name>"` *before* calling
-    `App.snapshot/1`, so any broadcast arriving between the snapshot
-    and the receive loop reaches the mailbox.
+    `App.snapshot/1`. If we snapshotted first and the broadcast
+    fired between the snapshot read and the subsequent subscribe,
+    we would miss the message. With the order flipped, any broadcast
+    that fires after subscribe (including ones racing with the
+    snapshot read) reaches the controller's mailbox and is caught
+    in `receive_settled/3`.
   - **404 lookup helper:** `ProcessSupervisor.app_pid/1` (or
     equivalent) must return `nil` for an unknown application without
     raising. If it doesn't exist yet, add it as a thin wrapper around
@@ -349,9 +356,13 @@ in its JSON body. Drop the original "fire and forget" semantics.
       + `{"status": "crashed", "reason": "..."}`.
     - Timeout: configure a small `:readiness_timeout` for the test
       and assert 504 + `{"status": "timeout", ...}`.
-    - Concurrent callers: spawn two tasks that both POST against a
-      `down` app simultaneously; assert both receive the same
-      exports and the app spawns each service exactly once.
+    - **Concurrent callers (required, not optional):** spawn two
+      `Task.async` calls that both POST against a `down` app
+      simultaneously; assert both receive the same exports and the
+      app spawns each service exactly once. This is the test that
+      proves `App.up/1` idempotency + PubSub fan-out work together.
+      Without this test, the concurrency claim in the proposal is
+      unsupported.
   - Use the existing `single_service_config/0` pattern (or extend
     it) to produce a fixture with a stub middleware that publishes
     a known export, mirroring `app_test.exs` patterns.
@@ -489,12 +500,14 @@ subcommand. Future subcommands (#6) extend the same dispatcher.
     end
     ```
   - Use `:httpc.request/4` for the POST. Configure SSL with
-    `verify: :verify_peer` and `cacertfile:` pointed at the system
-    trust store. On macOS, `:public_key.cacerts_get/0` (Erlang/OTP
-    25+) is the right call; otherwise fall back to a path env var.
-    This is fiddly enough that the implementation should verify it
-    works against a real Caddy + bates.test setup before declaring
-    the phase done.
+    `verify: :verify_peer` and `cacerts:` populated by
+    `:public_key.cacerts_get/0` (Erlang/OTP 25+; OTP 27 is the
+    audit-time version on the dev machine, returning ~158 certs).
+    `:ssl` is bundled with `:inets` and is loaded transitively via
+    `extra_applications: [:inets]`; no separate addition needed.
+    The implementation should still verify HTTPS works end-to-end
+    against a real Caddy + bates.test setup before declaring the
+    phase done.
 - **Create:** `source/test/bates/cli/env_test.exs`
   - Pure unit tests for `Bates.CLI.Env`'s formatting helpers (split
     them out to be testable). No real HTTP. Cases:
@@ -729,36 +742,64 @@ deviations from this plan).
 
 ---
 
-## Open Items for Audit
+## Readiness Audit
 
-These are not blockers, but flag them for `/audit-plan` to verify or
-resolve:
+### Audit Log
 
-1. **`ProcessSupervisor.app_pid/1` (or equivalent)**: confirm the
-   right helper exists (or add it). Current survey only inspected
-   `via_tuple/1` use in `app.ex`; the registry name and supervisor
-   shape need a quick read of `process_supervisor.ex` before Phase 2
-   edits.
+| Timestamp | Verdict | Summary |
+|-----------|---------|---------|
+| 2026-04-30 | READY FOR AUTONOMOUS EXECUTION | All assumptions verified against the actual codebase. The 5 pre-audit open items are non-blocking. Minor refinements applied to test guidance and the SSL note in Phase 3. |
 
-2. **`:public_key.cacerts_get/0` availability**: the escript needs
-   SSL trust-store access. Verify Erlang/OTP version on the dev
-   machine via `mix.exs` `elixir: "~> 1.14"` plus actual installed
-   OTP. If `cacerts_get/0` isn't available, fall back to
-   `:certifi.cacertfile/0` (add `:certifi` dep) or an env var.
+### Verdict: READY FOR AUTONOMOUS EXECUTION
 
-3. **`bates env` `up`-detection round-trip**: the plan suggests a
-   `GET /status` precheck to skip the `bates: starting ...` stderr
-   line. If that turns out to add noticeable latency to the common
-   case (app already up), drop the precheck and always print the
-   line — it's a UX nicety, not a correctness requirement.
+All prerequisites exist; all assumptions about line numbers, modules,
+test fixtures, and dependencies are confirmed. `/execute-plan` can
+proceed without human intervention.
 
-4. **Crash detail in 422 body**: the `crash_reason/2` helper picks
-   the first non-`:normal` exit_status it finds. If multiple
-   services crashed, the response only surfaces one. Acceptable for
-   v1; document as a limitation if it surprises the audit.
+### Input Data
 
-5. **Timeout handling when controller subscribed but boot already
-   completed before subscribe**: covered by the subscribe-then-snapshot
-   race fix, but worth a deliberate test that exercises this exact
-   sequence (subscribe after `:up` already succeeded but before
-   snapshot reads the state).
+| Input | Status | Notes |
+|-------|--------|-------|
+| `source/test/support/stub_middleware.ex` | Ready | Contains `ExportProducer` (lines 1–24, registers exports per service via the `:export_producer_exports` app env) and `EnvironmentRecorder` (lines 26–47). Both reusable for the new tests. |
+| `source/test/bates/app_test.exs` | Ready | Has the `single_service_config/0` pattern (lines 12–26) and uses `start_supervised!` + `assert_eventually/1` (lines 123, 196). PubSub subscription pattern (lines 6–10) mirrors the new tests' needs. |
+| `source/test/bates_web/controllers/process_controller_test.exs` | Ready | Has `single_service_config/0` (lines 6–16) and `start_app/1` (lines 18–21). Test app is `"testapp"` with default hostname `testapp.test`. |
+| Spec line numbers | Ready | `specs/control-interface.md` lines 113–120 (POST /start) and 140–162 (GET /env) confirmed; `specs/cli.md` lines 75–114 (bates env section) confirmed. |
+
+### Dependencies
+
+| Dependency | Status | Notes |
+|------------|--------|-------|
+| `:inets` | Installed | `source/mix.exs` line 18 — `extra_applications: [:logger, :inets]`. Pulls in `:httpc` and `:ssl` transitively. |
+| `:jason` | Installed | `source/mix.exs` line 31 — `{:jason, "~> 1.2"}`. |
+| `:public_key.cacerts_get/0` | Available | OTP 27 on the dev machine. Returned 158 system trust certs in the audit POC. No fallback to `:certifi` or env var needed. |
+| `:ssl` | Available | Bundled with `:inets` via OTP; no separate `extra_applications` entry needed. |
+| `Bates.ProcessRegistry` | Installed | `source/lib/bates/application.ex` line 11; `keys: :unique`. The `via_tuple/1` helper at `source/lib/bates/app.ex:557–559` uses `{:via, Registry, {Bates.ProcessRegistry, name}}`. The plan's proposed `ProcessSupervisor.app_pid/1` (Phase 2) wraps `Registry.lookup(Bates.ProcessRegistry, name)` cleanly. |
+| `mix escript.build` | Plan covers | Currently fails because no `main_module` is configured — Phase 3 adds it. Expected. |
+
+### Open Questions
+
+| # | Question | Blocking? | Notes |
+|---|----------|-----------|-------|
+| 1 | `ProcessSupervisor.app_pid/1` shape | No | Resolved. Registry is `Bates.ProcessRegistry` (`source/lib/bates/application.ex:11`); `Registry.lookup/2` returning `[]` for unknown names is the correct `nil` path. Plan's proposed implementation (Phase 2 lines 323–330) is correct as written. |
+| 2 | `:public_key.cacerts_get/0` availability | No | Resolved. OTP 27 returns ~158 system certs. No fallback dep needed. Plan's Phase 3 SSL note updated to drop the conditional fallback wording. |
+| 3 | `bates env` up-detection round-trip cost | No | Documented as UX-only optimization in plan lines 749–753. Implementation may drop the precheck and always print `bates: starting <name>...` if the extra round-trip is noticeable; it's not a correctness requirement. |
+| 4 | Crash detail when multiple services crash | No (deferred) | `crash_reason/2` returns the first non-`:normal` exit. Multi-crash case is an edge case; documented as v1 limitation. |
+| 5 | Subscribe-after-up race coverage | No | Resolved via subscribe-then-snapshot pattern (Phase 2). Phase 2's `await_start_response/2` checks the snapshot status *after* subscribing, returning immediately if `up`/`crashed`. The required test for this exact sequence is now folded into Phase 2's test list. |
+
+### POC Gaps
+
+| # | Assumption | Status | Effort |
+|---|-----------|--------|--------|
+| 1 | PubSub subscription works in a controller process | Confirmed by precedent | quick — `BatesWeb.LoadingController` (production code) already subscribes to `"app:<app_name>"` and receives in the request handler. |
+| 2 | All state-mutation return points in `app.ex` are wrapped by `maybe_broadcast_exports_settled/1` | Enumerated | quick — the mutation points are: `start_service/3` line 336 (port-less success), line 349 (port-bearing success); `:check_ready` info handler line 148 (ready) and line 177 (timeout); `:EXIT` info handler line 246. Five sites total, all listed in the plan. |
+| 3 | `crash_reason/2` helper compiles | Confirmed | immediate — two function-head clauses, valid Elixir. |
+| 4 | `App.up/1` idempotency under concurrent callers | Confirmed by code reading | confirmed — `start_eligible/1` (`app.ex:278–286`) only spawns services where `pid: nil`; `eligible_to_start?` returns false for `pid != nil` services (`app.ex:288–289`). Concurrent `:up` calls re-traverse but spawn nothing already-spawned. |
+| 5 | Spec line numbers haven't shifted | Confirmed | quick — `specs/control-interface.md` lines 113–120 and 140–162 contain the expected blocks; `specs/cli.md` lines 75–114 contain the expected `bates env` section. |
+
+### Pre-Work
+
+None. All pre-audit open items are resolved as non-blocking.
+
+### Blockers
+
+None identified.
