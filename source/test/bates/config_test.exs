@@ -75,6 +75,23 @@ defmodule Bates.ConfigTest do
     assert Config.applications("nonexistent.toml") == []
   end
 
+  describe "port" do
+    test "translates `port = \"auto\"` to `Service.port: :auto`" do
+      [{_name, _root, services}] =
+        Config.applications("test/fixtures/port_auto_config.toml")
+
+      queue = Enum.find(services, &(&1.name == "queue"))
+
+      assert queue.port == :auto
+      assert queue.hostname == nil
+    end
+
+    test "returns {:error, {:invalid_port, app, service, value}} for a non-integer string" do
+      assert Config.applications("test/fixtures/invalid_port_value_config.toml") ==
+               {:error, {:invalid_port, "myapp", "queue", "garbage"}}
+    end
+  end
+
   describe "middleware" do
     test "auto-appends 'port' for routable services in single-service shorthand" do
       [{_name, _root, [service]}] =

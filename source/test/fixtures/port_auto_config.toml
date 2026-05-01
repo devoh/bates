@@ -1,0 +1,6 @@
+[myapp]
+root = "/tmp/myapp"
+
+[myapp.services.queue]
+command = "bin/queue"
+port = "auto"

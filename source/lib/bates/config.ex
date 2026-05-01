@@ -30,16 +30,18 @@ defmodule Bates.Config do
     app_middleware = Map.get(options, "middleware", [])
     addon_names = parse_addons(Map.get(options, "addons"))
 
-    services =
-      if Map.has_key?(options, "services") do
-        build_multi_services(name, options["services"], app_middleware)
-      else
-        [build_single_service(name, options, app_middleware)]
-      end
+    with {:ok, services} <- build_services(name, options, app_middleware),
+         {:ok, expanded} <-
+           expand_addons(name, services, addon_names, app_middleware) do
+      {:ok, {name, root, expanded}}
+    end
+  end
 
-    case expand_addons(name, services, addon_names, app_middleware) do
-      {:ok, expanded} -> {:ok, {name, root, expanded}}
-      {:error, _} = error -> error
+  defp build_services(name, options, app_middleware) do
+    if Map.has_key?(options, "services") do
+      build_multi_services(name, options["services"], app_middleware)
+    else
+      {:ok, [build_single_service(name, options, app_middleware)]}
     end
   end
 
@@ -63,24 +65,32 @@ defmodule Bates.Config do
   end
 
   defp build_multi_services(app_name, services_map, app_middleware) do
-    Enum.map(services_map, fn {service_name, options} ->
-      hostname = resolve_hostname(app_name, options["hostname"])
-      port = resolve_port(hostname, options["port"])
-      service_middleware = Map.get(options, "middleware", [])
+    Enum.reduce_while(services_map, {:ok, []}, fn {service_name, options},
+                                                  {:ok, acc} ->
+      case resolve_port(options["port"]) do
+        {:ok, port} ->
+          hostname = resolve_hostname(app_name, options["hostname"])
+          service_middleware = Map.get(options, "middleware", [])
 
-      middleware =
-        merge_middleware(app_middleware, service_middleware, hostname)
+          middleware =
+            merge_middleware(app_middleware, service_middleware, hostname)
 
-      depends_on = Map.get(options, "depends_on", [])
+          depends_on = Map.get(options, "depends_on", [])
 
-      %Service{
-        name: service_name,
-        command: Map.fetch!(options, "command"),
-        port: port,
-        hostname: hostname,
-        middleware: middleware,
-        depends_on: depends_on
-      }
+          service = %Service{
+            name: service_name,
+            command: Map.fetch!(options, "command"),
+            port: port,
+            hostname: hostname,
+            middleware: middleware,
+            depends_on: depends_on
+          }
+
+          {:cont, {:ok, acc ++ [service]}}
+
+        {:error, value} ->
+          {:halt, {:error, {:invalid_port, app_name, service_name, value}}}
+      end
     end)
   end
 
@@ -167,9 +177,10 @@ defmodule Bates.Config do
   defp resolve_hostname(_app_name, value) when is_binary(value),
     do: "#{value}.test"
 
-  defp resolve_port(_hostname, port) when is_integer(port), do: port
-  defp resolve_port(nil, _port), do: nil
-  defp resolve_port(_hostname, _port), do: nil
+  defp resolve_port(nil), do: {:ok, nil}
+  defp resolve_port(port) when is_integer(port), do: {:ok, port}
+  defp resolve_port("auto"), do: {:ok, :auto}
+  defp resolve_port(value), do: {:error, value}
 
   defp validate_middleware(applications) do
     Enum.reduce_while(applications, :ok, fn {_name, _root, services}, _acc ->
