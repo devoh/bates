@@ -115,9 +115,25 @@ GET bates.test/status
 ```
 POST bates.test/processes/<name>/start
 
-→ 200  {"name": "myapp", "status": "up"}
-→ 422  {"name": "myapp", "error": "..."}
+→ 200
+{
+  "name": "myapp",
+  "status": "up",
+  "exports": {
+    "PGHOST": "127.0.0.1",
+    "PGPORT": "52345"
+  }
+}
+→ 422  {"name": "myapp", "status": "crashed", "reason": "..."}
+→ 504  {"name": "myapp", "status": "timeout", "reason": "..."}
+→ 404  {"name": "myapp", "status": "unknown", "reason": "..."}
 ```
+
+Blocks until the application's services have either spawned (and
+produced their exports) or terminal-failed, up to a 60-second
+readiness timeout. When the app is already `up`, returns
+immediately. Concurrent callers against a `down` app each receive
+the same merged exports without duplicate spawns.
 
 **Stop an application:**
 
@@ -137,29 +153,11 @@ POST bates.test/processes/<name>/restart
 → 422  {"name": "myapp", "error": "..."}
 ```
 
-**Get application environment exports:**
-
-```
-GET bates.test/processes/<name>/env
-
-→ 200
-{
-  "name": "myapp",
-  "exports": {
-    "PGHOST": "127.0.0.1",
-    "PGPORT": "52345"
-  }
-}
-→ 422  {"name": "myapp", "error": "application is not up"}
-→ 404  {"error": "unknown application: myapp"}
-```
-
-Returns the union of exports published by every service in the
-application, computed from each service's settled process invocation.
-Only available when the application is `up`; exports do not exist
-until services have started and their middleware has run. If two
-services export the same key, last-writer-wins by service start
-order.
+**Application exports** (e.g., `PGHOST`, `PGPORT` from the
+`postgresql` addon) are returned as part of the
+`POST /processes/<name>/start` response. There is no separate env
+endpoint. If two services export the same key, last-writer-wins by
+service start order.
 
 **Get application logs:**
 

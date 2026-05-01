@@ -77,14 +77,21 @@ Stops then starts an application. Requires the server to be running.
 Prints shell-eval'able `export` lines for the union of exports
 published by every service in the application. In v1, this is
 effectively the addon exports (e.g., `PGHOST`, `PGPORT` from the
-`postgresql` addon). Requires the server to be running and the
-application to be `up`; exports do not exist until services start.
+`postgresql` addon).
 
 ```
 $ bates env myapp
 export PGHOST='127.0.0.1'
 export PGPORT='52345'
 ```
+
+If the application is `down`, `bates env` triggers it to start —
+there is no separate `bates up` step. The command blocks until each
+service has either spawned (and produced its exports) or
+terminal-failed, then prints the merged exports. On a cold boot it
+writes a single `bates: starting <name>...` line to stderr so the
+user sees something is happening; when the application is already
+`up` the command returns immediately and stays silent on stderr.
 
 Output uses POSIX `export KEY='value'` syntax with single-quoted
 values; embedded single quotes are escaped (`'\''`). Compatible with
@@ -99,9 +106,10 @@ services see:
 eval "$(bates env myapp)"
 ```
 
-If Bates is not running, the application does not exist, or the
-application is not `up`, the command exits non-zero with a message on
-stderr and emits no output on stdout. Callers that want resilience in
+The command exits 0 on success and non-zero on any failure (Bates
+not running, application unknown, application crashed during start,
+readiness timeout). Failure messages are written to stderr and no
+output is written to stdout. Callers that want resilience in
 `.envrc` (e.g., before Bates has been started for the day) can wrap
 the call:
 
