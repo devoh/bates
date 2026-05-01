@@ -467,6 +467,7 @@ defmodule Bates.App do
 
   defp crash_reason(state, "crashed") do
     state.services
+    |> Enum.sort_by(fn {name, _svc} -> name end)
     |> Enum.find_value(fn {name, svc} ->
       case svc.exit_status do
         nil -> nil
