@@ -211,7 +211,8 @@ defmodule Bates.Config do
   end
 
   defp validate_dependencies(applications) do
-    Enum.reduce_while(applications, :ok, fn {app_name, _root, services}, _acc ->
+    Enum.reduce_while(applications, :ok, fn {app_name, _root, services},
+                                            _acc ->
       with :ok <- validate_dependency_names(app_name, services),
            :ok <- validate_dependency_cycles(app_name, services) do
         {:cont, :ok}

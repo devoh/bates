@@ -14,7 +14,12 @@ defmodule BatesWeb.ProcessController do
           status: status,
           services:
             Enum.map(services, fn svc ->
-              %{name: svc.name, hostname: svc.hostname, status: svc.status, port: svc.port}
+              %{
+                name: svc.name,
+                hostname: svc.hostname,
+                status: svc.status,
+                port: svc.port
+              }
             end)
         }
       end

@@ -47,7 +47,10 @@ defmodule Bates.Caddy do
 
   @impl GenServer
   def handle_call({:update_route, hostname, _port}, _from, %{pid: nil} = state) do
-    Logger.warning("[caddy] Cannot update route for #{hostname}: Caddy not running")
+    Logger.warning(
+      "[caddy] Cannot update route for #{hostname}: Caddy not running"
+    )
+
     {:reply, {:error, :not_running}, state}
   end
 
@@ -58,7 +61,10 @@ defmodule Bates.Caddy do
 
   @impl GenServer
   def handle_call({:revert_route, hostname}, _from, %{pid: nil} = state) do
-    Logger.warning("[caddy] Cannot revert route for #{hostname}: Caddy not running")
+    Logger.warning(
+      "[caddy] Cannot revert route for #{hostname}: Caddy not running"
+    )
+
     {:reply, {:error, :not_running}, state}
   end
 
@@ -81,7 +87,10 @@ defmodule Bates.Caddy do
 
     case start_caddy() do
       {:ok, pid, os_pid} ->
-        Logger.info("[caddy] Restarted after crash, re-registering running apps")
+        Logger.info(
+          "[caddy] Restarted after crash, re-registering running apps"
+        )
+
         re_register_running_routes()
         {:noreply, %{new_state | pid: pid, os_pid: os_pid}}
 
@@ -117,7 +126,9 @@ defmodule Bates.Caddy do
                           "handle" => [
                             %{
                               "handler" => "reverse_proxy",
-                              "upstreams" => [%{"dial" => "127.0.0.1:#{control_port}"}]
+                              "upstreams" => [
+                                %{"dial" => "127.0.0.1:#{control_port}"}
+                              ]
                             }
                           ]
                         }
@@ -175,7 +186,10 @@ defmodule Bates.Caddy do
         :ok
 
       {:ok, {{_, status, _}, _, response_body}} ->
-        Logger.warning("[caddy] Admin API PATCH #{route_id} returned #{status}: #{response_body}")
+        Logger.warning(
+          "[caddy] Admin API PATCH #{route_id} returned #{status}: #{response_body}"
+        )
+
         {:error, {:http_status, status}}
 
       {:error, reason} ->
@@ -194,7 +208,9 @@ defmodule Bates.Caddy do
           Logger.info("[caddy] Re-registered route for #{service.hostname}")
 
         {:error, reason} ->
-          Logger.warning("[caddy] Failed to re-register #{service.hostname}: #{inspect(reason)}")
+          Logger.warning(
+            "[caddy] Failed to re-register #{service.hostname}: #{inspect(reason)}"
+          )
       end
     end
   end
@@ -334,8 +350,12 @@ defmodule Bates.Caddy do
 
   defp check_caddy_in_path do
     case System.find_executable("caddy") do
-      nil -> {:error, "`caddy` not found in $PATH. Install with: brew install caddy"}
-      _path -> :ok
+      nil ->
+        {:error,
+         "`caddy` not found in $PATH. Install with: brew install caddy"}
+
+      _path ->
+        :ok
     end
   end
 
@@ -343,7 +363,8 @@ defmodule Bates.Caddy do
     if File.exists?("/etc/resolver/test") do
       :ok
     else
-      {:error, "/etc/resolver/test not found. Create with: sudo bash -c 'echo \"nameserver 127.0.0.1\" > /etc/resolver/test'"}
+      {:error,
+       "/etc/resolver/test not found. Create with: sudo bash -c 'echo \"nameserver 127.0.0.1\" > /etc/resolver/test'"}
     end
   end
 

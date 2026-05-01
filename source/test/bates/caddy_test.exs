@@ -44,7 +44,8 @@ defmodule Bates.CaddyTest do
       routes = config["apps"]["http"]["servers"]["bates"]["routes"]
 
       for route <- routes do
-        assert Map.has_key?(route, "@id"), "Route missing @id: #{inspect(route)}"
+        assert Map.has_key?(route, "@id"),
+               "Route missing @id: #{inspect(route)}"
       end
     end
 
@@ -53,7 +54,8 @@ defmodule Bates.CaddyTest do
       routes = config["apps"]["http"]["servers"]["bates"]["routes"]
 
       for route <- routes do
-        assert route["terminal"] == true, "Route not terminal: #{inspect(route["@id"])}"
+        assert route["terminal"] == true,
+               "Route not terminal: #{inspect(route["@id"])}"
       end
     end
 

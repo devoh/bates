@@ -87,7 +87,9 @@ defmodule Bates.ConfigTest do
     end
 
     test "returns {:error, {:invalid_port, app, service, value}} for a non-integer string" do
-      assert Config.applications("test/fixtures/invalid_port_value_config.toml") ==
+      assert Config.applications(
+               "test/fixtures/invalid_port_value_config.toml"
+             ) ==
                {:error, {:invalid_port, "myapp", "queue", "garbage"}}
     end
   end
@@ -156,7 +158,9 @@ defmodule Bates.ConfigTest do
     end
 
     test "returns {:error, {:unknown_middleware, name}} for unknown middleware" do
-      assert Config.applications("test/fixtures/unknown_middleware_config.toml") ==
+      assert Config.applications(
+               "test/fixtures/unknown_middleware_config.toml"
+             ) ==
                {:error, {:unknown_middleware, "nope"}}
     end
   end
@@ -164,7 +168,9 @@ defmodule Bates.ConfigTest do
   describe "depends_on" do
     test "parses depends_on as a list of sibling service names" do
       [{_name, _root, services}] =
-        Config.applications("test/fixtures/multi_service_with_deps_config.toml")
+        Config.applications(
+          "test/fixtures/multi_service_with_deps_config.toml"
+        )
 
       service_map = Map.new(services, &{&1.name, &1})
 
@@ -174,7 +180,9 @@ defmodule Bates.ConfigTest do
 
     test "defaults to empty list when depends_on key is absent" do
       [{_name, _root, services}] =
-        Config.applications("test/fixtures/multi_service_with_deps_config.toml")
+        Config.applications(
+          "test/fixtures/multi_service_with_deps_config.toml"
+        )
 
       service_map = Map.new(services, &{&1.name, &1})
 
@@ -189,7 +197,9 @@ defmodule Bates.ConfigTest do
     end
 
     test "returns {:error, {:unknown_dependency, app, service, missing}} for unknown name" do
-      assert Config.applications("test/fixtures/unknown_dependency_config.toml") ==
+      assert Config.applications(
+               "test/fixtures/unknown_dependency_config.toml"
+             ) ==
                {:error, {:unknown_dependency, "myapp", "web", "nonexistent"}}
     end
 

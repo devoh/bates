@@ -50,7 +50,9 @@ defmodule BatesWeb.ProcessControllerTest do
 
     conn = get(conn, "/processes/testapp/logs")
 
-    assert %{"name" => "testapp", "services" => services} = json_response(conn, 200)
+    assert %{"name" => "testapp", "services" => services} =
+             json_response(conn, 200)
+
     assert [%{"name" => "testapp", "lines" => lines}] = services
     assert is_list(lines)
   end
@@ -61,7 +63,9 @@ defmodule BatesWeb.ProcessControllerTest do
 
     conn = get(conn, "/processes/testapp/logs")
 
-    assert %{"name" => "testapp", "services" => services} = json_response(conn, 200)
+    assert %{"name" => "testapp", "services" => services} =
+             json_response(conn, 200)
+
     assert [%{"name" => "testapp", "lines" => []}] = services
   end
 
@@ -257,9 +261,7 @@ defmodule BatesWeb.ProcessControllerTest do
 
       # Snapshot the registry pid so we can read service state after.
       app_pid =
-        GenServer.whereis(
-          {:via, Registry, {Bates.ProcessRegistry, "testapp"}}
-        )
+        GenServer.whereis({:via, Registry, {Bates.ProcessRegistry, "testapp"}})
 
       conn1 = conn
       conn2 = Phoenix.ConnTest.build_conn()

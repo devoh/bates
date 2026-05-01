@@ -7,7 +7,11 @@ defmodule Bates.App do
   @timeout 60_000
   @max_log_lines 1_000
   @poll_interval Application.compile_env(:bates, :poll_interval, 200)
-  @readiness_timeout Application.compile_env(:bates, :readiness_timeout, 60_000)
+  @readiness_timeout Application.compile_env(
+                       :bates,
+                       :readiness_timeout,
+                       60_000
+                     )
 
   # Public API
 
@@ -165,7 +169,9 @@ defmodule Bates.App do
             broadcast_app(state.name, {:status, derive_status(new_state)})
 
             new_state =
-              new_state |> start_eligible() |> maybe_broadcast_exports_settled()
+              new_state
+              |> start_eligible()
+              |> maybe_broadcast_exports_settled()
 
             {:noreply, new_state}
 
@@ -310,7 +316,10 @@ defmodule Bates.App do
   defp eligible_to_start?(%{pid: pid}, _services) when not is_nil(pid),
     do: false
 
-  defp eligible_to_start?(%{config: %Service{depends_on: depends_on}}, services) do
+  defp eligible_to_start?(
+         %{config: %Service{depends_on: depends_on}},
+         services
+       ) do
     Enum.all?(depends_on, fn dependency_name ->
       case Map.get(services, dependency_name) do
         nil -> false

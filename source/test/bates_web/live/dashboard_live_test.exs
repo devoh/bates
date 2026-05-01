@@ -6,15 +6,16 @@ defmodule BatesWeb.DashboardLiveTest do
   defp single_service_config(name, opts \\ []) do
     command = Keyword.get(opts, :command, "sleep 999")
 
-    {name, ".", [
-      %Service{
-        name: name,
-        command: command,
-        port: Bates.PortNumber.next(),
-        hostname: "#{name}.test",
-        middleware: ["port"]
-      }
-    ]}
+    {name, ".",
+     [
+       %Service{
+         name: name,
+         command: command,
+         port: Bates.PortNumber.next(),
+         hostname: "#{name}.test",
+         middleware: ["port"]
+       }
+     ]}
   end
 
   test "renders app list with name, hostname, status, and port", %{conn: conn} do
@@ -56,7 +57,11 @@ defmodule BatesWeb.DashboardLiveTest do
   end
 
   test "updates status when app starts", %{conn: conn} do
-    config = single_service_config("myapp", command: "elixir test/support/test_server.ex")
+    config =
+      single_service_config("myapp",
+        command: "elixir test/support/test_server.ex"
+      )
+
     start_supervised!({App, config})
 
     {:ok, live, html} = live(conn, "/")
@@ -79,7 +84,11 @@ defmodule BatesWeb.DashboardLiveTest do
   end
 
   test "shows stop and restart buttons for up app", %{conn: conn} do
-    config = single_service_config("myapp", command: "elixir test/support/test_server.ex")
+    config =
+      single_service_config("myapp",
+        command: "elixir test/support/test_server.ex"
+      )
+
     start_supervised!({App, config})
     :ok = App.up("myapp")
     assert_eventually(fn -> App.status("myapp") == "up" end)
@@ -91,18 +100,28 @@ defmodule BatesWeb.DashboardLiveTest do
   end
 
   test "start event starts an app", %{conn: conn} do
-    config = single_service_config("myapp", command: "elixir test/support/test_server.ex")
+    config =
+      single_service_config("myapp",
+        command: "elixir test/support/test_server.ex"
+      )
+
     start_supervised!({App, config})
 
     {:ok, live, _html} = live(conn, "/")
 
-    live |> element(~s(button[phx-value-name="myapp"]), "Start") |> render_click()
+    live
+    |> element(~s(button[phx-value-name="myapp"]), "Start")
+    |> render_click()
 
     assert_eventually(fn -> App.status("myapp") == "up" end)
   end
 
   test "stop event stops an app", %{conn: conn} do
-    config = single_service_config("myapp", command: "elixir test/support/test_server.ex")
+    config =
+      single_service_config("myapp",
+        command: "elixir test/support/test_server.ex"
+      )
+
     start_supervised!({App, config})
     :ok = App.up("myapp")
     assert_eventually(fn -> App.status("myapp") == "up" end)
@@ -115,21 +134,31 @@ defmodule BatesWeb.DashboardLiveTest do
   end
 
   test "restart transitions back to up, not crashed", %{conn: conn} do
-    config = single_service_config("myapp", command: "elixir test/support/test_server.ex")
+    config =
+      single_service_config("myapp",
+        command: "elixir test/support/test_server.ex"
+      )
+
     start_supervised!({App, config})
     :ok = App.up("myapp")
     assert_eventually(fn -> App.status("myapp") == "up" end)
 
     {:ok, live, _html} = live(conn, "/")
 
-    live |> element(~s(button[phx-value-name="myapp"]), "Restart") |> render_click()
+    live
+    |> element(~s(button[phx-value-name="myapp"]), "Restart")
+    |> render_click()
 
     assert_eventually(fn -> App.status("myapp") == "up" end)
     refute App.status("myapp") == "crashed"
   end
 
   test "restart transitions through down and starting to up", %{conn: _conn} do
-    config = single_service_config("myapp", command: "elixir test/support/test_server.ex")
+    config =
+      single_service_config("myapp",
+        command: "elixir test/support/test_server.ex"
+      )
+
     start_supervised!({App, config})
     :ok = App.up("myapp")
     assert_eventually(fn -> App.status("myapp") == "up" end)
@@ -142,10 +171,23 @@ defmodule BatesWeb.DashboardLiveTest do
   end
 
   test "multi-service app shows service rows", %{conn: conn} do
-    config = {"myapp", ".", [
-      %Service{name: "web", command: "sleep 999", port: Bates.PortNumber.next(), hostname: "myapp.test", middleware: ["port"]},
-      %Service{name: "worker", command: "sleep 999", port: nil, hostname: nil}
-    ]}
+    config =
+      {"myapp", ".",
+       [
+         %Service{
+           name: "web",
+           command: "sleep 999",
+           port: Bates.PortNumber.next(),
+           hostname: "myapp.test",
+           middleware: ["port"]
+         },
+         %Service{
+           name: "worker",
+           command: "sleep 999",
+           port: nil,
+           hostname: nil
+         }
+       ]}
 
     start_supervised!({App, config})
 
@@ -169,10 +211,23 @@ defmodule BatesWeb.DashboardLiveTest do
   end
 
   test "partial status shows start, stop, and restart buttons", %{conn: conn} do
-    config = {"myapp", ".", [
-      %Service{name: "web", command: "sleep 999", port: 19879, hostname: "myapp.test", middleware: ["port"]},
-      %Service{name: "worker", command: "sleep 999", port: nil, hostname: nil}
-    ]}
+    config =
+      {"myapp", ".",
+       [
+         %Service{
+           name: "web",
+           command: "sleep 999",
+           port: 19879,
+           hostname: "myapp.test",
+           middleware: ["port"]
+         },
+         %Service{
+           name: "worker",
+           command: "sleep 999",
+           port: nil,
+           hostname: nil
+         }
+       ]}
 
     start_supervised!({App, config})
     :ok = App.up("myapp")

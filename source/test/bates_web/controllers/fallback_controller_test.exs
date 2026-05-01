@@ -4,9 +4,16 @@ defmodule BatesWeb.FallbackControllerTest do
   alias Bates.{App, Service}
 
   test "redirects app domain to loading page", %{conn: conn} do
-    config = {"testapp", ".", [
-      %Service{name: "testapp", command: "sleep 999", port: nil, hostname: "testapp.test"}
-    ]}
+    config =
+      {"testapp", ".",
+       [
+         %Service{
+           name: "testapp",
+           command: "sleep 999",
+           port: nil,
+           hostname: "testapp.test"
+         }
+       ]}
 
     start_supervised!({App, config})
 
@@ -18,10 +25,22 @@ defmodule BatesWeb.FallbackControllerTest do
   end
 
   test "redirects custom hostname to loading page", %{conn: conn} do
-    config = {"myapp", ".", [
-      %Service{name: "web", command: "sleep 999", port: nil, hostname: "myapp.test"},
-      %Service{name: "vite", command: "sleep 999", port: nil, hostname: "vite.myapp.test"}
-    ]}
+    config =
+      {"myapp", ".",
+       [
+         %Service{
+           name: "web",
+           command: "sleep 999",
+           port: nil,
+           hostname: "myapp.test"
+         },
+         %Service{
+           name: "vite",
+           command: "sleep 999",
+           port: nil,
+           hostname: "vite.myapp.test"
+         }
+       ]}
 
     start_supervised!({App, config})
 

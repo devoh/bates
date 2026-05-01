@@ -20,7 +20,10 @@ defmodule BatesWeb.Plugs.AppRedirect do
 
         {app_name, service_name} ->
           conn
-          |> redirect(external: "https://#{control_host}/loading/#{app_name}/#{service_name}")
+          |> redirect(
+            external:
+              "https://#{control_host}/loading/#{app_name}/#{service_name}"
+          )
           |> halt()
       end
     else
