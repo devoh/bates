@@ -9,7 +9,7 @@ defmodule Bates.CLI do
   end
 
   @doc false
-  def dispatch(["env" | rest]), do: Bates.CLI.Env.run(rest)
+  def dispatch(["env", name]) when is_binary(name), do: Bates.CLI.Env.run(name)
   def dispatch(_), do: usage()
 
   defp usage do

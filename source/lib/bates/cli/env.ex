@@ -3,10 +3,7 @@ defmodule Bates.CLI.Env do
 
   @endpoint "https://bates.test"
 
-  def run([name]) when is_binary(name), do: do_env(name)
-  def run(_), do: usage()
-
-  defp do_env(name) do
+  def run(name) when is_binary(name) do
     maybe_announce_starting(name)
 
     case post_start(name) do
@@ -55,11 +52,6 @@ defmodule Bates.CLI.Env do
   @doc false
   def escape(value) when is_binary(value) do
     String.replace(value, "'", "'\\''")
-  end
-
-  defp usage do
-    IO.write(:stderr, "Usage: bates env <name>\n")
-    2
   end
 
   # HTTP
