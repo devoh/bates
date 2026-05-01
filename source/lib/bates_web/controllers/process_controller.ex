@@ -23,14 +23,23 @@ defmodule BatesWeb.ProcessController do
   end
 
   def start(conn, %{"name" => name}) do
-    case App.up(name) do
-      :ok ->
-        json(conn, %{name: name, status: "up"})
-
-      {:error, reason} ->
+    case ProcessSupervisor.app_pid(name) do
+      nil ->
         conn
-        |> put_status(422)
-        |> json(%{name: name, error: inspect(reason)})
+        |> put_status(404)
+        |> json(%{
+          name: name,
+          status: "unknown",
+          reason: "unknown application: #{name}"
+        })
+
+      _pid ->
+        # Subscribe before snapshotting so a broadcast that fires
+        # between the snapshot read and the receive loop still lands
+        # in this process's mailbox. Snapshot-then-subscribe would
+        # drop a settling message that arrives in that gap.
+        Phoenix.PubSub.subscribe(Bates.PubSub, "app:#{name}")
+        await_start_response(conn, name)
     end
   end
 
@@ -61,5 +70,81 @@ defmodule BatesWeb.ProcessController do
         |> put_status(422)
         |> json(%{name: name, error: inspect(reason)})
     end
+  end
+
+  defp await_start_response(conn, name) do
+    case App.snapshot(name) do
+      %{status: "up", exports: exports} ->
+        json(conn, %{name: name, status: "up", exports: exports})
+
+      %{status: "crashed", reason: reason} ->
+        conn
+        |> put_status(422)
+        |> json(%{
+          name: name,
+          status: "crashed",
+          reason: reason || "application crashed"
+        })
+
+      _ ->
+        try do
+          App.up(name)
+        catch
+          :exit, _ -> :ok
+        end
+
+        await_settled(conn, name, timeout())
+    end
+  end
+
+  defp timeout do
+    Application.get_env(:bates, :readiness_timeout, 60_000)
+  end
+
+  defp await_settled(conn, name, timeout) do
+    deadline = System.monotonic_time(:millisecond) + timeout
+    receive_settled(conn, name, deadline)
+  end
+
+  defp receive_settled(conn, name, deadline) do
+    remaining = deadline - System.monotonic_time(:millisecond)
+
+    if remaining <= 0 do
+      timeout_response(conn, name)
+    else
+      receive do
+        {:exports_settled, exports} ->
+          json(conn, %{name: name, status: "up", exports: exports})
+
+        {:status, "crashed", reason} ->
+          conn
+          |> put_status(422)
+          |> json(%{name: name, status: "crashed", reason: reason})
+
+        {:status, "crashed"} ->
+          conn
+          |> put_status(422)
+          |> json(%{
+            name: name,
+            status: "crashed",
+            reason: "application crashed"
+          })
+
+        _ ->
+          receive_settled(conn, name, deadline)
+      after
+        remaining -> timeout_response(conn, name)
+      end
+    end
+  end
+
+  defp timeout_response(conn, name) do
+    conn
+    |> put_status(504)
+    |> json(%{
+      name: name,
+      status: "timeout",
+      reason: "timed out waiting for exports"
+    })
   end
 end

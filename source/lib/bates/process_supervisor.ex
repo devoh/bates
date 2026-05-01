@@ -20,6 +20,13 @@ defmodule Bates.ProcessSupervisor do
     Registry.select(Bates.ProcessRegistry, [{{:"$1", :_, :_}, [], [:"$1"]}])
   end
 
+  def app_pid(name) do
+    case Registry.lookup(Bates.ProcessRegistry, name) do
+      [{pid, _}] -> pid
+      [] -> nil
+    end
+  end
+
   def hostname_lookup do
     for name <- app_names(),
         service <- App.services(name),
