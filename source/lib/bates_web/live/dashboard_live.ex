@@ -28,6 +28,11 @@ defmodule BatesWeb.DashboardLive do
   end
 
   @impl true
+  def handle_info({:exports_settled, _exports}, socket) do
+    {:noreply, socket}
+  end
+
+  @impl true
   def handle_event("start", %{"name" => name}, socket) do
     App.up(name)
     {:noreply, socket}

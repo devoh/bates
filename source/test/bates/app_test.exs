@@ -747,6 +747,167 @@ defmodule Bates.AppTest do
     end
   end
 
+  describe "exports_settled broadcast" do
+    alias Bates.TestSupport.ExportProducer
+
+    setup do
+      Bates.Middleware.Registry.register("export_producer", ExportProducer)
+
+      on_exit(fn ->
+        Bates.Middleware.Registry.unregister("export_producer")
+        Application.delete_env(:bates, :export_producer_exports)
+      end)
+
+      :ok
+    end
+
+    test "fires once with empty exports for a port-less service" do
+      config =
+        {"testapp", ".",
+         [
+           %Service{
+             name: "worker",
+             command: "sleep 999",
+             port: nil,
+             hostname: nil
+           }
+         ]}
+
+      start_supervised!({App, config})
+      :ok = App.up("testapp")
+
+      assert_receive {:exports_settled, %{}}, 5_000
+    end
+
+    test "fires with merged exports from a producer middleware" do
+      Application.put_env(:bates, :export_producer_exports, %{
+        "worker" => %{"FOO" => "bar"}
+      })
+
+      config =
+        {"testapp", ".",
+         [
+           %Service{
+             name: "worker",
+             command: "sleep 999",
+             port: nil,
+             hostname: nil,
+             middleware: ["export_producer"]
+           }
+         ]}
+
+      start_supervised!({App, config})
+      :ok = App.up("testapp")
+
+      assert_receive {:exports_settled, %{"FOO" => "bar"}}, 5_000
+    end
+
+    test "merges exports across services with last-writer-wins by start order" do
+      Application.put_env(:bates, :export_producer_exports, %{
+        "first" => %{"SHARED" => "from-first", "ONLY_FIRST" => "1"},
+        "second" => %{"SHARED" => "from-second", "ONLY_SECOND" => "2"}
+      })
+
+      config =
+        {"testapp", ".",
+         [
+           %Service{
+             name: "first",
+             command: "sleep 999",
+             port: nil,
+             hostname: nil,
+             middleware: ["export_producer"]
+           },
+           %Service{
+             name: "second",
+             command: "sleep 999",
+             port: nil,
+             hostname: nil,
+             middleware: ["export_producer"]
+           }
+         ]}
+
+      start_supervised!({App, config})
+      :ok = App.up("testapp")
+
+      assert_receive {:exports_settled, exports}, 5_000
+      assert exports["ONLY_FIRST"] == "1"
+      assert exports["ONLY_SECOND"] == "2"
+      assert exports["SHARED"] == "from-second"
+    end
+
+    test "fires exactly once across multiple :up calls without :down" do
+      config =
+        {"testapp", ".",
+         [
+           %Service{
+             name: "worker",
+             command: "sleep 999",
+             port: nil,
+             hostname: nil
+           }
+         ]}
+
+      start_supervised!({App, config})
+      :ok = App.up("testapp")
+      assert_receive {:exports_settled, %{}}, 5_000
+
+      :ok = App.up("testapp")
+      refute_receive {:exports_settled, _}, 200
+    end
+
+    test "fires again after :down then :up" do
+      config =
+        {"testapp", ".",
+         [
+           %Service{
+             name: "worker",
+             command: "sleep 999",
+             port: nil,
+             hostname: nil
+           }
+         ]}
+
+      start_supervised!({App, config})
+      :ok = App.up("testapp")
+      assert_receive {:exports_settled, %{}}, 5_000
+
+      :ok = App.down("testapp")
+      :ok = App.up("testapp")
+      assert_receive {:exports_settled, %{}}, 5_000
+    end
+  end
+
+  describe "snapshot/1" do
+    test "returns status, exports, and reason atomically" do
+      config =
+        {"testapp", ".",
+         [
+           %Service{
+             name: "worker",
+             command: "sleep 999",
+             port: nil,
+             hostname: nil
+           }
+         ]}
+
+      start_supervised!({App, config})
+
+      snapshot = App.snapshot("testapp")
+      assert snapshot.status == "down"
+      assert snapshot.exports == %{}
+      assert snapshot.reason == nil
+
+      :ok = App.up("testapp")
+      assert_receive {:exports_settled, _}, 5_000
+
+      snapshot = App.snapshot("testapp")
+      assert snapshot.status == "up"
+      assert snapshot.exports == %{}
+      assert snapshot.reason == nil
+    end
+  end
+
   defp assert_eventually(fun, attempts \\ 50) do
     Bates.TestHelpers.assert_eventually(fun, attempts)
   end

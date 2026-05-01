@@ -35,6 +35,10 @@ defmodule Bates.App do
     GenServer.call(via_tuple(name), :status)
   end
 
+  def snapshot(name) do
+    GenServer.call(via_tuple(name), :snapshot)
+  end
+
   def service_status(name, service_name) do
     GenServer.call(via_tuple(name), {:service_status, service_name})
   end
@@ -69,12 +73,25 @@ defmodule Bates.App do
          }}
       end)
 
-    {:ok, %{name: name, root: root, services: service_states, pids: %{}}}
+    {:ok,
+     %{
+       name: name,
+       root: root,
+       services: service_states,
+       pids: %{},
+       exports_broadcast: false
+     }}
   end
 
   @impl GenServer
   def handle_call(:up, _from, state) do
-    {:reply, :ok, start_eligible(state)}
+    new_state = state |> start_eligible() |> maybe_broadcast_exports_settled()
+    {:reply, :ok, new_state}
+  end
+
+  @impl GenServer
+  def handle_call(:snapshot, _from, state) do
+    {:reply, build_snapshot(state), state}
   end
 
   @impl GenServer
@@ -92,6 +109,7 @@ defmodule Bates.App do
         end
       end)
 
+    new_state = %{new_state | exports_broadcast: false}
     {:reply, :ok, new_state}
   end
 
@@ -145,7 +163,11 @@ defmodule Bates.App do
             new_state = put_in(state, [:services, service_name], new_svc)
             broadcast_service(state.name, service_name, {:status, "up"})
             broadcast_app(state.name, {:status, derive_status(new_state)})
-            {:noreply, start_eligible(new_state)}
+
+            new_state =
+              new_state |> start_eligible() |> maybe_broadcast_exports_settled()
+
+            {:noreply, new_state}
 
           {:error, _} ->
             elapsed = System.monotonic_time(:millisecond) - svc.started_at
@@ -174,7 +196,7 @@ defmodule Bates.App do
               )
 
               broadcast_app(state.name, {:status, derive_status(new_state)})
-              {:noreply, new_state}
+              {:noreply, maybe_broadcast_exports_settled(new_state)}
             else
               Process.send_after(
                 self(),
@@ -243,7 +265,7 @@ defmodule Bates.App do
           broadcast_app(state.name, {:status, derive_status(new_state)})
         end
 
-        {:noreply, new_state}
+        {:noreply, maybe_broadcast_exports_settled(new_state)}
     end
   end
 
@@ -333,7 +355,7 @@ defmodule Bates.App do
           new_state = put_in(new_state, [:services, service_name], new_svc)
           broadcast_service(state.name, service_name, {:status, "up"})
           broadcast_app(state.name, {:status, derive_status(new_state)})
-          new_state
+          maybe_broadcast_exports_settled(new_state)
         else
           Process.send_after(
             self(),
@@ -346,7 +368,7 @@ defmodule Bates.App do
           new_state = %{state | pids: new_pids}
           new_state = put_in(new_state, [:services, service_name], new_svc)
           broadcast_app(state.name, {:status, derive_status(new_state)})
-          new_state
+          maybe_broadcast_exports_settled(new_state)
         end
 
       {:error, reason} ->
@@ -404,6 +426,48 @@ defmodule Bates.App do
       true -> "partial"
     end
   end
+
+  defp maybe_broadcast_exports_settled(state) do
+    if not state.exports_broadcast and all_services_settled?(state) do
+      exports = merge_exports(state)
+      broadcast_app(state.name, {:exports_settled, exports})
+      %{state | exports_broadcast: true}
+    else
+      state
+    end
+  end
+
+  defp all_services_settled?(state) do
+    Enum.all?(state.services, fn {_name, svc} ->
+      svc.pid != nil or svc.exit_status != nil
+    end)
+  end
+
+  defp merge_exports(state) do
+    Enum.reduce(state.services, %{}, fn {_name, svc}, acc ->
+      Map.merge(acc, svc.exports)
+    end)
+  end
+
+  defp build_snapshot(state) do
+    status = derive_status(state)
+    exports = merge_exports(state)
+    reason = crash_reason(state, status)
+    %{status: status, exports: exports, reason: reason}
+  end
+
+  defp crash_reason(state, "crashed") do
+    state.services
+    |> Enum.find_value(fn {name, svc} ->
+      case svc.exit_status do
+        nil -> nil
+        :normal -> nil
+        status -> "service #{name} failed: #{inspect(status)}"
+      end
+    end)
+  end
+
+  defp crash_reason(_state, _), do: nil
 
   defp service_status_name(%{pid: pid, ready: true}) when not is_nil(pid),
     do: "up"
