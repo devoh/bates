@@ -8,7 +8,8 @@ defmodule Bates.MixProject do
       elixir: "~> 1.14",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
-      deps: deps()
+      deps: deps(),
+      escript: [main_module: Bates.CLI, name: "bates"]
     ]
   end
 
