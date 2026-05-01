@@ -1,6 +1,8 @@
 defmodule BatesWeb.ProcessController do
   use BatesWeb, :controller
 
+  require Logger
+
   alias Bates.{App, ProcessSupervisor}
 
   def status(conn, _params) do
@@ -92,14 +94,30 @@ defmodule BatesWeb.ProcessController do
         })
 
       _ ->
-        try do
-          App.up(name)
-        catch
-          :exit, _ -> :ok
-        end
+        case start_app(name) do
+          :ok ->
+            await_settled(conn, name, timeout())
 
-        await_settled(conn, name, timeout())
+          {:error, reason} ->
+            Logger.error(
+              "App.up/1 exited for #{name}: #{inspect(reason)}"
+            )
+
+            conn
+            |> put_status(500)
+            |> json(%{
+              name: name,
+              status: "error",
+              reason: "internal error: #{inspect(reason)}"
+            })
+        end
     end
+  end
+
+  defp start_app(name) do
+    App.up(name)
+  catch
+    :exit, reason -> {:error, reason}
   end
 
   defp timeout do
