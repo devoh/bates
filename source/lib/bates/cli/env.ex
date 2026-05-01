@@ -4,10 +4,10 @@ defmodule Bates.CLI.Env do
   @endpoint "https://bates.test"
 
   def run(name) when is_binary(name) do
-    maybe_announce_starting(name)
-
     case post_start(name) do
       {:ok, status, body} when status in 200..299 ->
+        announce_started(name, body["status"])
+
         body
         |> Map.get("exports", %{})
         |> emit_exports()
@@ -24,11 +24,10 @@ defmodule Bates.CLI.Env do
     end
   end
 
-  defp maybe_announce_starting(name) do
-    case get_status(name) do
-      {:ok, "up"} -> :ok
-      _ -> IO.write(:stderr, "bates: starting #{name}...\n")
-    end
+  defp announce_started(_name, "up"), do: :ok
+
+  defp announce_started(name, _status) do
+    IO.write(:stderr, "bates: started #{name}\n")
   end
 
   @doc false
@@ -57,42 +56,13 @@ defmodule Bates.CLI.Env do
   # HTTP
 
   defp post_start(name) do
-    request("#{@endpoint}/processes/#{URI.encode(name)}/start", :post)
-  end
-
-  defp get_status(name) do
-    case request("#{@endpoint}/status", :get) do
-      {:ok, status, body} when status in 200..299 ->
-        process =
-          (body["processes"] || [])
-          |> Enum.find(fn proc -> proc["name"] == name end)
-
-        if process, do: {:ok, process["status"]}, else: :error
-
-      _ ->
-        :error
-    end
-  end
-
-  defp request(url, method) do
     ensure_apps()
-    url_charlist = String.to_charlist(url)
+    url = String.to_charlist("#{@endpoint}/processes/#{URI.encode(name)}/start")
     headers = [{~c"accept", ~c"application/json"}]
+    request = {url, headers, ~c"application/json", ~c""}
+    http_options = [ssl: ssl_options(), timeout: 65_000]
 
-    request_tuple =
-      case method do
-        :post -> {url_charlist, headers, ~c"application/json", ~c""}
-        :get -> {url_charlist, headers}
-      end
-
-    http_options = [
-      ssl: ssl_options(),
-      timeout: 65_000
-    ]
-
-    case :httpc.request(method, request_tuple, http_options,
-           body_format: :binary
-         ) do
+    case :httpc.request(:post, request, http_options, body_format: :binary) do
       {:ok, {{_version, status, _phrase}, _headers, body}} ->
         {:ok, status, decode(body)}
 

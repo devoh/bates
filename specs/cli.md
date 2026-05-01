@@ -88,10 +88,12 @@ export PGPORT='52345'
 If the application is `down`, `bates env` triggers it to start —
 there is no separate `bates up` step. The command blocks until each
 service has either spawned (and produced its exports) or
-terminal-failed, then prints the merged exports. On a cold boot it
-writes a single `bates: starting <name>...` line to stderr so the
-user sees something is happening; when the application is already
-`up` the command returns immediately and stays silent on stderr.
+terminal-failed, then prints the merged exports. After a cold boot
+it writes a single `bates: started <name>` line to stderr; when the
+application was already `up` the command stays silent on stderr.
+The decision is based on the `status` field of the start response:
+`up` means no boot occurred, anything else means the request
+triggered one.
 
 Output uses POSIX `export KEY='value'` syntax with single-quoted
 values; embedded single quotes are escaped (`'\''`). Compatible with

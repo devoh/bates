@@ -137,7 +137,7 @@ defmodule BatesWeb.ProcessController do
     else
       receive do
         {:exports_settled, exports} ->
-          json(conn, %{name: name, status: "up", exports: exports})
+          respond_settled(conn, name, exports)
 
         {:status, "crashed", reason} ->
           conn
@@ -158,6 +158,22 @@ defmodule BatesWeb.ProcessController do
       after
         remaining -> timeout_response(conn, name)
       end
+    end
+  end
+
+  defp respond_settled(conn, name, exports) do
+    case App.snapshot(name) do
+      %{status: "crashed", reason: reason} ->
+        conn
+        |> put_status(422)
+        |> json(%{
+          name: name,
+          status: "crashed",
+          reason: reason || "application crashed"
+        })
+
+      %{status: status} ->
+        json(conn, %{name: name, status: status, exports: exports})
     end
   end
 

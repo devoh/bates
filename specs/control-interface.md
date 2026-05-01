@@ -135,6 +135,12 @@ readiness timeout. When the app is already `up`, returns
 immediately. Concurrent callers against a `down` app each receive
 the same merged exports without duplicate spawns.
 
+The `status` field reflects the application's actual derived
+status at response time. For port-bearing services this can be
+`starting` (services have spawned and exports are populated, but
+the TCP port is not yet bound) — exports are still valid and
+intended to be consumed; readiness is the caller's concern.
+
 **Stop an application:**
 
 ```
