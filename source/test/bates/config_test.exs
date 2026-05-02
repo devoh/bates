@@ -75,6 +75,22 @@ defmodule Bates.ConfigTest do
     assert Config.applications("nonexistent.toml") == []
   end
 
+  describe "applications/0" do
+    test "reads the configured `:config_path` from the application env" do
+      Application.put_env(:bates, :config_path, "test/fixtures/config.toml")
+      on_exit(fn -> Application.delete_env(:bates, :config_path) end)
+
+      [{name, _root, _services}] = Config.applications()
+
+      assert name == "testapp"
+    end
+
+    test "falls back to ~/.config/bates/config.toml when the env is unset" do
+      Application.delete_env(:bates, :config_path)
+      assert Config.path() =~ ".config/bates/config.toml"
+    end
+  end
+
   describe "port" do
     test "translates `port = \"auto\"` to `Service.port: :auto`" do
       [{_name, _root, services}] =

@@ -1,9 +1,12 @@
 defmodule Bates.Config do
   alias Bates.{Addons, Middleware, Service}
 
-  @path "config.toml"
+  def applications do
+    applications(path())
+  end
 
-  def applications(path \\ @path) do
+  @doc false
+  def applications(path) when is_binary(path) do
     with {:ok, toml} <- File.read(path),
          {:ok, config} <- Toml.decode(toml),
          {:ok, applications} <- build_applications(config),
@@ -14,6 +17,22 @@ defmodule Bates.Config do
       {:error, :enoent} -> []
       {:error, _} = error -> error
     end
+  end
+
+  @doc """
+  Returns the configured config-file path.
+
+  Reads `:bates, :config_path` from the application environment when set,
+  otherwise falls back to `~/.config/bates/config.toml`. Uses
+  `System.user_home!/0` so the path resolves correctly under `sudo`
+  without `-E` (which strips `$HOME`).
+  """
+  def path do
+    Application.get_env(:bates, :config_path, default_path())
+  end
+
+  defp default_path do
+    Path.join([System.user_home!(), ".config", "bates", "config.toml"])
   end
 
   defp build_applications(config) do
