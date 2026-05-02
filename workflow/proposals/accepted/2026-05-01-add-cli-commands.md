@@ -1,6 +1,6 @@
 # Add CLI Commands — Proposal
 
-**Status:** Draft
+**Status:** Accepted
 **Date:** 2026-05-01
 **Author:** Tyler + Claude
 **Origin:** https://github.com/tylerhunt/bates/issues/6
