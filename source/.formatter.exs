@@ -5,11 +5,11 @@
   locals_without_parens: [
     embed_templates: 1,
     get: 3,
-    live: 2
+    live: 2,
     pipe_through: 1,
     plug: 1,
     plug: 2,
     post: 3,
-    socket: 3,
+    socket: 3
   ]
 ]

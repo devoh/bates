@@ -99,9 +99,7 @@ defmodule BatesWeb.ProcessController do
             await_settled(conn, name, timeout())
 
           {:error, reason} ->
-            Logger.error(
-              "App.up/1 exited for #{name}: #{inspect(reason)}"
-            )
+            Logger.error("App.up/1 exited for #{name}: #{inspect(reason)}")
 
             conn
             |> put_status(500)
