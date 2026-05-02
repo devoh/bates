@@ -23,14 +23,7 @@ defmodule Bates.Caddy do
 
   @impl GenServer
   def init(_opts) do
-    case check_prerequisites() do
-      :ok ->
-        {:ok, %{pid: nil, os_pid: nil}, {:continue, :start_caddy}}
-
-      {:error, reason} ->
-        Logger.warning("Caddy not started: #{reason}")
-        {:ok, %{pid: nil, os_pid: nil}}
-    end
+    {:ok, %{pid: nil, os_pid: nil}, {:continue, :start_caddy}}
   end
 
   @impl GenServer
@@ -337,35 +330,6 @@ defmodule Bates.Caddy do
       ],
       "terminal" => true
     }
-  end
-
-  # Prerequisites
-
-  defp check_prerequisites do
-    with :ok <- check_caddy_in_path(),
-         :ok <- check_resolver_file() do
-      :ok
-    end
-  end
-
-  defp check_caddy_in_path do
-    case System.find_executable("caddy") do
-      nil ->
-        {:error,
-         "`caddy` not found in $PATH. Install with: brew install caddy"}
-
-      _path ->
-        :ok
-    end
-  end
-
-  defp check_resolver_file do
-    if File.exists?("/etc/resolver/test") do
-      :ok
-    else
-      {:error,
-       "/etc/resolver/test not found. Create with: sudo bash -c 'echo \"nameserver 127.0.0.1\" > /etc/resolver/test'"}
-    end
   end
 
   defp control_interface_port do
