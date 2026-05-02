@@ -5,6 +5,7 @@
 **Author:** Tyler + Claude
 **Origin:** https://github.com/tylerhunt/bates/issues/6
 **Synced:** 2026-05-01 (no comments on issue)
+**Refined:** 2026-05-01
 
 ## Summary
 
@@ -73,9 +74,9 @@ The contract from issue #6 stands:
   `~/.config/bates/config.toml`. Other subcommands implicitly use
   whatever config the running server was started with.
 - **Prerequisite checks gate `start`.** Before booting, verify
-  `/etc/resolver/test` exists and Caddy's local CA is trusted. On
-  failure, print a message pointing to `bates setup` and exit non-zero.
-  Bates does not attempt to fix prerequisites automatically.
+  `caddy` is on `$PATH` and `/etc/resolver/test` exists. On failure,
+  print a message pointing to `bates setup` and exit non-zero. Bates
+  does not attempt to fix prerequisites automatically.
 - **`bates setup` is standalone.** Performs `/etc/resolver/test`
   creation (requires `sudo`) and `caddy trust`. Both steps are
   idempotent. Does not require a running server.
@@ -109,6 +110,44 @@ Carry-overs from earlier work that this proposal extends:
   `bates env`. Non-zero exit on any failure.
 - **API responses are JSON.** No plain-text or empty bodies, even for
   errors. (Already a global rule in this codebase per memory.)
+
+The design refinements (refinement Q&A, 2026-05-01):
+
+- **CA trust is not a `bates start` prerequisite.** `caddy trust` is
+  idempotent and lives in `bates setup`; runtime detection of "is the
+  CA trusted?" is awkward across Caddy versions and macOS keychain
+  layouts. If trust is missing, the symptom is a browser warning, and
+  the fix is `bates setup`. `bates start` checks only that `caddy` is
+  on `$PATH` and `/etc/resolver/test` exists.
+- **Prerequisite checks live only in `bates start`.** Move
+  `check_caddy_in_path/0` and `check_resolver_file/0` out of
+  `Bates.Caddy.init/1` entirely. The `mix phx.server` development path
+  is no longer guarded — that's the trade-off for a single source of
+  truth on prereqs. Caddy's `init/1` simplifies in the process.
+- **`up`/`down`/`restart` announce on stdout.** Each prints
+  `bates: started <name>`, `bates: stopped <name>`, or
+  `bates: restarted <name>` to **stdout** on success and exits 0. This
+  is asymmetric with `bates env`, which keeps its progress line on
+  stderr because its stdout is `eval`'d by direnv — a constraint the
+  control commands don't share.
+- **Empty status output is headers-only, exit 0.** When no
+  applications are configured (or the config file is missing), `bates
+  status` prints the column headers and nothing else, then exits 0.
+  Script-friendly; matches `ls` on an empty directory.
+- **`bates setup` refuses to overwrite a customized resolver.** If
+  `/etc/resolver/test` exists but does not contain `nameserver
+  127.0.0.1`, exit non-zero with a diagnostic. Don't append, don't
+  overwrite. Treat it as user-edited state and let the human resolve
+  it.
+- **`bates start` probes for an already-running daemon.** Before
+  booting the OTP application, perform a short-timeout `GET /status`
+  against `bates.test`. If it succeeds, exit non-zero with `Bates is
+  already running.`. Avoids the ugly port-bind-failure stack trace
+  when the user accidentally double-starts.
+- **`OptionParser` is the argv parser.** `Bates.CLI.Start.run/1` uses
+  `OptionParser.parse/2` from stdlib for `--config`. The dispatcher
+  itself stays argv-list-based; flags are parsed inside the
+  subcommand module that needs them.
 
 ---
 
@@ -258,37 +297,39 @@ process and cleanly terminates it on shutdown via its `terminate/2`
 
 ### Prerequisite checks as `bates start`'s gate
 
-Move the existing checks out of `Bates.Caddy.init/1`:
+Move the existing checks out of `Bates.Caddy.init/1` entirely. They
+become public functions on a small `Bates.Prerequisites` module (or
+stay on `Bates.Caddy` as `verify/0`) and are invoked from
+`bates start` before `Application.ensure_all_started/1`. CA trust is
+not checked at runtime — `bates setup` is the only path that runs
+`caddy trust`.
 
-- `check_caddy_in_path/0` and `check_resolver_file/0` become public
-  functions on a `Bates.Prerequisites` (or similar) module, or stay on
-  `Bates.Caddy` as `verify/0`.
-- Add a third check for **CA trust**. Realistic options:
-  - Run `caddy trust --check` (if it exists) or parse `caddy
-    untrust --help` for a dry-run flag.
-  - Open an HTTPS connection to `https://bates.test` and observe
-    whether peer verification succeeds. Requires the server to be
-    running, so not viable here.
-  - Read the keychain via `security find-certificate -c "Caddy Local
-    Authority - <date>" /Library/Keychains/System.keychain`. Brittle
-    across Caddy versions.
-  - Defer the trust check entirely in v1: rely on `caddy trust` being
-    idempotent and let the user re-run `bates setup` if HTTPS doesn't
-    work.
+On failure, `bates start` prints:
 
-  Pick during refinement (Open Question 1).
-- `bates start` calls these before `Application.ensure_all_started`.
-  On failure, print:
+```
+bates: prerequisite not met: /etc/resolver/test missing
+Run `bates setup` to configure system prerequisites.
+```
 
-  ```
-  bates: prerequisite not met: /etc/resolver/test missing
-  Run `bates setup` to configure system prerequisites.
-  ```
+...to stderr, exits non-zero, and never enters the supervision tree.
 
-  ...to stderr, exit 2.
-- `Bates.Caddy.init/1` no longer needs the prereq guard — but keeps
-  it (as a defensive fallback) for the `mix phx.server` development
-  path. Or move it entirely. Open Question 2.
+`Bates.Caddy.init/1` simplifies: no warning fallback, no defensive
+guard. The `mix phx.server` development path is now expected to fail
+loudly if prereqs are missing (port-bind failures, etc.), since the
+fail-fast path is in `bates start`.
+
+### Already-running probe
+
+Before booting the OTP application, `bates start` issues a short-
+timeout `GET /status` against `https://bates.test`. If the request
+returns 200, Bates is already running — exit non-zero with `Bates is
+already running.` to stderr. If the request fails (connection
+refused, DNS failure, timeout), proceed with boot.
+
+The probe reuses the same `Bates.CLI.Client` HTTP plumbing the
+control commands use, with a tighter timeout (~500ms) since the
+daemon-not-running case is the common path and we don't want a hung
+probe to delay startup.
 
 ### `bates setup`
 
@@ -345,15 +386,23 @@ Per-command specifics:
   apps print one row with the app name in the NAME column. Use a
   fixed-width table renderer; an `—` for null hostname/port.
 - **`bates up <name>`** → `POST /processes/<name>/start`. On 200,
-  exit 0 silently (or print `bates: started <name>` to stderr — Open
-  Question 3). On 404, 422, 504: print `reason` to stderr, exit 1.
+  print `bates: started <name>` to stdout, exit 0. (Exports in the
+  response body are ignored — that's `bates env`'s job.) On 404, 422,
+  504: print `reason` to stderr, exit 1.
 - **`bates down <name>`** → `POST /processes/<name>/stop`. On 200,
-  exit 0 silently (or `bates: stopped <name>`). On 422, print
-  `error`, exit 1.
-- **`bates restart <name>`** → `POST /processes/<name>/restart`.
-  Same as down.
+  print `bates: stopped <name>` to stdout, exit 0. On 422, print
+  `error` to stderr, exit 1.
+- **`bates restart <name>`** → `POST /processes/<name>/restart`. On
+  200, print `bates: restarted <name>` to stdout, exit 0. On 422,
+  print `error` to stderr, exit 1.
 
 ### `--config <path>` plumbing
+
+`bates start` parses argv with stdlib `OptionParser.parse/2`:
+
+```elixir
+{opts, _, _} = OptionParser.parse(argv, strict: [config: :string])
+```
 
 `bates start --config /path/to/config.toml` writes the absolute path
 into the application env before starting:
@@ -428,11 +477,13 @@ In scope:
   `Bates.CLI.Client` (or similar). `Env` migrates to use it.
 - Movement of prerequisite checks out of `Bates.Caddy.init/1` into a
   function that `bates start` invokes before
-  `Application.ensure_all_started/1`. (Caddy keeps a defensive
-  fallback or not — Open Question 2.)
-- A CA-trust prerequisite check to be added (Open Question 1).
-- `--config <path>` flag on `bates start`. Plumb through application
-  env into `Bates.Config.applications/0`.
+  `Application.ensure_all_started/1`. Caddy's defensive fallback is
+  removed entirely.
+- Already-running probe via `GET /status` against `bates.test` before
+  booting; clean exit if the daemon is already up.
+- `--config <path>` flag on `bates start`, parsed via stdlib
+  `OptionParser`. Plumb through application env into
+  `Bates.Config.applications/0`.
 - Default config path of `~/.config/bates/config.toml`, expanded once
   at boot.
 - Dispatcher updates and a multi-line `usage/0`.
@@ -482,83 +533,6 @@ Out of scope:
 
 ## Open Questions
 
-1. **CA trust verification.** What's the actual mechanism for `bates
-   start`'s prerequisite "Caddy's local CA root certificate is
-   trusted" check? Options:
-   - Defer it entirely — assume idempotent `caddy trust` is enough,
-     skip a runtime check, and let users re-run `bates setup` if
-     browsers reject `bates.test`.
-   - Inspect the macOS keychain via `security find-certificate -c
-     "Caddy Local Authority" /Library/Keychains/System.keychain`.
-     Brittle across Caddy versions; likely good enough.
-   - Open an internal SSL handshake to a known port to verify.
-     Requires server-up which defeats the purpose of a pre-boot
-     check.
-
-   Recommended: defer. Caddy's trust step is fast and idempotent;
-   `bates setup` re-runs it. A failed-trust scenario surfaces as a
-   browser warning, not a Bates crash.
-
-2. **Where do prerequisite checks live in the supervision tree?** Two
-   options after movement out of `Bates.Caddy.init/1`:
-   - Run only from `bates start` (before
-     `Application.ensure_all_started`). `mix phx.server` users skip
-     them. Caddy's `init/1` no longer guards.
-   - Run from both — `bates start` for fail-fast UX, and
-     `Caddy.init/1` as a defensive fallback that logs warnings (today's
-     behavior).
-
-   Recommended: option 2. Cheap to keep both. The Caddy fallback
-   exists for the `mix phx.server` development path that we don't
-   want to break.
-
-3. **Output on success for `bates up` / `down` / `restart`.** Three
-   styles in play:
-   - Silent on success (Unix tradition). User checks exit code.
-   - One-line stderr `bates: started myapp` (matches `bates env` cold-
-     boot behavior).
-   - One-line stdout `myapp: up`.
-
-   Recommended: option 2 for `up`, option 1 (silent) for `down` and
-   `restart`. Asymmetric, but `up` is the only one with an obvious
-   "I just did something noticeable" outcome (and the precedent from
-   `bates env`).
-
-4. **Status output when no apps are configured.** Three options:
-   - Print headers only.
-   - Print `No applications configured.` to stderr, exit 0.
-   - Print `No applications configured.` to stderr, exit 1.
-
-   Recommended: option 1. Headers-only is the most script-friendly
-   and matches `ls` on an empty directory (silent, exit 0).
-
-5. **`bates setup` and a hand-edited `/etc/resolver/test`.** If the
-   file exists but doesn't contain `nameserver 127.0.0.1`, what
-   should `setup` do?
-   - Refuse and exit non-zero with a diagnostic (proposed behavior).
-   - Append the line.
-   - Overwrite.
-
-   Recommended: option 1. Resolver files are typically tiny; if a
-   user has customized theirs, silently overwriting is hostile.
-
-6. **Concurrent `bates start` invocations.** What's the failure mode
-   when Bates is already running and the user runs `bates start`
-   again? The Phoenix endpoint will fail to bind port 4080 and the
-   supervision tree will crash on init. Should we add a
-   "Bates is already running" probe via the JSON API before booting,
-   to give a clean error?
-
-   Recommended: yes — a quick `GET /status` against `bates.test` with
-   a short timeout before booting. If it succeeds, exit non-zero with
-   `Bates is already running.`. Cheap, mirrors the inverse check the
-   control commands do.
-
-7. **Argv parser.** Today the dispatcher pattern-matches argv lists.
-   For `--config <path>` we need at least minimal flag parsing.
-   - Use `OptionParser.parse/2` (stdlib).
-   - Hand-roll argv splitting in `Bates.CLI.Start`.
-
-   Recommended: `OptionParser`. It's stdlib, free, and saves us from
-   writing a worse one. Keep the dispatcher itself argv-list-based;
-   `Start.run/1` is the only command with flags in v1.
+None remaining. All seven of the original open questions were
+resolved during the 2026-05-01 refinement Q&A and folded into the
+**Decided** section above.
