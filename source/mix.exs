@@ -35,6 +35,7 @@ defmodule Bates.MixProject do
       {:phoenix_live_view, "~> 1.0"},
       {:phoenix_pubsub, "~> 2.1"},
       {:toml, "~> 0.6"},
+      {:bypass, "~> 2.1", only: :test},
       {:lazy_html, ">= 0.1.0", only: :test}
     ]
   end
