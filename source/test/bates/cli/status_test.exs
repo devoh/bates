@@ -7,13 +7,21 @@ defmodule Bates.CLI.StatusTest do
 
   setup do
     bypass = Bypass.open()
-    Application.put_env(:bates, :api_base_url, "http://localhost:#{bypass.port}")
+
+    Application.put_env(
+      :bates,
+      :api_base_url,
+      "http://localhost:#{bypass.port}"
+    )
+
     on_exit(fn -> Application.delete_env(:bates, :api_base_url) end)
     {:ok, bypass: bypass}
   end
 
   describe "run/0" do
-    test "renders headers only when no processes are configured", %{bypass: bypass} do
+    test "renders headers only when no processes are configured", %{
+      bypass: bypass
+    } do
       Bypass.expect_once(bypass, "GET", "/status", fn conn ->
         conn
         |> Plug.Conn.put_resp_content_type("application/json")
@@ -28,7 +36,8 @@ defmodule Bates.CLI.StatusTest do
 
     test "renders a single-service app as one row", %{bypass: bypass} do
       Bypass.expect_once(bypass, "GET", "/status", fn conn ->
-        body = ~s({"processes":[{"name":"api","status":"down","services":[{"name":"api","hostname":"api.test","status":"down","port":null}]}]})
+        body =
+          ~s({"processes":[{"name":"api","status":"down","services":[{"name":"api","hostname":"api.test","status":"down","port":null}]}]})
 
         conn
         |> Plug.Conn.put_resp_content_type("application/json")
@@ -108,16 +117,36 @@ defmodule Bates.CLI.StatusTest do
           "name" => "myapp",
           "status" => "up",
           "services" => [
-            %{"name" => "web", "hostname" => "myapp.test", "status" => "up", "port" => 52341},
-            %{"name" => "vite", "hostname" => "vite.myapp.test", "status" => "up", "port" => 52342},
-            %{"name" => "worker", "hostname" => nil, "status" => "up", "port" => nil}
+            %{
+              "name" => "web",
+              "hostname" => "myapp.test",
+              "status" => "up",
+              "port" => 52341
+            },
+            %{
+              "name" => "vite",
+              "hostname" => "vite.myapp.test",
+              "status" => "up",
+              "port" => 52342
+            },
+            %{
+              "name" => "worker",
+              "hostname" => nil,
+              "status" => "up",
+              "port" => nil
+            }
           ]
         },
         %{
           "name" => "api",
           "status" => "down",
           "services" => [
-            %{"name" => "api", "hostname" => "api.test", "status" => "down", "port" => nil}
+            %{
+              "name" => "api",
+              "hostname" => "api.test",
+              "status" => "down",
+              "port" => nil
+            }
           ]
         }
       ]

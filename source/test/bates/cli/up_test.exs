@@ -7,7 +7,13 @@ defmodule Bates.CLI.UpTest do
 
   setup do
     bypass = Bypass.open()
-    Application.put_env(:bates, :api_base_url, "http://localhost:#{bypass.port}")
+
+    Application.put_env(
+      :bates,
+      :api_base_url,
+      "http://localhost:#{bypass.port}"
+    )
+
     on_exit(fn -> Application.delete_env(:bates, :api_base_url) end)
     {:ok, bypass: bypass}
   end
@@ -28,7 +34,10 @@ defmodule Bates.CLI.UpTest do
     Bypass.expect_once(bypass, "POST", "/processes/myapp/start", fn conn ->
       conn
       |> Plug.Conn.put_resp_content_type("application/json")
-      |> Plug.Conn.resp(422, ~s({"name":"myapp","status":"crashed","reason":"boom"}))
+      |> Plug.Conn.resp(
+        422,
+        ~s({"name":"myapp","status":"crashed","reason":"boom"})
+      )
     end)
 
     stderr =
@@ -43,7 +52,10 @@ defmodule Bates.CLI.UpTest do
     Bypass.expect_once(bypass, "POST", "/processes/ghost/start", fn conn ->
       conn
       |> Plug.Conn.put_resp_content_type("application/json")
-      |> Plug.Conn.resp(404, ~s({"name":"ghost","status":"unknown","reason":"unknown application: ghost"}))
+      |> Plug.Conn.resp(
+        404,
+        ~s({"name":"ghost","status":"unknown","reason":"unknown application: ghost"})
+      )
     end)
 
     stderr =

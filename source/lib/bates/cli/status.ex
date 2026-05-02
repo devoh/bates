@@ -69,7 +69,10 @@ defmodule Bates.CLI.Status do
   defp hostname_to_string(value) when is_binary(value), do: value
 
   defp port_to_string(nil), do: @null
-  defp port_to_string(value) when is_integer(value), do: Integer.to_string(value)
+
+  defp port_to_string(value) when is_integer(value),
+    do: Integer.to_string(value)
+
   defp port_to_string(value) when is_binary(value), do: value
 
   defp column_widths(rows) do

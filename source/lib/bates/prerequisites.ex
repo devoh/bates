@@ -37,8 +37,7 @@ defmodule Bates.Prerequisites do
     if File.exists?(@resolver_path) do
       :ok
     else
-      {:error,
-       "#{@resolver_path} not found. Run `bates setup` to create it."}
+      {:error, "#{@resolver_path} not found. Run `bates setup` to create it."}
     end
   end
 end

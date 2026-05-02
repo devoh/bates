@@ -14,11 +14,13 @@ log output to stdout. Ctrl-C shuts everything down.
 
 Before starting, checks that system prerequisites are in place:
 
-1. `/etc/resolver/test` exists (DNS resolution for `*.test`).
-2. Caddy's local CA root certificate is trusted (SSL termination).
+1. `caddy` is on `$PATH`.
+2. `/etc/resolver/test` exists (DNS resolution for `*.test`).
 
 If either check fails, prints a message pointing to `bates setup`
 and exits. Bates does not attempt to fix prerequisites automatically.
+Caddy's local CA root certificate trust is set up during `bates
+setup`, not gated here.
 
 #### Options
 

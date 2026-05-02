@@ -5,7 +5,13 @@ defmodule Bates.CLI.ClientTest do
 
   setup do
     bypass = Bypass.open()
-    Application.put_env(:bates, :api_base_url, "http://localhost:#{bypass.port}")
+
+    Application.put_env(
+      :bates,
+      :api_base_url,
+      "http://localhost:#{bypass.port}"
+    )
+
     on_exit(fn -> Application.delete_env(:bates, :api_base_url) end)
     {:ok, bypass: bypass}
   end
