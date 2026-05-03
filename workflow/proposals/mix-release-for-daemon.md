@@ -2,18 +2,19 @@
 
 **Status:** Draft
 **Date:** 2026-05-02
+**Refined:** 2026-05-03
 **Author:** Tyler + Claude
-**Origin:** Hand-test of `bates start` (PR [#31](https://github.com/tylerhunt/bates/pull/31)) failed with an `erlexec` priv-dir lookup error. Follow-up to the accepted [Add CLI Commands proposal](accepted/2026-05-01-add-cli-commands.md).
+**Origin:** Hand-test of `bates start` (PR [#31](https://github.com/tylerhunt/bates/pull/31), since merged) failed with an `erlexec` priv-dir lookup error. Supersedes the `bates start` portions of the accepted [Add CLI Commands proposal](accepted/2026-05-01-add-cli-commands.md).
 
 ## Summary
 
-Split the `bates` binary in two. Keep `bates` as an escript for the control commands (`env`, `status`, `up`, `down`, `restart`, `setup`) — they need fast cold-start and only speak HTTP to a running daemon. Ship the daemon (`bates start`) as a Mix release named `batesd`, which embeds ERTS and includes priv directories, so `erlexec` can find its `exec-port` C binary at runtime.
+Split the `bates` binary in two. Keep `bates` as an escript for the control commands (`env`, `status`, `up`, `down`, `restart`, `setup`) — they need fast cold-start and only speak HTTP to a running daemon. Ship the daemon as a Mix release named `batesd`, which embeds ERTS and includes priv directories so `erlexec` can find its `exec-port` C binary at runtime.
 
-`bates start` keeps its current user-facing contract — it's still `bates start [--config <path>]` — but its implementation becomes a thin `:os.execvp` into the `batesd` release binary that lives next to it on disk.
+The merged `bates start` subcommand is removed. Users invoke `batesd` directly to start the server. Eventually a follow-up proposal will install a launchd job via `bates setup` so users don't run `batesd` by hand in normal use, but that is explicitly out of scope here.
 
 ## Problem
 
-The just-shipped `bates start` command (PR #31, Phase 4 of the Add-CLI-Commands plan) does not work outside of `mix phx.server`. Hand-testing the built escript exposes the failure:
+The merged `bates start` command (PR #31, Phase 4 of the Add-CLI-Commands plan) does not work outside of `mix phx.server`. Hand-testing the built escript exposes the failure:
 
 ```
 $ ./bates start
@@ -41,11 +42,11 @@ The audit framed it as a startup-mechanism issue. It's actually a packaging issu
 
 ## What This Unlocks
 
-1. **`bates start` actually works** as a built binary, not just under `mix phx.server`.
-2. **A real distribution story.** Mix releases produce `batesd` as a self-contained tree (`bin/batesd`, `releases/`, `lib/`, ERTS) that a Homebrew formula can install to `Cellar/bates/<vsn>/` directly.
-3. **No lock-in to a third-party tool.** `mix release` is core OTP. No Burrito, no Bakeware, no Zig. We can revisit those later if we want single-file distribution.
+1. **The daemon actually works** as a built artifact, not just under `mix phx.server`.
+2. **A real distribution story.** Mix releases produce `batesd` as a self-contained tree (`bin/batesd`, `releases/`, `lib/`, ERTS). A future Homebrew formula can install it without depending on the user having Erlang for the daemon side.
+3. **No lock-in to a third-party tool.** `mix release` is core OTP. No Burrito, no Bakeware, no Zig.
 4. **The escript stays fast.** `bates env myapp` keeps its ~200ms cold-start. `eval "$(bates env myapp)"` in a `.envrc` is still cheap.
-5. **Clear separation of concerns.** Control commands speak HTTP; the daemon owns OTP boot. The broken layering that POC #2 exposed (escript trying to start the OTP tree) goes away.
+5. **Clear separation of concerns.** Control commands speak HTTP; the daemon owns OTP boot. The broken layering that POC #2 exposed — an escript trying to start the OTP tree — goes away because there is no `bates start` anymore.
 
 ---
 
@@ -59,15 +60,12 @@ The audit framed it as a startup-mechanism issue. It's actually a packaging issu
 - `source/mix.exs:17-22` — `application/0` already declares `mod: {Bates.Application, []}`. Reused by the release.
 - `source/mix.exs:28-41` — `deps/0`. erlexec is `{:erlexec, "~> 2.3"}`. Stays.
 
-**The daemon entrypoint that's currently broken:**
+**Code that must come out (merged in PR #31):**
 
-- `source/lib/bates/cli/start.ex:1-85` — the new `Bates.CLI.Start.run/1` shipped in PR #31. Currently:
-  1. Parses `--config` with `OptionParser`.
-  2. Verifies prerequisites (`Bates.Prerequisites.verify/0`).
-  3. Probes `/status` via `Bates.CLI.Client.get/2`.
-  4. Calls `Application.ensure_all_started(:bates)` — **fails here** because erlexec can't start.
-  5. `Process.sleep(:infinity)`.
-  This module will be rewritten as a thin shim that exec's the release.
+- `source/lib/bates/cli/start.ex` — the broken `Bates.CLI.Start.run/1` module. Delete.
+- `source/lib/bates/cli.ex` — the `start` clause of `dispatch/1` and the `start` line in `usage/0`. Remove.
+- `source/test/bates/cli/start_test.exs` — argv parsing tests for the doomed module. Delete.
+- `specs/cli.md` — the `### \`bates start\`` section. Remove.
 
 **Daemon supervision tree (no changes — runs the same way under the release):**
 
@@ -76,16 +74,16 @@ The audit framed it as a startup-mechanism issue. It's actually a packaging issu
 - `source/lib/bates/caddy.ex` — owns the Caddy reverse-proxy process via `:exec.run_link/2`.
 - `source/lib/bates/config.ex` — already reads its path from `Application.get_env(:bates, :config_path, ...)`. The release inherits this.
 
-**Dispatcher and tests already in place:**
+**Reusable from PR #31:**
 
-- `source/lib/bates/cli.ex` — escript dispatcher with clauses for all seven subcommands. The `start` clause stays; only `Bates.CLI.Start`'s body changes.
-- `source/test/bates/cli/start_test.exs` — argv parsing tests. Stays. The `Application.ensure_all_started/1` happy path was already documented as out-of-scope for unit tests.
+- `source/lib/bates/prerequisites.ex` — `Bates.Prerequisites.verify/0`. Now invoked from `Bates.Application.start/2` instead of the escript.
+- `source/lib/bates/cli/client.ex`, `source/lib/bates/cli/{up,down,restart,status,env,setup}.ex` — untouched. The control commands are correct.
 
 **Existing architectural references:**
 
-- `specs/cli.md` — the contract for all subcommands. Mostly unchanged; `bates start` keeps its public surface.
-- `specs/system-overview.md` — needs a paragraph on the two-binary topology.
-- `README.md` — install instructions are currently "clone the repo, run `mix phx.server`." Will need a Homebrew section.
+- `specs/cli.md` — the contract for the six remaining control subcommands. Stays mostly intact.
+- `specs/system-overview.md` — needs a paragraph on the two-binary topology and the fact that `batesd` is the entry point for the server.
+- `README.md` — install/run instructions get a section on building and running `batesd`.
 
 ---
 
@@ -93,36 +91,47 @@ The audit framed it as a startup-mechanism issue. It's actually a packaging issu
 
 ### Two binaries
 
-| Binary    | Built by              | Contains                          | Purpose                              |
-|-----------|----------------------|-----------------------------------|--------------------------------------|
-| `bates`   | `mix escript.build`   | `.beam` archive only              | Control commands. Fast cold-start.   |
+| Binary    | Built by                          | Contains                            | Purpose                              |
+|-----------|-----------------------------------|-------------------------------------|--------------------------------------|
+| `bates`   | `mix escript.build`               | `.beam` archive only                | Control commands. Fast cold-start.   |
 | `batesd`  | `MIX_ENV=prod mix release batesd` | ERTS, all `.beam`, all `priv/` dirs | The daemon. Boots the OTP tree.      |
 
 Both binaries share the same source tree and the same `Bates.*` modules. The split is purely a packaging boundary.
 
-### How `bates start` works
+### How users start the server
 
-`Bates.CLI.Start.run/1` becomes a shim:
+Users run `batesd` directly:
 
-1. Parse argv as today (keep `--config <path>` validation).
-2. Verify prerequisites (`Bates.Prerequisites.verify/0`) — escript-side, fast, no OTP needed.
-3. Probe `/status` (already-running check) — escript-side, fast.
-4. Locate `batesd` on disk (see *Discovery* below).
-5. `:os.execvp("batesd", forwarded_argv)` — the escript process is replaced by the release process; signal handling, stdout/stderr, and the controlling TTY pass through unchanged.
+```
+$ batesd
+$ batesd --config /path/to/config.toml
+```
 
-Steps 2 and 3 staying in the escript means **fast failure**: missing `caddy` or an already-running daemon doesn't pay the ERTS-startup tax (~500-1000ms). It also means the user-facing error messages and exit codes (defined in PR #31's acceptance criteria) don't move.
+`batesd` is a foreground process. Logs stream to stdout. Ctrl-C shuts it down cleanly. No subcommand — the bare command name is the verb.
 
-Step 5's `execvp` is the simplest hand-off semantics: from the user's perspective `bates start` *is* the daemon process. Ctrl-C goes to ERTS, not the escript. There's no "escript watching a release" problem.
+There is no `bates start` wrapper. The `bates` escript no longer attempts to boot the OTP tree under any code path; it only speaks HTTP.
 
-### `batesd` discovery
+A future proposal will add `bates setup`-managed launchd integration so `batesd` is supervised by the system in normal use. Until then, users invoke it manually (typically via a terminal window or a tmux pane).
 
-The escript needs to find the release binary. Three lookup strategies, tried in order:
+### `batesd` flags
 
-1. **`BATES_DAEMON` env var** if set — explicit override for development and packagers.
-2. **Sibling lookup:** if the escript is at `<prefix>/bin/bates`, try `<prefix>/bin/batesd`. This is what Homebrew gives us (`/opt/homebrew/bin/bates` → `/opt/homebrew/bin/batesd`).
-3. **`$PATH` lookup** as the final fallback. If `batesd` is on the path, use it.
+| Flag              | Default                            | Behavior |
+|-------------------|------------------------------------|----------|
+| `--config <path>` | `~/.config/bates/config.toml`      | Path to the configuration file. |
 
-If none of these resolve, print a diagnostic to stderr explaining that the daemon binary couldn't be found and exit 2.
+Same default and parsing semantics as the doomed `bates start` had. Argv is parsed in the application start callback (see *Entry point* below) before the supervision tree boots.
+
+No `--no-prereq-check`, no `--port`, no `--detach`, no `--log-level`. Keep the surface minimal until a real caller asks for more.
+
+### Entry point
+
+Boot sequence inside `Bates.Application.start/2`:
+
+1. Parse `System.argv()` for `--config <path>` (default `~/.config/bates/config.toml`). Set `:bates, :config_path` via `Application.put_env/3`.
+2. Run `Bates.Prerequisites.verify/0`. On failure, write the existing diagnostic to stderr and exit non-zero. Same error messages as PR #31's escript path.
+3. Build and return the supervision spec. Caddy and the Endpoint bind their ports here; if 443 is already taken (another `batesd` running, another web server, etc.), Bandit's `:eaddrinuse` propagates as a startup failure with a clear message. We rely on this rather than a separate "already running" probe — the OS error is authoritative.
+
+This logic runs identically under `mix phx.server` (which calls `start/2`) and under `bin/batesd` (the release launcher). Test runs are unaffected because `mix test` doesn't invoke `start/2`.
 
 ### Release configuration
 
@@ -138,121 +147,122 @@ def project do
         version: "0.1.0",
         applications: [bates: :permanent],
         include_executables_for: [:unix],
-        steps: [:assemble, :tar]
+        steps: [:assemble]
       ]
     ]
   ]
 end
 ```
 
-This produces:
+No `rel/env.sh.eex` or `rel/vm.args.eex` templates — defaults are fine.
 
-- `source/_build/prod/rel/batesd/` — the release tree.
-- `source/_build/prod/rel/batesd/bin/batesd` — the launcher script.
-- `source/_build/prod/batesd-0.1.0.tar.gz` — packageable artifact.
+### Overlay to make `batesd` the command
 
-The release boots `Bates.Application` — same supervision tree as today. No code changes to the supervision tree, `Bates.App`, `Bates.Caddy`, or anything downstream.
+`mix release` generates `bin/batesd` as a multi-subcommand launcher (`batesd start`, `batesd daemon`, `batesd remote`, etc.). We don't want subcommands.
 
-### Build, install, and run
+A release overlay at `source/rel/overlays/bin/batesd` overrides the generated launcher with a thin script that always runs the foreground start path:
 
-**Local development (now):**
-
-```bash
-cd source
-mix deps.get
-mix escript.build              # produces source/bates
-MIX_ENV=prod mix release batesd  # produces source/_build/prod/rel/batesd/bin/batesd
+```sh
+#!/bin/sh
+# Override of mix release's generated bin/batesd launcher.
+# We expose a single foreground command, not a subcommand dispatcher.
+exec "$(dirname "$0")/batesd-release" start "$@"
 ```
 
-For development, set `BATES_DAEMON=$(pwd)/_build/prod/rel/batesd/bin/batesd` so the escript can find the release. (Or symlink both binaries into a directory on `$PATH` — see the Homebrew layout below.)
+(`batesd-release` is the renamed mix-generated launcher, achieved via a build-time `cp`/`mv` step or a custom `:steps` callback. Exact mechanics get nailed down in the plan.)
 
-**Distribution (eventually):**
-
-A Homebrew formula installs both binaries side by side under one prefix:
-
-```
-/opt/homebrew/Cellar/bates/0.1.0/
-  bin/
-    bates          # escript — symlinked to /opt/homebrew/bin/bates
-    batesd         # release launcher — symlinked to /opt/homebrew/bin/batesd
-  libexec/
-    batesd/        # release tree (releases/, lib/, erts-*/)
-```
-
-The formula is out of scope for this proposal — it lives in a separate `homebrew-bates` tap. But the on-disk layout above is what this work needs to enable.
+The user-facing surface is `batesd [--config <path>]`. The mix-release start subcommand is an implementation detail.
 
 ### What stays the same
 
-- All seven subcommands' user-facing contracts (output, exit codes, eval-safety of `bates env`).
-- The `specs/cli.md` contract.
+- All six remaining control subcommands' user-facing contracts (output, exit codes, eval-safety of `bates env`).
+- The `specs/cli.md` contract for those six.
 - The JSON API surface.
 - The supervision tree.
 - erlexec usage in `Bates.App` and `Bates.Caddy`.
-- `Bates.Prerequisites`, `Bates.CLI.Client`, the `:bates, :config_path` plumbing — all still load from the escript and the release.
+- `Bates.Prerequisites`, `Bates.CLI.Client`, the `:bates, :config_path` plumbing.
 
 ### What changes
 
+**Removals (cleanup of merged PR #31):**
+
+- Delete `source/lib/bates/cli/start.ex`.
+- Delete `source/test/bates/cli/start_test.exs`.
+- Remove the `start` clause from `Bates.CLI.dispatch/1` in `source/lib/bates/cli.ex`.
+- Remove the `start` line from `Bates.CLI.usage/0` in `source/lib/bates/cli.ex`.
+- Remove the `### \`bates start\`` section from `specs/cli.md`.
+
+**Additions:**
+
 - `source/mix.exs` — add `releases:` keyword.
-- `source/lib/bates/cli/start.ex` — rewrite from "boot OTP" to "exec batesd".
-- `source/test/bates/cli/start_test.exs` — drop the boot-path tests, add tests for `batesd` discovery (env var, sibling, PATH, missing).
-- `specs/cli.md` — note that `bates start` execs the daemon binary; document the discovery order and `BATES_DAEMON` override.
-- `specs/system-overview.md` — add a brief two-binary topology paragraph.
-- `README.md` — replace "run `mix phx.server`" with the dual-binary build steps until the Homebrew formula lands.
-- New `.gitignore` entries for `_build/prod/rel/` if not already covered.
+- `source/rel/overlays/bin/batesd` — overlay script that exposes `batesd` as the foreground command.
+- `source/lib/bates/application.ex` — argv parsing + prereq check at the top of `start/2`.
+- `source/lib/bates/daemon.ex` (or similar) — small module owning argv parsing if `Bates.Application.start/2` becomes too large. Optional.
+- `source/test/bates/daemon_test.exs` — unit tests for `--config` parsing (including the default) and prereq exit paths.
+
+**Spec / doc updates:**
+
+- `specs/system-overview.md` — add a paragraph on the two-binary topology and that `batesd` is the server entry point.
+- `specs/cli.md` — remove `bates start`. Possibly add a short note pointing at `batesd` as the way to start the server.
+- New `specs/batesd.md` (or section in `specs/system-overview.md`) — document `batesd` flags, prereq behavior, log streaming, signal handling.
+- `README.md` — replace `mix phx.server` with the dual-binary build steps (`mix escript.build` + `mix release batesd`) and the run instructions for `batesd`.
+- `.gitignore` — add `_build/prod/rel/` if not already covered.
 
 ---
 
 ## Scope
 
-- **Build:** add `releases:` config; document `mix release batesd` in the README; ensure CI builds both binaries.
-- **CLI:** rewrite `Bates.CLI.Start.run/1` as a discovery + `execvp` shim. Keep argv parsing, prereq check, and already-running probe escript-side.
-- **Tests:** unit tests for the discovery order; remove the now-irrelevant "ensure_all_started" path comments.
-- **Specs:** `specs/cli.md` and `specs/system-overview.md` updates.
-- **Docs:** `README.md` install/build section.
-- **Out of scope:** the Homebrew formula itself (separate repo / future PR), Linux support, Windows support, signed/notarized binaries.
+- **Cleanup:** delete the merged `Bates.CLI.Start` module, its dispatcher clause, its test file, its spec section, and its usage line.
+- **Build:** add `releases:` config to `source/mix.exs`; add `rel/overlays/bin/batesd`; document `mix release batesd` in the README.
+- **Daemon:** move prereq check + argv parsing into `Bates.Application.start/2` (or a small `Bates.Daemon` helper called from `start/2`).
+- **Tests:** add `daemon_test.exs` covering argv parsing and prereq exit paths.
+- **Specs:** update `specs/cli.md` (remove `bates start`), update `specs/system-overview.md` (two-binary topology), add `batesd` documentation.
+- **Docs:** `README.md` install/build/run section.
+- **Out of scope:** Homebrew formula (separate follow-up proposal once `mix release` artifacts exist), launchd integration (separate v2 proposal), Linux support, Windows support, signed/notarized binaries.
 
 ---
 
 ## Design Principles
 
-- **Don't break what just shipped.** PR #31's nine refactor commits stay. The shared `Bates.CLI.Client`, `Bates.Prerequisites`, app-env config path, dispatcher updates, and `specs/cli.md` reconciliation are correct and reused. This proposal changes only the *packaging* of `bates start`.
-- **No new third-party packaging deps.** Plain `mix release`. No Burrito, no Bakeware, no Zig. `mix release` is core OTP and well-trodden.
-- **Two binaries, one user model.** Users still type `bates start`. The fact that it execs into `batesd` is an implementation detail, surfaced in the spec and in error messages but not in normal flow.
-- **Fail fast in the escript.** Cheap checks (prereqs, already-running) stay escript-side. ERTS startup only happens on the success path.
-- **Discoverability over magic.** `BATES_DAEMON` env var first, then sibling, then `$PATH`. Each step is explainable in a short error message when discovery fails.
-- **Treat the CLI ↔ JSON API boundary as portable.** The `bates` escript is a candidate for a future rewrite in a non-BEAM language (Go, Rust) to remove the system Erlang dependency and enable single-binary `curl | sh` distribution. Implementation work in this proposal — and follow-on CLI work — should respect that boundary: keep control commands as thin HTTP clients; don't push daemon-side logic into CLI modules; don't introduce BEAM-specific runtime requirements in control commands. `bates setup` may shell out (`sudo`, `caddy trust`), and `bates start`'s `:os.execvp` shim is portable to `syscall.Exec` in any language. Anything that requires Elixir/OTP belongs in `batesd`.
+- **Don't break what works.** PR #31's other commits — `Bates.CLI.Client`, `Bates.Prerequisites`, the app-env config plumbing, the dispatcher consolidation, the six working subcommands — stay. This proposal removes only the broken `bates start` artifacts and adds the daemon binary.
+- **No new third-party packaging deps.** Plain `mix release`. No Burrito, no Bakeware, no Zig.
+- **One verb per binary.** `bates` is for control. `batesd` is for the server. No subcommand maze on either.
+- **The OS is authoritative.** Rely on port-bind failure for "already running" detection rather than an HTTP self-probe. Fewer round-trips, no false positives, no race window.
+- **Prereqs gate the daemon, not the control commands.** The control commands assume the daemon is up; if it isn't, they emit their own "Bates is not running" message. The daemon owns the system-prereq check because the daemon is what actually requires `caddy` and the resolver file.
+- **Treat the CLI ↔ JSON API boundary as portable.** The `bates` escript is a candidate for a future rewrite in a non-BEAM language (Go, Rust) to remove the system Erlang dependency. Implementation work in this proposal — and follow-on CLI work — should respect that boundary: keep control commands as thin HTTP clients; don't push daemon-side logic into CLI modules; don't introduce BEAM-specific runtime requirements in control commands. `bates setup` may shell out (`sudo`, `caddy trust`). Anything that requires Elixir/OTP belongs in `batesd`.
+
+---
+
+## Decided
+
+Captured during the 2026-05-03 refinement pass:
+
+1. **launchd integration** — defer to a v2 proposal. This proposal ships direct `batesd` invocation only.
+2. **PR #31 cleanup** — already merged. This proposal's execution removes the broken `bates start` artifacts from master.
+3. **`batesd` flags** — `--config <path>` only, default `~/.config/bates/config.toml`. No `--no-prereq-check` or other flags in v1.
+4. **Already-running probe** — dropped. `batesd` fails naturally on port-bind conflict; the OS error is authoritative.
+5. **Prereq check** — lives in `batesd` startup (top of `Bates.Application.start/2`), before the supervision tree boots.
+6. **Homebrew packaging** — out of scope. Follow-up proposal once `mix release` artifacts exist.
+7. **Release configuration** — defined inline in `source/mix.exs`'s `releases:` keyword. No `rel/env.sh.eex` or `rel/vm.args.eex` templates for v1.
+8. **Entry point** — `Bates.Application.start/2` reads `System.argv()` for `--config` and runs the prereq check. A release overlay at `source/rel/overlays/bin/batesd` overrides the generated launcher so the user-facing command is `batesd` (no subcommand).
+9. **Logging** — unchanged from `bates start`. Foreground BEAM, Logger to stdout, Ctrl-C shuts down.
+10. **Tests** — delete merged `start_test.exs`. Add `daemon_test.exs` covering argv parsing and prereq exit paths. Release boot itself is manual smoke-test territory (acceptance criterion in the plan).
 
 ---
 
 ## Open Questions
 
-1. **`mix release` env vs. `MIX_ENV=prod`.** The release should be built with `MIX_ENV=prod` for compile-time pruning of test code. This is the standard practice but worth being explicit about in the README and CI.
+1. **Where does argv parsing live — directly in `Bates.Application.start/2` or in a dedicated `Bates.Daemon` module called from `start/2`?** Either works. A separate module is cleaner if argv parsing grows beyond `--config`. Recommend deciding during plan creation based on how big the parser turns out to be.
 
-2. **`batesd` vs `bates-daemon` vs `bates-server`.** `batesd` is the BSD-style convention (`sshd`, `httpd`, `caddy`). It's short and idiomatic for a long-running process. The alternative — making `batesd` an internal-only binary the user never types directly — is also valid but more magical.
+2. **Overlay mechanics for renaming the generated `bin/batesd`.** The overlay needs to either (a) rename the mix-generated launcher to `batesd-release` via a custom `:steps` callback before the overlay drops in, or (b) put the overlay at a different path and have the overlay invoke the original via its known relative location. Defer the exact mechanism to plan-creation time — this is a small implementation detail, not an architectural decision.
 
-3. **Homebrew layout: `bin/batesd` exposed or hidden?** Two choices:
-   - **Exposed** (`bin/batesd` symlinked to `$PATH`): users could run `batesd --config ...` directly, bypassing the escript. Documented as an advanced path. Simpler install.
-   - **Hidden** (`libexec/batesd/bin/batesd`): only `bates` is on `$PATH`. The escript discovers the release via a known relative path. Cleaner but requires a more elaborate install layout and one extra hop in `:os.execvp`.
-
-   Recommend **exposed** for v1 — fewer moving parts, advanced users can use it directly, the escript still works.
-
-4. **Argv pass-through to `batesd`.** `bates start --config /path/to/foo.toml` becomes `:os.execvp("batesd", ["start", "--config", "/path/to/foo.toml"])` — but the release's CLI doesn't have a `start` subcommand of its own. Two paths:
-   - The release uses `mix release`'s default startup (`bin/batesd start` is the launcher convention) and `--config` is parsed inside `Bates.Application.start/2` via OS env (`BATES_CONFIG_PATH`).
-   - The release wraps a custom Elixir entry that re-parses argv.
-
-   Recommend the env-var path: simpler, matches release conventions, and the `Application.put_env(:bates, :config_path, ...)` call moves to `Bates.Application.start/2` reading from `System.get_env("BATES_CONFIG_PATH")`. The escript sets the env var before exec'ing.
-
-5. **Versioning the release.** Today `mix.exs` has `version: "0.1.0"`. The release should pin to the same version. When we cut releases, we bump `mix.exs` and rebuild both binaries. No independent versioning between escript and release — they're tested as a pair.
-
-6. **Test environment.** The release should not be built or required during `mix test`. Tests run against the source tree as today. The release is a packaging concern, not a test concern.
-
-7. **Should `bates start` still print "Bates is already running" / prereq diagnostics from the escript, or should they move into the release?** Recommend escript: failing fast without ERTS startup is a real UX win, and these checks are pure data (HTTP probe + file/path checks). They don't need OTP.
+3. **Does `mix test` need any changes?** Tests today don't call `start/2`. Adding argv parsing + prereq check to `start/2` shouldn't affect tests, but worth verifying during plan execution. If a test path does call `start/2` (e.g. integration tests via `Application.ensure_all_started`), the prereq check needs to be skippable in `:test` env — likely via an internal `if Mix.env() == :test` guard, but confirm before writing it that way.
 
 ---
 
 ## Risks and Mitigations
 
-- **`:os.execvp` semantics on macOS:** confirmed it's a standard POSIX call; signals, stdout/stderr, controlling TTY all hand off correctly. Verify in Phase 1 hand-test.
-- **Release size:** ~30-40MB including ERTS. For a local dev tool this is fine. Worth noting in the README.
-- **"Two binaries" install confusion:** mitigated by Homebrew (one `brew install bates` installs both). For the source-build path, the README documents the two `mix` commands.
-- **Stale `batesd` after `bates` upgrade:** if a user has both binaries on disk but the escript is newer than the release, behavior is undefined. Mitigation: the escript and release are versioned together (same `mix.exs` version field) and the Homebrew formula upgrades them atomically.
+- **Release size:** ~30-40MB including ERTS. Fine for a local dev tool. Worth noting in the README.
+- **Two-step build:** `mix escript.build` and `mix release batesd` are separate commands. README must document both. Consider a `mix bates.build` task that runs both in sequence as a quality-of-life follow-up.
+- **Users running multiple `batesd` instances by accident:** mitigated by the port-bind failure; second instance exits with a clear error from Bandit. Pretty close to a no-op risk in practice.
+- **Removing `bates start` from a recently merged PR:** small churn cost. The alternative (keep a broken command around indefinitely) is worse. The plan should land on master with a clear "supersedes the `bates start` portion of PR #31" note in the commit message.
