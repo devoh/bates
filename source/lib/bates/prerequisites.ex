@@ -1,16 +1,16 @@
 defmodule Bates.Prerequisites do
   @moduledoc """
-  System prerequisite checks gating `bates start`.
+  System prerequisite checks gating `batesd` startup.
 
   Today this covers the Caddy executable being on `$PATH` and the
   presence of `/etc/resolver/test`. Caddy's CA-trust step is no longer
-  a `bates start` prereq — it lives in `bates setup`.
+  a `batesd` prereq — it lives in `bates setup`.
   """
 
   @resolver_path "/etc/resolver/test"
 
   @doc """
-  Verifies all `bates start` prerequisites.
+  Verifies all `batesd` prerequisites.
 
   Returns `:ok` if every check passes, otherwise `{:error, reason}`
   with a user-facing message describing the first failure.

@@ -1,6 +1,6 @@
 defmodule Bates.CLI.Setup do
   @moduledoc """
-  One-time system setup for `bates start`.
+  One-time system setup for `batesd`.
 
   Two steps, both idempotent:
 

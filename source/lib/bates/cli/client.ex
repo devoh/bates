@@ -62,7 +62,7 @@ defmodule Bates.CLI.Client do
 
   @doc false
   def not_running_message,
-    do: "Bates is not running. Start it with: bates start"
+    do: "Bates is not running. Start it with: batesd"
 
   @doc false
   def ensure_apps do
