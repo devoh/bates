@@ -94,10 +94,18 @@ The on-demand startup flow (app not running):
 
 ### CLI
 
-The command-line interface for launching and interacting with Bates.
-`bates start` runs the server in the foreground. Control commands
-(`status`, `up`, `down`, `restart`) communicate with the running server
-via the JSON API.
+Bates ships two binaries:
+
+- `batesd` is the server. It boots the OTP supervision tree, runs
+  Caddy as a managed child process, and serves the JSON API and
+  dashboard. Users invoke it directly in the foreground. It is built
+  as a Mix release so `erlexec`'s native `priv/exec-port` binary is
+  available at runtime.
+- `bates` is a thin client for control commands. `bates env`,
+  `bates status`, `bates up`, `bates down`, `bates restart`, and
+  `bates setup` all speak to the running `batesd` over the JSON API
+  (except `bates setup`, which is standalone). It is built as an
+  escript so cold-start stays fast.
 
 See [CLI](cli.md).
 
