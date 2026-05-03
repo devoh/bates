@@ -1,32 +1,17 @@
 # CLI
 
-Bates provides a command-line interface for launching the server,
-managing applications, and performing system setup. Running `bates`
-with no arguments displays usage information.
+Bates ships two binaries. `batesd` is the server (a Mix release that
+boots the OTP supervision tree). `bates` is a thin client escript for
+managing applications and performing system setup against a running
+`batesd`. Running `bates` with no arguments displays usage
+information.
 
 ## Commands
 
-### `bates start`
-
-Starts the Bates server in the foreground. Launches the OTP
-supervision tree, starts Caddy, and begins streaming the interleaved
-log output to stdout. Ctrl-C shuts everything down.
-
-Before starting, checks that system prerequisites are in place:
-
-1. `caddy` is on `$PATH`.
-2. `/etc/resolver/test` exists (DNS resolution for `*.test`).
-
-If either check fails, prints a message pointing to `bates setup`
-and exits. Bates does not attempt to fix prerequisites automatically.
-Caddy's local CA root certificate trust is set up during `bates
-setup`, not gated here.
-
-#### Options
-
-| Flag | Description |
-|------|-------------|
-| `--config <path>` | Path to the configuration file. Defaults to `~/.config/bates/config.toml`. |
+The Bates server itself is a separate binary, `batesd`. The `bates`
+escript is a thin client for the control commands below; it does not
+boot the OTP tree. See [System Overview](system-overview.md) for the
+two-binary topology and [Daemon](#daemon) below for `batesd`'s flags.
 
 ### `bates setup`
 
@@ -125,6 +110,33 @@ eval "$(bates env myapp 2>/dev/null || true)"
 exports that changed since the shell loaded the file (for example,
 after a stop/start cycle assigned a fresh `PGPORT`).
 
+## Daemon
+
+The server is a separate binary named `batesd`, built as a Mix release
+(`MIX_ENV=prod mix release batesd`). It boots the OTP supervision
+tree, runs Caddy as a managed child process, and serves the JSON API
+and dashboard. Run it directly in a terminal — Ctrl-C shuts it down.
+
+Before bringing the supervision tree up, `batesd` checks that system
+prerequisites are in place:
+
+1. `caddy` is on `$PATH`.
+2. `/etc/resolver/test` exists (DNS resolution for `*.test`).
+
+If either check fails, `batesd` writes a diagnostic pointing at
+`bates setup` to stderr and exits with code 2. Bates does not attempt
+to fix prerequisites automatically. Caddy's local CA root certificate
+trust is set up during `bates setup`, not gated here.
+
+A future proposal will install a launchd job via `bates setup` so
+`batesd` is system-supervised; until then users invoke it manually.
+
+### Options
+
+| Flag | Description |
+|------|-------------|
+| `--config <path>` | Path to the configuration file. Defaults to `~/.config/bates/config.toml`. |
+
 ## Server Communication
 
 Control commands (`status`, `up`, `down`, `restart`, `env`)
@@ -132,22 +144,24 @@ communicate with the running server via the JSON API on `bates.test`.
 If the server is not running, they exit with a clear error message:
 
 ```
-Bates is not running. Start it with: bates start
+Bates is not running. Start it with: batesd
 ```
 
 ## Configuration
 
 The default configuration file location is
 `~/.config/bates/config.toml`. This can be overridden with the
-`--config` flag on `bates start`.
+`--config` flag on `batesd`.
 
 See [Process Management](process-management.md) for the configuration
 format.
 
 ## How It Connects
 
-- **`bates start`** launches the OTP application, which starts the
-  ProcessSupervisor, Caddy, and the control interface (Phoenix).
+- **`batesd`** is the server. It launches the OTP application, which
+  starts the ProcessSupervisor, Caddy, and the control interface
+  (Phoenix). Run it directly in a terminal; future versions will
+  install a launchd job via `bates setup`.
 - **`bates setup`** is standalone — it does not require the server
   to be running.
 - **Control commands** are thin wrappers around the JSON API defined in
