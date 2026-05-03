@@ -55,6 +55,48 @@ defmodule Bates.DaemonTest do
     end
   end
 
+  describe "apply_env/1" do
+    setup do
+      original = Application.get_env(:bates, :config_path)
+
+      on_exit(fn ->
+        if original do
+          Application.put_env(:bates, :config_path, original)
+        else
+          Application.delete_env(:bates, :config_path)
+        end
+      end)
+
+      :ok
+    end
+
+    test "without BATES_CONFIG_PATH leaves :bates, :config_path unchanged" do
+      Application.put_env(:bates, :config_path, "/from/argv.toml")
+      assert :ok = Daemon.apply_env(%{})
+      assert Application.get_env(:bates, :config_path) == "/from/argv.toml"
+    end
+
+    test "with empty BATES_CONFIG_PATH leaves :bates, :config_path unchanged" do
+      Application.put_env(:bates, :config_path, "/from/argv.toml")
+      assert :ok = Daemon.apply_env(%{"BATES_CONFIG_PATH" => ""})
+      assert Application.get_env(:bates, :config_path) == "/from/argv.toml"
+    end
+
+    test "with BATES_CONFIG_PATH expands and stores under :bates, :config_path" do
+      assert :ok =
+               Daemon.apply_env(%{"BATES_CONFIG_PATH" => "~/from-env.toml"})
+
+      assert Application.get_env(:bates, :config_path) ==
+               Path.expand("~/from-env.toml")
+    end
+
+    test "BATES_CONFIG_PATH overrides a previously argv-set config path" do
+      Application.put_env(:bates, :config_path, "/from/argv.toml")
+      assert :ok = Daemon.apply_env(%{"BATES_CONFIG_PATH" => "/from/env.toml"})
+      assert Application.get_env(:bates, :config_path) == "/from/env.toml"
+    end
+  end
+
   describe "verify_prerequisites/0" do
     test "returns the formatted prereq diagnostic when caddy is missing" do
       original_path = System.get_env("PATH")

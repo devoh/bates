@@ -20,6 +20,7 @@ defmodule Bates.Application do
     else
       with {:ok, opts} <- Daemon.parse_argv(System.argv()),
            :ok <- Daemon.apply_options(opts),
+           :ok <- Daemon.apply_env(),
            :ok <- Daemon.verify_prerequisites() do
         :ok
       else
