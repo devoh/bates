@@ -1,10 +1,10 @@
 # Mix Release for the Daemon — Proposal
 
-**Status:** Draft
+**Status:** Accepted
 **Date:** 2026-05-02
 **Refined:** 2026-05-03
 **Author:** Tyler + Claude
-**Origin:** Hand-test of `bates start` (PR [#31](https://github.com/tylerhunt/bates/pull/31), since merged) failed with an `erlexec` priv-dir lookup error. Supersedes the `bates start` portions of the accepted [Add CLI Commands proposal](accepted/2026-05-01-add-cli-commands.md).
+**Origin:** Hand-test of `bates start` (PR [#31](https://github.com/tylerhunt/bates/pull/31), since merged) failed with an `erlexec` priv-dir lookup error. Supersedes the `bates start` portions of the accepted [Add CLI Commands proposal](2026-05-01-add-cli-commands.md).
 
 ## Summary
 
