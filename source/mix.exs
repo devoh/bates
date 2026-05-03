@@ -68,13 +68,53 @@ defmodule Bates.MixProject do
     renamed = Path.join(bin, "batesd-orig")
     File.rename!(generated, renamed)
 
+    # The user-facing surface is `batesd [--config <path>]`. The
+    # mix-release `start` subcommand discards extra argv, and the
+    # generated `elixir` launcher's CLI mode interprets argv as
+    # `[script | args]` (so passing `--config` directly would make
+    # Elixir try to load `--config` as a script). Instead, the wrapper
+    # parses our flags in shell and exports them as environment
+    # variables that `Bates.Application.start/2` reads.
     wrapper = """
     #!/bin/sh
     # Thin wrapper installed by Bates' release `:steps` callback.
-    # Always invokes the foreground `start` subcommand of the generated
-    # mix-release launcher (`batesd-orig`). Users see a single command:
-    # `batesd [--config <path>]`.
-    exec "$(dirname "$0")/batesd-orig" start "$@"
+    # Translates `batesd [--config <path>]` into environment variables
+    # that the daemon reads, then execs the underlying mix-release
+    # launcher's foreground `start` subcommand.
+
+    set -e
+    DIR=$(dirname "$0")
+
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --config)
+          if [ -z "$2" ]; then
+            echo "batesd: --config requires a path" >&2
+            echo "Usage: batesd [--config <path>]" >&2
+            exit 2
+          fi
+          BATES_CONFIG_PATH="$2"
+          export BATES_CONFIG_PATH
+          shift 2
+          ;;
+        --config=*)
+          BATES_CONFIG_PATH="${1#--config=}"
+          export BATES_CONFIG_PATH
+          shift
+          ;;
+        --help|-h)
+          echo "Usage: batesd [--config <path>]"
+          exit 0
+          ;;
+        *)
+          echo "batesd: unknown argument: $1" >&2
+          echo "Usage: batesd [--config <path>]" >&2
+          exit 2
+          ;;
+      esac
+    done
+
+    exec "$DIR/batesd-orig" start
     """
 
     File.write!(generated, wrapper)

@@ -2,12 +2,26 @@ defmodule Bates.Daemon do
   @moduledoc """
   Boot helpers for the `batesd` Mix release.
 
-  `Bates.Application.start/2` calls these helpers to parse `System.argv()`
-  and verify system prerequisites before bringing up the supervision tree.
-  Each helper is pure (returns a tagged tuple) so it can be unit-tested
-  without trapping `System.halt/1`.
+  `Bates.Application.start/2` calls these helpers to parse the daemon's
+  inputs and verify system prerequisites before bringing up the
+  supervision tree. Each helper is pure (returns a tagged tuple) so it
+  can be unit-tested without trapping `System.halt/1`.
+
+  Two input paths feed `:bates, :config_path`:
+
+    * `mix phx.server` (and any other dev/release entry point that
+      exposes argv) goes through `parse_argv/1` + `apply_options/1`.
+    * The `bin/batesd` Mix-release wrapper parses argv in shell and
+      sets the `BATES_CONFIG_PATH` environment variable, which
+      `apply_env/1` picks up. (The mix-release `start` subcommand
+      discards extra argv, so the wrapper translates the only flag we
+      accept into env.)
+
+  When both are set the env var wins (the wrapper sets it
+  deliberately).
   """
 
+  @env_config_path "BATES_CONFIG_PATH"
   @usage "Usage: batesd [--config <path>]\n"
 
   @doc """
@@ -43,6 +57,28 @@ defmodule Bates.Daemon do
     end
 
     :ok
+  end
+
+  @doc """
+  Applies daemon options sourced from the environment.
+
+  Reads `BATES_CONFIG_PATH` (set by the `bin/batesd` wrapper) and
+  stores it under `:bates, :config_path`, overriding anything
+  `apply_options/1` previously set. The argv path stays useful for
+  `mix phx.server`; the env path covers the Mix release.
+  """
+  def apply_env(env \\ System.get_env()) when is_map(env) do
+    case Map.get(env, @env_config_path) do
+      nil ->
+        :ok
+
+      "" ->
+        :ok
+
+      path ->
+        Application.put_env(:bates, :config_path, Path.expand(path))
+        :ok
+    end
   end
 
   @doc """
