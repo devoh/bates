@@ -21,25 +21,25 @@ Users will invoke `batesd` directly to start the server. A future proposal will 
 
 ## Acceptance Criteria
 
-- [ ] `Bates.CLI.Start` module deleted.
-- [ ] `start` clause removed from `Bates.CLI.dispatch/1`; `bates start` no longer appears in `Bates.CLI.usage/0` output.
-- [ ] `source/test/bates/cli/start_test.exs` deleted.
-- [ ] `Bates.CLITest`'s usage assertions updated — no assertion on `"bates start"` remaining.
-- [ ] `Bates.CLI.Client.not_running_message/0` points users at `batesd`, not `bates start`. Tests updated to match.
-- [ ] `Bates.Prerequisites` and `Bates.CLI.Setup` docstrings no longer reference `bates start`.
-- [ ] `source/mix.exs` declares a `releases:` keyword with a `batesd` release.
-- [ ] `MIX_ENV=prod mix release batesd` succeeds and produces `source/_build/prod/rel/batesd/bin/batesd`.
-- [ ] `Bates.Application.start/2` parses `System.argv()` for `--config <path>`, runs `Bates.Prerequisites.verify/0`, and emits the same diagnostic + non-zero exit on failure that `bates start` did.
-- [ ] `source/config/test.exs` sets `config :bates, skip_prereq_check: true` so the prereq gate doesn't fire during `mix test`.
-- [ ] No `Mix.*` call appears in `Bates.Application.start/2` or any module reachable from it. (`Mix` is build-time only and unavailable in releases.)
-- [ ] An overlay at `source/rel/overlays/bin/batesd` makes `bin/batesd` (no subcommand) the foreground command. `bin/batesd --config /path/to/foo.toml` boots the supervision tree.
-- [ ] `source/test/bates/daemon_test.exs` covers `--config` parsing (default + override) and the prereq exit path.
-- [ ] `mix test` passes.
-- [ ] `mix format --check-formatted` passes.
-- [ ] `specs/cli.md`'s `### bates start` section removed; remaining `bates start` references updated to point at `batesd`.
-- [ ] `specs/system-overview.md` mentions the two-binary topology and that `batesd` is the server entry point.
-- [ ] `README.md` documents `mix release batesd` and how to run `batesd`.
-- [ ] Manual smoke test: `_build/prod/rel/batesd/bin/batesd` boots, serves the dashboard at `https://bates.test`, Ctrl-C shuts it down. `bates status`, `bates up <name>`, and `bates env <name>` all work against the running daemon.
+- [x] `Bates.CLI.Start` module deleted.
+- [x] `start` clause removed from `Bates.CLI.dispatch/1`; `bates start` no longer appears in `Bates.CLI.usage/0` output.
+- [x] `source/test/bates/cli/start_test.exs` deleted.
+- [x] `Bates.CLITest`'s usage assertions updated — no assertion on `"bates start"` remaining.
+- [x] `Bates.CLI.Client.not_running_message/0` points users at `batesd`, not `bates start`. Tests updated to match.
+- [x] `Bates.Prerequisites` and `Bates.CLI.Setup` docstrings no longer reference `bates start`.
+- [x] `source/mix.exs` declares a `releases:` keyword with a `batesd` release.
+- [x] `MIX_ENV=prod mix release batesd` succeeds and produces `source/_build/prod/rel/batesd/bin/batesd`.
+- [x] `Bates.Application.start/2` parses `System.argv()` for `--config <path>`, runs `Bates.Prerequisites.verify/0`, and emits the same diagnostic + non-zero exit on failure that `bates start` did.
+- [x] `source/config/test.exs` sets `config :bates, skip_prereq_check: true` so the prereq gate doesn't fire during `mix test`.
+- [x] No `Mix.*` call appears in `Bates.Application.start/2` or any module reachable from it. (`Mix` is build-time only and unavailable in releases.)
+- [x] An overlay at `source/rel/overlays/bin/batesd` makes `bin/batesd` (no subcommand) the foreground command. `bin/batesd --config /path/to/foo.toml` boots the supervision tree.
+- [x] `source/test/bates/daemon_test.exs` covers `--config` parsing (default + override) and the prereq exit path.
+- [x] `mix test` passes.
+- [x] `mix format --check-formatted` passes.
+- [x] `specs/cli.md`'s `### bates start` section removed; remaining `bates start` references updated to point at `batesd`.
+- [x] `specs/system-overview.md` mentions the two-binary topology and that `batesd` is the server entry point.
+- [x] `README.md` documents `mix release batesd` and how to run `batesd`.
+- [ ] Manual smoke test: `_build/prod/rel/batesd/bin/batesd` boots, serves the dashboard at `https://bates.test`, Ctrl-C shuts it down. `bates status`, `bates up <name>`, and `bates env <name>` all work against the running daemon. (User to verify before merge.)
 
 ## Phases
 
@@ -372,3 +372,36 @@ None. The plan is execution-ready as written.
 ### Blockers
 
 None identified.
+
+---
+
+## Execution Notes
+
+### Assumptions Confirmed
+
+- `MIX_ENV=prod mix release batesd` builds cleanly on this codebase (POC gap #1).
+- `mix test` passes with `skip_prereq_check: true` in `config/test.exs` even on a machine without `caddy` on `$PATH` (POC gap #4).
+
+### Deviations From Plan
+
+- **Phase 3 — `skip_prereq_check` gate widened.** The plan said the flag skips only the prereq check. In practice, `mix test` invokes `Bates.Application.start/2` with `System.argv() == ["test"]`, which the new daemon argv parser rejects as a stray positional. Gated the entire `boot_daemon` orchestrator (argv parse + apply + prereq) on the flag, not just the prereq step. Same intent (don't trip on dev machines), broader scope.
+- **Phase 3 — extracted `Bates.Daemon` module.** The plan said inline if `start/2` orchestration stays under three lines. The boot pipeline grew to four steps (`parse_argv` → `apply_options` → `apply_env` → `verify_prerequisites`); extracted into `Bates.Daemon` for testability. `start/2` stays a thin wrapper around `boot_daemon/0`.
+- **Phase 4 — overlay mechanism abandoned for direct write.** The plan preferred option 1 (custom `:steps` callback to rename the generated launcher, then drop an overlay at `bin/batesd`). Sandbox restrictions made the overlay's `chmod +x` impossible to commit. Switched to the documented fallback: do the rename + write + `File.chmod!` entirely inside the `install_launcher/1` callback. No `source/rel/overlays/` directory exists in the final tree.
+- **Phase 4 — added `config/prod.exs`.** Not in the plan. `config/config.exs` does `import_config "#{config_env()}.exs"` and the prod release fails to assemble without a `config/prod.exs`. Added a minimal stub mirroring `dev.exs` (Endpoint port 4080, secret_key_base, `:info` log level).
+- **Phase 4 — env-var path for `--config`.** Big surprise mid-Phase 4: `_build/prod/rel/batesd/bin/batesd --config /x` did not honor the flag. Two stacked problems: (1) the mix-release `start` subcommand discards extra argv at the shell level, and (2) the `elixir` launcher's CLI mode interprets argv as `[script | args]`, so even after patching `start)` to forward `"$@"`, `--config` got read as a script filename and `start_cli` halted. Solved by having `bin/batesd` parse `--config` in shell, export it as `BATES_CONFIG_PATH`, then `exec batesd-orig start` with no argv. Added `Bates.Daemon.apply_env/1` to plumb the env var into `:bates, :config_path`. The argv path stays for `mix phx.server`; the env path covers the release. When both are set the env wins (the wrapper sets it deliberately).
+
+### Gotchas Worth Documenting
+
+- **`Mix.env/0` is unavailable in releases.** Plan called this out; confirmed during execution. The `skip_prereq_check` Application env var is the right approach.
+- **Mix-release `start)` case discards argv.** Anyone trying to pass argv through the launcher will hit this. The env-var indirection is the cleanest workaround that doesn't require patching the upstream launcher template.
+- **The escript no longer boots the OTP application.** Earlier work (commit `aaeb43f`) flipped `app: nil` in `mix.exs`'s `escript:` config so `bates env` doesn't accidentally start Caddy. This is unrelated to this plan but worth noting for context: the daemon path is `batesd` only; the escript is purely a JSON API client (plus `bates setup`, which shells out).
+
+## Execution Stats
+
+| Metric | Value |
+|--------|-------|
+| Duration | 00:51 → 01:18 (~27 minutes) |
+| Files changed | 17 (vs `master`) |
+| Commits | 7 |
+| Tests added | 1 file (`source/test/bates/daemon_test.exs`, 11 tests) |
+| Token totals (input / cache_create / cache_read / output) | _to be filled by launcher_ |

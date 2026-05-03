@@ -9,7 +9,6 @@ defmodule Bates.CLI do
   end
 
   @doc false
-  def dispatch(["start" | rest]), do: Bates.CLI.Start.run(rest)
   def dispatch(["setup"]), do: Bates.CLI.Setup.run()
   def dispatch(["status"]), do: Bates.CLI.Status.run()
   def dispatch(["up", name]) when is_binary(name), do: Bates.CLI.Up.run(name)
@@ -26,7 +25,6 @@ defmodule Bates.CLI do
   defp usage do
     IO.write(:stderr, """
     Usage:
-      bates start [--config <path>]
       bates setup
       bates status
       bates up <name>

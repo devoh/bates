@@ -40,6 +40,34 @@ its root CA so browsers accept the certificates:
 caddy trust
 ```
 
+## Build and Run
+
+Bates ships two binaries: `batesd` (the server, a Mix release) and
+`bates` (a thin escript client for control commands). From `source/`:
+
+```bash
+mix deps.get
+mix escript.build               # produces source/bates (the CLI)
+MIX_ENV=prod mix release batesd # produces source/_build/prod/rel/batesd/
+```
+
+Run the daemon in the foreground:
+
+```bash
+_build/prod/rel/batesd/bin/batesd
+```
+
+Pass `--config <path>` to override the default config location
+(`~/.config/bates/config.toml`). Ctrl-C shuts the daemon down.
+
+The `bates` escript talks to the running daemon via the JSON API.
+With `bates` and `batesd` both on `$PATH`:
+
+```bash
+bates status
+bates env myapp
+```
+
 ## Configuration
 
 The configuration file is defined in [TOML][] format.

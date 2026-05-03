@@ -8,6 +8,7 @@ config :bates, BatesWeb.Endpoint,
 
 config :bates,
   poll_interval: 50,
-  readiness_timeout: 2_000
+  readiness_timeout: 2_000,
+  skip_prereq_check: true
 
 config :logger, level: :warning

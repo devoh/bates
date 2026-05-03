@@ -83,14 +83,14 @@ defmodule Bates.CLI.ClientTest do
   describe "transport_message/1" do
     test "maps :nxdomain to the canonical not-running message" do
       assert Client.transport_message(:nxdomain) ==
-               "Bates is not running. Start it with: bates start"
+               "Bates is not running. Start it with: batesd"
     end
 
     test "maps {:failed_connect, _} to the canonical not-running message" do
       reason = {:failed_connect, [{:to_address, {~c"bates.test", 443}}]}
 
       assert Client.transport_message(reason) ==
-               "Bates is not running. Start it with: bates start"
+               "Bates is not running. Start it with: batesd"
     end
 
     test "falls through for unrecognized errors" do

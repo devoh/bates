@@ -9,7 +9,6 @@ defmodule Bates.CLITest do
 
       assert exit_code == 2
       assert output =~ "Usage:"
-      assert output =~ "bates start"
       assert output =~ "bates setup"
       assert output =~ "bates status"
       assert output =~ "bates up <name>"
