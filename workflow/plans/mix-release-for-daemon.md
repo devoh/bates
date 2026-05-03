@@ -2,6 +2,13 @@
 
 **Proposal:** [Mix Release for the Daemon](../proposals/accepted/2026-05-03-mix-release-for-daemon.md)
 
+### Revision Log
+
+| Date | What Changed |
+|------|-------------|
+| 2026-05-03 00:30 PDT | Plan created. Seven phases covering removal of broken `bates start`, daemon boot in `Application.start/2`, `mix release` config + overlay, specs, README, manual smoke test. |
+| 2026-05-03 01:15 PDT | Readiness audit applied. Phase 3 locks in `Application.get_env(:bates, :skip_prereq_check, false)` gating (Mix is not available at release runtime); adds `source/config/test.exs` change to Files. Phase 4 adds note that `config/runtime.exs` is not expected to be needed and clarifies overlay-mechanic fallback. Acceptance criteria gain a `skip_prereq_check` config item. |
+
 ## Goal
 
 Ship the Bates daemon as a Mix release named `batesd`, remove the broken `bates start` subcommand merged in PR #31, and move prerequisite + argv handling into `Bates.Application.start/2` so the same supervision tree boots correctly under `bin/batesd`.
@@ -23,6 +30,8 @@ Users will invoke `batesd` directly to start the server. A future proposal will 
 - [ ] `source/mix.exs` declares a `releases:` keyword with a `batesd` release.
 - [ ] `MIX_ENV=prod mix release batesd` succeeds and produces `source/_build/prod/rel/batesd/bin/batesd`.
 - [ ] `Bates.Application.start/2` parses `System.argv()` for `--config <path>`, runs `Bates.Prerequisites.verify/0`, and emits the same diagnostic + non-zero exit on failure that `bates start` did.
+- [ ] `source/config/test.exs` sets `config :bates, skip_prereq_check: true` so the prereq gate doesn't fire during `mix test`.
+- [ ] No `Mix.*` call appears in `Bates.Application.start/2` or any module reachable from it. (`Mix` is build-time only and unavailable in releases.)
 - [ ] An overlay at `source/rel/overlays/bin/batesd` makes `bin/batesd` (no subcommand) the foreground command. `bin/batesd --config /path/to/foo.toml` boots the supervision tree.
 - [ ] `source/test/bates/daemon_test.exs` covers `--config` parsing (default + override) and the prereq exit path.
 - [ ] `mix test` passes.
@@ -77,14 +86,17 @@ Move argv parsing and prereq verification into `Bates.Application.start/2`. Reus
   - At the top of `start/2`, before building the supervision spec:
     1. Parse `System.argv()` with `OptionParser.parse(argv, strict: [config: :string])`. On unknown flags or unexpected positional args, write a `Usage: batesd [--config <path>]` message to stderr and `System.halt(2)`.
     2. If `--config <path>` parsed, `Application.put_env(:bates, :config_path, Path.expand(path))`.
-    3. Skip the prereq check when `Mix.env() == :test` (or use `Application.get_env(:bates, :skip_prereq_check, false)` if `Mix.env/0` isn't available at runtime in a release — confirm during execution which guard works inside the release tree).
-    4. Otherwise run `Bates.Prerequisites.verify/0`. On `{:error, reason}`, write the same diagnostic Phase 4 of PR #31 emitted (`bates: prerequisite not met: <reason>\nRun \`bates setup\` to configure system prerequisites.\n`) to stderr and `System.halt(2)`.
+    3. If `Application.get_env(:bates, :skip_prereq_check, false)` is `true`, skip the prereq check. (Set to `true` only in the test environment — see `source/config/test.exs` below.)
+    4. Otherwise run `Bates.Prerequisites.verify/0`. On `{:error, reason}`, write the same diagnostic `Bates.CLI.Start` emitted (`bates: prerequisite not met: <reason>\nRun \`bates setup\` to configure system prerequisites.\n`) to stderr and `System.halt(2)`.
   - Build and return the supervision spec exactly as today (`{:ok, _} = Supervisor.start_link(children(), opts)`).
+- `source/config/test.exs`:
+  - Add `config :bates, skip_prereq_check: true` so `mix test` doesn't trip the prereq gate (CI / dev machines may not have `caddy` on `$PATH` or `/etc/resolver/test`).
 
 **Notes:**
 
-- `mix test` exercises the supervision tree implicitly via `start_permanent` — the prereq check must be skippable in test or it'll fail under any test environment without `caddy` on `$PATH` and `/etc/resolver/test`. Prefer `Mix.env() == :test` if it works in the release context; otherwise gate via `Application.get_env(:bates, :skip_prereq_check, true)` defaulting to `true` in `config/test.exs` and `false` in `config/prod.exs`. Pick the simpler one that passes both `mix test` and the release smoke test.
-- A new module — `Bates.Daemon` — is acceptable if `start/2` becomes too large. Keep it under `source/lib/bates/daemon.ex` with a single `parse_argv/1` and `verify_prerequisites/0` API. If three or fewer lines of orchestration remain in `start/2`, leave it inline.
+- **Do not call `Mix.env/0` (or any `Mix.*` function) from `Bates.Application.start/2` or anything reachable from it.** `Mix` is a build-time module and is not packaged into a `mix release`. Calling it at daemon boot raises `UndefinedFunctionError` and crashes the supervision tree before it starts. Use `Application.get_env(:bates, :skip_prereq_check, false)` instead — `false` is the safe default for the prod release; `config/test.exs` flips it to `true` for the test environment.
+- A new module — `Bates.Daemon` — is acceptable if `start/2` becomes too large. Keep it under `source/lib/bates/daemon.ex` with a single `parse_argv/1` (pure: returns `{:ok, opts}` or `{:error, message}`) and `verify_prerequisites/0` API. If three or fewer lines of orchestration remain in `start/2`, leave it inline.
+- Structure `parse_argv/1` as a pure function so the test doesn't need to capture `System.halt`. The thin `start/2` wrapper handles the halt-on-error case.
 
 **Tests:**
 
@@ -124,7 +136,11 @@ Wire the release into `mix.exs` and add the overlay that exposes `batesd` (no su
 
   If the overlay/`:steps` ordering turns out to be awkward, fall back to a custom step that writes the wrapper script directly without using the overlay mechanism. Document the chosen mechanism in a short comment in `mix.exs`.
 
+  **How to verify it took:** after `mix release batesd`, run `_build/prod/rel/batesd/bin/batesd --help`. If the output is mix-release subcommand help (lists `start`, `daemon`, `remote`, `eval`, `rpc`, `restart`, `stop`, `pid`, `version`), the overlay didn't take. The expected behavior for the new launcher is either to boot the daemon (because `--help` was passed as an argv to be parsed by `Bates.Application.start/2`) or to fail with our own usage message — *not* to print the mix-release subcommand list.
+
 - Verify `source/.gitignore` already covers `/_build/` (it does) — no change needed.
+
+- **`config/runtime.exs` is not expected to be needed.** The release reads its only environment-dependent setting (`--config <path>`) from argv, not from runtime config. Don't add `runtime.exs` preemptively. If the release fails to boot for a runtime-config reason during the smoke test, add a minimal stub at that point.
 
 **Tests:**
 
@@ -282,3 +298,77 @@ The PR description should list these as `[ ]` items for the user to verify befor
 **Reference for the application boot pattern:**
 
 - `source/lib/bates/cli/start.ex` (before deletion) is the reference for what argv parsing + prereq verification should look like in `Bates.Application.start/2`. Steal the error formatting verbatim — same diagnostics, same exit codes — only the entry point changes.
+
+---
+
+## Readiness Audit
+
+### Audit Log
+
+| Timestamp | Verdict | Summary |
+|-----------|---------|---------|
+| 2026-05-03 01:15 PDT | READY | All input files exist and contain the code the plan claims. No hard blockers. Phase 3 hardened to lock in `Application.get_env(:bates, :skip_prereq_check, false)` (Mix is unavailable at release runtime). Phase 4 clarified for overlay-mechanic verification and `runtime.exs` non-requirement. Five POC gaps are downstream of work the plan proposes (need a built release artifact to verify) and resolve naturally during Phase 4/Phase 7. |
+
+### Verdict: READY FOR AUTONOMOUS EXECUTION
+
+The plan is concrete, all referenced files exist with the expected contents, and the only real architectural ambiguity (`Mix.env/0` vs. `Application.get_env` for the test-skip gate) is now resolved in favor of the latter. Remaining "either/or" calls (overlay-mechanic option 1 vs option 2, `Bates.Daemon` module vs inline parsing) are within the agent's scope to decide during execution.
+
+### Input Data
+
+| Input | Status | Notes |
+|-------|--------|-------|
+| `source/lib/bates/cli/start.ex` | Ready | Exists; `Bates.CLI.Start.run/1` matches plan's description. Will be deleted in Phase 1. |
+| `source/test/bates/cli/start_test.exs` | Ready | Exists. Will be deleted in Phase 1. |
+| `source/lib/bates/cli.ex:12` | Ready | `dispatch(["start" \| rest])` clause exactly as plan describes. |
+| `source/lib/bates/cli.ex:29` | Ready | `bates start [--config <path>]` line in `usage/0` heredoc as expected. |
+| `source/test/bates/cli_test.exs:12` | Ready | The `assert output =~ "bates start"` line exists. Removing it leaves six other subcommand assertions intact — the test remains useful. |
+| `source/lib/bates/cli/client.ex:65` | Ready | `not_running_message/0` returns the expected string. |
+| `source/test/bates/cli/client_test.exs:86,93` | Ready | Both assertions exist as plan describes. |
+| `source/lib/bates/prerequisites.ex` | Ready | Module + `verify/0` docstrings reference `bates start`. |
+| `source/lib/bates/cli/setup.ex:3` | Ready | Docstring opens with "One-time system setup for `bates start`." |
+| `source/lib/bates/application.ex` | Ready | `start/2` is a 5-line pass-through to `Supervisor.start_link/2`. Clean slate for argv parsing + prereq check. |
+| `source/lib/bates/config.ex` | Ready | `path/0` reads `Application.get_env(:bates, :config_path, default_path())`. Default is `~/.config/bates/config.toml`. |
+| `source/config/` | Ready | Has `config.exs`, `test.exs`, `dev.exs`. No `prod.exs` or `runtime.exs`. `config.exs` does `import_config "#{config_env()}.exs"` — release ships with `:prod` and finds no env-specific file, which is fine. |
+| `source/.gitignore` | Ready | `/_build/` is covered. |
+| `source/rel/` | Missing (expected) | Created by Phase 4 (`source/rel/overlays/bin/batesd`). |
+| `specs/cli.md` | Ready | `### bates start` section at lines 9-29; not-running example at line 135; `--config` reference at line 142; "How It Connects" bullet at 149-150. |
+| `specs/system-overview.md` | Ready | `### CLI` section at lines 95-102 mentions `bates start`. |
+| `README.md` | Ready | No existing "Build and Run" section. Phase 6 adds one after "Setup". |
+
+### Dependencies
+
+| Dependency | Status | Notes |
+|------------|--------|-------|
+| `erlexec ~> 2.3` | Installed | `mix.exs:31`. Stays. |
+| `releases:` in `mix.exs` | Not declared (expected) | Added by Phase 4. |
+| `Mix.env/0` at release runtime | Unavailable (decided) | `Mix` is build-time only; not packaged into releases. Plan now uses `Application.get_env(:bates, :skip_prereq_check, false)` exclusively. |
+| `config/runtime.exs` | Not present, not required | The only env-dependent setting (`--config <path>`) is read from argv. No release-time runtime config needed. |
+| Elixir `~> 1.14` | OK | Mix releases are stable and well-supported in this range. |
+| `source/test/bates/prerequisites_test.exs` | Exists | Phase 2 only changes docstrings; doesn't break this test. |
+
+### Open Questions
+
+| # | Question | Blocking? | Notes |
+|---|----------|-----------|-------|
+| 1 | Which overlay mechanic ends up working — custom `:steps` callback to rename the generated launcher, or direct script write? | No | Phase 4 prefers option 1 with option 2 as fallback. Verifiable during execution via `bin/batesd --help`. |
+| 2 | Should `parse_argv/1` live inline in `Bates.Application.start/2` or in a separate `Bates.Daemon` module? | No | Phase 3 says: inline if it stays small (≤ 3 lines of orchestration), separate module otherwise. Agent decides. |
+| 3 | Does `System.argv()` inside `Bates.Application.start/2` see clean user args under a `bin/batesd` launcher invocation? | No | Should be clean (Erlang strips BEAM flags before exposing argv). Verified during Phase 7 smoke test; the test for `--config /tmp/test.toml` will fail loudly if argv is mangled. |
+
+### POC Gaps
+
+| # | Assumption | Suggested POC | Why It Matters | Effort |
+|---|-----------|---------------|----------------|--------|
+| 1 | `MIX_ENV=prod mix release batesd` builds successfully on this codebase today | Build the release as part of Phase 4. If it fails, common causes are: missing `applications:` (plan includes it), unexpected runtime-config requirement (Phase 4 note covers fallback), ERTS mismatch (rare on a clean install). | Phase 4 cannot finish without this. | quick (during Phase 4) |
+| 2 | The release overlay/`:steps` mechanic produces the correct `bin/batesd` entry point | After Phase 4 build: `_build/prod/rel/batesd/bin/batesd --help`. If output is mix-release subcommand help, the overlay didn't take. | If overlay fails, users get the mix-release subcommand interface instead of a daemon. | quick (during Phase 4) |
+| 3 | `System.argv()` inside `start/2` sees clean `--config` args | Phase 7 smoke step: `bin/batesd --config /tmp/test.toml` — confirm `Application.get_env(:bates, :config_path)` is set to the expanded path. | If mangled, the daemon won't honor `--config`. | quick (during Phase 7) |
+| 4 | The `config :bates, skip_prereq_check: true` line in `config/test.exs` is read at test time and the daemon prereq path skips correctly | `mix test` after Phase 3. Tests pass without `caddy` on `$PATH` and without `/etc/resolver/test`. | If misconfigured, `mix test` fails on dev machines that don't have `bates setup` run. | quick (during Phase 3) |
+
+All four gaps are downstream of work the plan does and resolve naturally during execution. No pre-execution experiments are runnable (all require a built release artifact, which only exists after Phase 4).
+
+### Pre-Work
+
+None. The plan is execution-ready as written.
+
+### Blockers
+
+None identified.
