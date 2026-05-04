@@ -566,9 +566,40 @@ defmodule Bates.App do
   end
 
   defp build_env(environment) do
-    Enum.map(environment, fn {key, value} ->
-      {to_charlist(key), to_charlist(value)}
-    end)
+    user_env =
+      Enum.map(environment, fn {key, value} ->
+        {to_charlist(key), to_charlist(value)}
+      end)
+
+    scrub_path() ++ user_env
+  end
+
+  # When `batesd` runs as a Mix release, the launcher prepends
+  # `<release_root>/erts-*/bin` and `<release_root>/bin` to PATH so the daemon
+  # finds its own `erl`. Children inherit that PATH, so a user service
+  # running `elixir`/`mix` resolves `erl` to bates's release `erl` (which
+  # computes `ROOTDIR` from its own location) and then fails to find
+  # `<release_root>/bin/start.boot`. Strip those entries before handing PATH
+  # to the child.
+  defp scrub_path do
+    with release_root when is_binary(release_root) <-
+           System.get_env("RELEASE_ROOT"),
+         path when is_binary(path) <- System.get_env("PATH") do
+      scrubbed =
+        path
+        |> String.split(":", trim: true)
+        |> Enum.reject(&path_inside_release?(&1, release_root))
+        |> Enum.join(":")
+
+      [{~c"PATH", to_charlist(scrubbed)}]
+    else
+      _ -> []
+    end
+  end
+
+  defp path_inside_release?(entry, release_root) do
+    entry == Path.join(release_root, "bin") or
+      String.starts_with?(entry, Path.join(release_root, "erts-"))
   end
 
   defp log(app_name, service_name, message) do
