@@ -1,0 +1,516 @@
+/* =============================================================
+   Bates — colors, type, and dashboard components.
+   Adapted from the Claude Design handoff bundle. See
+   workflow/specs/control-interface.md and the design files at
+   /tmp/bates-design/bates-dashboard/ for the source design.
+   ============================================================= */
+
+@font-face {
+  font-family: 'Baskervville';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('/assets/fonts/Baskervville-VariableFont_wght.ttf') format('truetype-variations'),
+       url('/assets/fonts/Baskervville-VariableFont_wght.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'Baskervville';
+  font-style: italic;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('/assets/fonts/Baskervville-Italic-VariableFont_wght.ttf') format('truetype-variations'),
+       url('/assets/fonts/Baskervville-Italic-VariableFont_wght.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/assets/fonts/JetBrainsMono-Regular.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/assets/fonts/JetBrainsMono-Medium.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/assets/fonts/JetBrainsMono-Italic.woff2') format('woff2');
+}
+
+:root {
+  /* ── Palette ─────────────────────────────────────────────── */
+  --ink:            #1a1612;
+  --ink-soft:       #2a241e;
+  --dove:           #8a8578;
+  --dove-soft:      #a8a295;
+  --parch:          #f1e8d3;
+  --cream:          #f7f3eb;
+  --forest:         #2d4a3a;
+  --leaf:           #4a7a62;
+  --brass-aged:     #b8923a;
+  --brass-polished: #d4a437;
+  --oxblood:        #6b2028;
+  --copper:         #c4614a;
+
+  /* ── Hairlines ───────────────────────────────────────────── */
+  --rule-ink-12:    rgba(26, 22, 18, 0.12);
+  --rule-ink-15:    rgba(26, 22, 18, 0.15);
+  --rule-ink-08:    rgba(26, 22, 18, 0.08);
+
+  /* ── Semantic roles (light) ──────────────────────────────── */
+  --bg:              var(--parch);
+  --bg-raised:       var(--cream);
+  --bg-row-hover:    rgba(26, 22, 18, 0.025);
+  --bg-row-selected: rgba(45, 74, 58, 0.06);
+  --fg:              var(--ink);
+  --fg-muted:        var(--dove);
+  --accent:          var(--forest);
+  --success:         var(--leaf);
+  --error:           var(--copper);
+  --warning:         var(--copper);
+  --rule:            var(--rule-ink-12);
+  --rule-strong:     var(--rule-ink-15);
+  --rule-soft:       var(--rule-ink-08);
+
+  /* ── Type ────────────────────────────────────────────────── */
+  --font-serif: 'Baskervville', 'Baskerville', 'EB Garamond', Georgia, serif;
+  --font-mono:  'JetBrains Mono', 'SFMono-Regular', Consolas, 'Courier New', monospace;
+
+  /* ── Motion ──────────────────────────────────────────────── */
+  --ease:     cubic-bezier(0.2, 0.6, 0.2, 1);
+  --dur-fast: 120ms;
+  --dur:      200ms;
+  --dur-slow: 320ms;
+}
+
+* , *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; min-height: 100vh; }
+button { font: inherit; }
+
+/* ============================================================
+   Page
+   ============================================================ */
+body.bates-page {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-serif);
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.bates-shell {
+  max-width: 1480px;
+  margin: 0 auto;
+  padding: 36px 56px 56px;
+}
+
+/* ============================================================
+   Topbar
+   ============================================================ */
+.bates-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 28px;
+  padding-bottom: 22px;
+  border-bottom: 1px solid var(--rule-strong);
+  margin-bottom: 36px;
+}
+
+.bates-topbar__right {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 13px;
+  color: var(--fg-muted);
+}
+
+.bates-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 13px;
+  border-radius: 999px;
+  border: 1px solid rgba(45, 74, 58, 0.25);
+  background: rgba(74, 122, 98, 0.08);
+  color: var(--accent);
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 12px;
+}
+
+.bates-pill__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--success);
+}
+
+.bates-pill__mono {
+  font-family: var(--font-mono);
+  font-style: normal;
+  font-size: 12px;
+}
+
+.bates-version {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 13px;
+  color: var(--fg-muted);
+}
+
+/* ============================================================
+   Wordmark
+   ============================================================ */
+.bates-wordmark {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 13px;
+}
+
+.bates-wordmark__name {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-weight: 400;
+  font-size: 30px;
+  letter-spacing: -0.01em;
+  line-height: 1;
+  color: var(--forest);
+}
+
+.bates-wordmark__tag {
+  font-family: var(--font-serif);
+  font-size: 10px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+
+/* ============================================================
+   Summary band
+   ============================================================ */
+.bates-summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  margin-bottom: 36px;
+}
+
+.bates-stat {
+  padding: 14px 24px 12px;
+  border-right: 1px solid var(--rule);
+}
+.bates-stat:last-child { border-right: none; }
+
+.bates-stat__row {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.bates-stat__lamp-slot {
+  align-self: center;
+  display: inline-flex;
+}
+
+.bates-stat__value {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 36px;
+  line-height: 1;
+  letter-spacing: -0.01em;
+  font-variant-numeric: lining-nums;
+  color: var(--fg);
+}
+
+.bates-stat__label {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+  padding-left: 4px;
+}
+
+.bates-stat--running  .bates-stat__value { color: var(--success); }
+.bates-stat--stopped  .bates-stat__value { color: var(--fg-muted); }
+.bates-stat--partial  .bates-stat__value { color: var(--brass-aged); }
+.bates-stat--error    .bates-stat__value { color: var(--error); }
+.bates-stat--neutral  .bates-stat__value { color: var(--fg); }
+
+/* ============================================================
+   Apps section + AppCard
+   ============================================================ */
+.bates-apps {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.bates-app {
+  background: var(--bg-raised);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.bates-app__header {
+  padding: 14px 22px 12px;
+  border-bottom: 1px solid var(--rule);
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.bates-app__title-group {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.bates-app__title-group > .bates-lamp {
+  align-self: center;
+}
+
+.bates-app__title {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-weight: 400;
+  font-size: 22px;
+  letter-spacing: -0.01em;
+  line-height: 1.05;
+  color: var(--fg);
+}
+
+.bates-app__domain {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--fg-muted);
+  text-decoration: none;
+}
+.bates-app__domain:hover { color: var(--accent); }
+
+.bates-app__error-tag {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 12px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--error);
+  padding-left: 12px;
+  border-left: 1px solid var(--rule-strong);
+}
+
+.bates-app__actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* ============================================================
+   Services table — 4-column grid in Phase 1
+   Service / Hostname / Status / Port
+   ============================================================ */
+.bates-services {
+  display: block;
+}
+
+.bates-services__head,
+.bates-services__row {
+  display: grid;
+  grid-template-columns: 1.3fr 1.4fr 1.1fr 0.8fr;
+}
+
+.bates-services__head {
+  border-bottom: 1px solid var(--rule-soft);
+}
+
+.bates-services__head .bates-services__cell {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+  padding: 6px 16px;
+}
+
+.bates-services__row {
+  border-bottom: 1px solid var(--rule-soft);
+  transition: background var(--dur-fast) var(--ease);
+}
+.bates-services__row:last-child { border-bottom: none; }
+.bates-services__row:hover { background: var(--bg-row-hover); }
+
+.bates-services__row .bates-services__cell {
+  padding: 7px 16px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--fg);
+  display: flex;
+  align-items: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.bates-services__cell--name { font-weight: 500; }
+
+.bates-services__cell--host a {
+  color: var(--fg);
+  text-decoration: none;
+}
+.bates-services__cell--host a:hover { color: var(--accent); }
+
+.bates-services__cell--dim { color: var(--fg-muted); }
+
+.bates-services__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 13px;
+}
+.bates-services__status--running  { color: var(--success); }
+.bates-services__status--stopped  { color: var(--fg-muted); }
+.bates-services__status--starting { color: var(--brass-aged); }
+.bates-services__status--error    { color: var(--error); }
+.bates-services__status--partial  { color: var(--brass-aged); }
+
+/* ============================================================
+   Status lamp — single source of truth
+   States: running | partial | starting | stopped | error | neutral
+   ============================================================ */
+.bates-lamp {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--lamp-fill, var(--fg-muted));
+  box-shadow: 0 0 0 4px var(--lamp-ring, transparent);
+  flex-shrink: 0;
+  transition: background-color var(--dur) var(--ease),
+              box-shadow var(--dur) var(--ease);
+}
+
+.bates-lamp--running {
+  --lamp-fill: var(--success);
+  --lamp-ring: color-mix(in srgb, var(--success) 18%, transparent);
+}
+.bates-lamp--partial {
+  --lamp-fill: var(--brass-aged);
+  --lamp-ring: color-mix(in srgb, var(--brass-aged) 18%, transparent);
+}
+.bates-lamp--starting {
+  --lamp-fill: var(--brass-polished);
+  --lamp-ring: color-mix(in srgb, var(--brass-polished) 18%, transparent);
+  animation: bates-lamp-pulse 1.6s var(--ease) infinite;
+}
+.bates-lamp--stopped {
+  --lamp-fill: var(--fg-muted);
+  --lamp-ring: transparent;
+}
+.bates-lamp--error {
+  --lamp-fill: var(--error);
+  --lamp-ring: color-mix(in srgb, var(--error) 18%, transparent);
+}
+.bates-lamp--neutral {
+  --lamp-fill: var(--fg);
+  --lamp-ring: transparent;
+}
+
+@keyframes bates-lamp-pulse {
+  0%, 100% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--lamp-fill) 22%, transparent); }
+  50%      { box-shadow: 0 0 0 8px color-mix(in srgb, var(--lamp-fill)  6%, transparent); }
+}
+
+/* ============================================================
+   Buttons
+   ============================================================ */
+.bates-btn {
+  font-family: var(--font-serif);
+  font-style: italic;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  cursor: pointer;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  padding: 8px 14px;
+  font-size: 12px;
+  white-space: nowrap;
+  background: transparent;
+  color: var(--fg);
+  transition: background var(--dur) var(--ease),
+              color var(--dur) var(--ease),
+              border-color var(--dur) var(--ease);
+}
+
+.bates-btn--ghost {
+  border-color: var(--rule-strong);
+  color: var(--fg);
+}
+.bates-btn--ghost:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--fg) 5%, transparent);
+  border-color: var(--fg);
+}
+
+.bates-btn--ghost-destructive {
+  border-color: color-mix(in srgb, var(--error) 32%, transparent);
+  color: var(--error);
+}
+.bates-btn--ghost-destructive:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--error) 6%, transparent);
+  border-color: var(--error);
+}
+
+.bates-btn:disabled {
+  background: color-mix(in srgb, var(--fg) 6%, transparent);
+  color: color-mix(in srgb, var(--fg) 42%, transparent);
+  border-color: transparent;
+  cursor: not-allowed;
+}
+
+/* ============================================================
+   Empty state
+   ============================================================ */
+.bates-empty {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 15px;
+  color: var(--fg-muted);
+  padding: 48px 0;
+  text-align: center;
+}
+
+/* ============================================================
+   Footer
+   ============================================================ */
+.bates-footer {
+  margin-top: 56px;
+  padding-top: 18px;
+  border-top: 1px solid var(--rule);
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+}
+
+/* ============================================================
+   Selection
+   ============================================================ */
+::selection { background: var(--brass-polished); color: var(--ink); }

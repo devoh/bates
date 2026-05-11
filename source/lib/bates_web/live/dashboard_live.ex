@@ -56,7 +56,6 @@ defmodule BatesWeb.DashboardLive do
       status = App.status(name)
       services = App.services(name)
 
-      # For single-service apps, pull hostname and port from the sole service
       {hostname, port} =
         case services do
           [single] -> {single.hostname, single.port}
@@ -74,117 +73,207 @@ defmodule BatesWeb.DashboardLive do
     end
   end
 
+  defp lamp_state("up"), do: "running"
+  defp lamp_state("down"), do: "stopped"
+  defp lamp_state("starting"), do: "starting"
+  defp lamp_state("partial"), do: "partial"
+  defp lamp_state("crashed"), do: "error"
+  defp lamp_state(_), do: "stopped"
+
+  defp service_error_count(services) do
+    Enum.count(services, fn s -> lamp_state(s.status) == "error" end)
+  end
+
+  defp summary_stats(apps) do
+    total = length(apps)
+    running = Enum.count(apps, &(&1.status == "up"))
+    stopped = Enum.count(apps, &(&1.status == "down"))
+    failed = Enum.count(apps, &(&1.status == "crashed"))
+
+    [
+      %{label: "Apps", value: total, lamp: "neutral", tone: "neutral"},
+      %{label: "Running", value: running, lamp: "running", tone: "running"},
+      %{label: "Stopped", value: stopped, lamp: "stopped", tone: "stopped"},
+      %{
+        label: "Failed",
+        value: failed,
+        lamp: if(failed > 0, do: "error", else: "stopped"),
+        tone: if(failed > 0, do: "error", else: "stopped")
+      }
+    ]
+  end
+
   @impl true
   def render(assigns) do
+    assigns = assign(assigns, :stats, summary_stats(assigns.apps))
+
     ~H"""
-    <div style="font-family: system-ui, sans-serif; max-width: 800px; margin: 80px auto; padding: 0 20px;">
-      <h1 style="font-size: 24px; font-weight: 600; margin-bottom: 32px;">Bates</h1>
+    <div class="bates-shell">
+      <.topbar />
+
+      <section class="bates-summary">
+        <.stat :for={s <- @stats} stat={s} />
+      </section>
 
       <%= if @apps == [] do %>
-        <p style="color: #6b7280;">No applications configured.</p>
+        <p class="bates-empty">No applications configured.</p>
       <% else %>
-        <table style="width: 100%; border-collapse: collapse;">
-          <thead>
-            <tr style="border-bottom: 2px solid #e5e7eb; text-align: left;">
-              <th style="padding: 8px 12px; font-weight: 600; font-size: 14px;">Name</th>
-              <th style="padding: 8px 12px; font-weight: 600; font-size: 14px;">Hostname</th>
-              <th style="padding: 8px 12px; font-weight: 600; font-size: 14px;">Status</th>
-              <th style="padding: 8px 12px; font-weight: 600; font-size: 14px;">Port</th>
-              <th style="padding: 8px 12px; font-weight: 600; font-size: 14px;"></th>
-            </tr>
-          </thead>
-          <tbody>
-            <%= for app <- @apps do %>
-              <tr style="border-bottom: 1px solid #e5e7eb;">
-                <td style="padding: 10px 12px; font-size: 14px;"><%= app.name %></td>
-                <td style="padding: 10px 12px; font-size: 14px;">
-                  <a
-                    href={"https://#{app.hostname}"}
-                    style="color: #3b82f6; text-decoration: none;"
-                  >
-                    <%= app.hostname %>
-                  </a>
-                </td>
-                <td style="padding: 10px 12px; font-size: 14px;">
-                  <span style={"display: inline-block; padding: 2px 8px; border-radius: 9999px; font-size: 12px; font-weight: 500; #{status_style(app.status)}"}>
-                    <%= app.status %>
-                  </span>
-                </td>
-                <td style="padding: 10px 12px; font-size: 14px; color: #6b7280;">
-                  <%= app.port %>
-                </td>
-                <td style="padding: 10px 12px; font-size: 14px;">
-                  <div style="display: flex; gap: 8px;">
-                    <%= if app.status in ["down", "crashed", "partial"] do %>
-                      <button
-                        phx-click="start"
-                        phx-value-name={app.name}
-                        style="padding: 4px 12px; border: 1px solid #d1d5db; border-radius: 6px; background: white; cursor: pointer; font-size: 13px;"
-                      >
-                        Start
-                      </button>
-                    <% end %>
-                    <%= if app.status in ["starting", "up", "partial"] do %>
-                      <button
-                        phx-click="stop"
-                        phx-value-name={app.name}
-                        style="padding: 4px 12px; border: 1px solid #d1d5db; border-radius: 6px; background: white; cursor: pointer; font-size: 13px;"
-                      >
-                        Stop
-                      </button>
-                    <% end %>
-                    <%= if app.status in ["up", "partial"] do %>
-                      <button
-                        phx-click="restart"
-                        phx-value-name={app.name}
-                        style="padding: 4px 12px; border: 1px solid #d1d5db; border-radius: 6px; background: white; cursor: pointer; font-size: 13px;"
-                      >
-                        Restart
-                      </button>
-                    <% end %>
-                  </div>
-                </td>
-              </tr>
-              <%= if app.multi_service do %>
-                <%= for service <- app.services do %>
-                  <tr style="border-bottom: 1px solid #f3f4f6; background: #fafafa;">
-                    <td style="padding: 6px 12px 6px 28px; font-size: 13px; color: #6b7280;">
-                      <%= service.name %>
-                    </td>
-                    <td style="padding: 6px 12px; font-size: 13px;">
-                      <%= if service.hostname do %>
-                        <a
-                          href={"https://#{service.hostname}"}
-                          style="color: #3b82f6; text-decoration: none;"
-                        >
-                          <%= service.hostname %>
-                        </a>
-                      <% end %>
-                    </td>
-                    <td style="padding: 6px 12px; font-size: 13px;">
-                      <span style={"display: inline-block; padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 500; #{status_style(service.status)}"}>
-                        <%= service.status %>
-                      </span>
-                    </td>
-                    <td style="padding: 6px 12px; font-size: 13px; color: #9ca3af;">
-                      <%= service.port %>
-                    </td>
-                    <td></td>
-                  </tr>
-                <% end %>
-              <% end %>
-            <% end %>
-          </tbody>
-        </table>
+        <section class="bates-apps">
+          <.app_card :for={app <- @apps} app={app} />
+        </section>
       <% end %>
+
+      <footer class="bates-footer">
+        <span>§ Bates</span>
+        <span>{@apps |> length()} app{if length(@apps) == 1, do: "", else: "s"}</span>
+      </footer>
     </div>
     """
   end
 
-  defp status_style("up"), do: "background: #dcfce7; color: #166534;"
-  defp status_style("starting"), do: "background: #dbeafe; color: #1e40af;"
-  defp status_style("crashed"), do: "background: #fee2e2; color: #991b1b;"
-  defp status_style("partial"), do: "background: #fef3c7; color: #92400e;"
-  defp status_style("down"), do: "background: #f3f4f6; color: #374151;"
-  defp status_style(_), do: "background: #f3f4f6; color: #374151;"
+  attr :rest, :global
+
+  defp topbar(assigns) do
+    ~H"""
+    <header class="bates-topbar" {@rest}>
+      <.wordmark />
+      <div class="bates-topbar__right">
+        <span class="bates-pill">
+          <span class="bates-pill__dot"></span>
+          running on <span class="bates-pill__mono">*.test</span>
+        </span>
+      </div>
+    </header>
+    """
+  end
+
+  defp wordmark(assigns) do
+    ~H"""
+    <div class="bates-wordmark">
+      <span class="bates-wordmark__name">Bates</span>
+      <span class="bates-wordmark__tag">at your service</span>
+    </div>
+    """
+  end
+
+  attr :stat, :map, required: true
+
+  defp stat(assigns) do
+    ~H"""
+    <div class={"bates-stat bates-stat--#{@stat.tone}"}>
+      <div class="bates-stat__row">
+        <span class="bates-stat__lamp-slot">
+          <.status_lamp state={@stat.lamp} />
+        </span>
+        <span class="bates-stat__value">{@stat.value}</span>
+        <span class="bates-stat__label">{@stat.label}</span>
+      </div>
+    </div>
+    """
+  end
+
+  attr :state, :string, required: true
+
+  defp status_lamp(assigns) do
+    ~H"""
+    <span class={"bates-lamp bates-lamp--#{@state}"} aria-hidden="true"></span>
+    """
+  end
+
+  attr :app, :map, required: true
+
+  defp app_card(assigns) do
+    assigns =
+      assigns
+      |> assign(:lamp, lamp_state(assigns.app.status))
+      |> assign(:error_count, service_error_count(assigns.app.services))
+      |> assign(:all_up, assigns.app.status == "up")
+      |> assign(:all_down, assigns.app.status == "down")
+
+    ~H"""
+    <article class="bates-app">
+      <header class="bates-app__header">
+        <div class="bates-app__title-group">
+          <.status_lamp state={@lamp} />
+          <h2 class="bates-app__title">{@app.name}</h2>
+          <a class="bates-app__domain" href={"https://#{@app.hostname}"}>{@app.hostname}</a>
+          <%= if @error_count > 0 do %>
+            <span class="bates-app__error-tag">
+              {@error_count} error{if @error_count > 1, do: "s", else: ""}
+            </span>
+          <% end %>
+        </div>
+
+        <div class="bates-app__actions">
+          <button
+            class="bates-btn bates-btn--ghost"
+            phx-click="start"
+            phx-value-name={@app.name}
+            disabled={@all_up}
+          >Start all</button>
+          <%= if @all_up do %>
+            <button
+              class="bates-btn bates-btn--ghost"
+              phx-click="restart"
+              phx-value-name={@app.name}
+            >Restart</button>
+          <% end %>
+          <button
+            class="bates-btn bates-btn--ghost-destructive"
+            phx-click="stop"
+            phx-value-name={@app.name}
+            disabled={@all_down}
+          >Stop all</button>
+        </div>
+      </header>
+
+      <div class="bates-services">
+        <div class="bates-services__head">
+          <div class="bates-services__cell">Service</div>
+          <div class="bates-services__cell">Hostname</div>
+          <div class="bates-services__cell">Status</div>
+          <div class="bates-services__cell">Port</div>
+        </div>
+        <.service_row :for={svc <- @app.services} svc={svc} />
+      </div>
+    </article>
+    """
+  end
+
+  attr :svc, :map, required: true
+
+  defp service_row(assigns) do
+    lamp = lamp_state(assigns.svc.status)
+
+    assigns =
+      assigns
+      |> assign(:lamp, lamp)
+      |> assign(:dim, assigns.svc.status in ["down", "crashed"])
+
+    ~H"""
+    <div class="bates-services__row">
+      <div class="bates-services__cell bates-services__cell--name">{@svc.name}</div>
+      <div class="bates-services__cell bates-services__cell--host">
+        <%= if @svc.hostname do %>
+          <a href={"https://#{@svc.hostname}"}>{@svc.hostname}</a>
+        <% else %>
+          <span class="bates-services__cell--dim">—</span>
+        <% end %>
+      </div>
+      <div class="bates-services__cell">
+        <span class={"bates-services__status bates-services__status--#{@lamp}"}>
+          <.status_lamp state={@lamp} />
+          {@svc.status}{if @svc.status == "starting", do: "…", else: ""}
+        </span>
+      </div>
+      <div class={"bates-services__cell" <> if(@dim, do: " bates-services__cell--dim", else: "")}>
+        <%= if @svc.port do %>
+          :{@svc.port}
+        <% else %>
+          —
+        <% end %>
+      </div>
+    </div>
+    """
+  end
 end
