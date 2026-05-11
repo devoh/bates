@@ -38,7 +38,7 @@ defmodule BatesWeb.LoadingLive do
       |> assign(:error_details, nil)
 
     if status == "up" do
-      {:ok, redirect(socket, external: "https://#{hostname}")}
+      {:ok, replace_navigate(socket, "https://#{hostname}")}
     else
       {:ok, socket}
     end
@@ -46,7 +46,7 @@ defmodule BatesWeb.LoadingLive do
 
   @impl true
   def handle_info({:status, "up"}, socket) do
-    {:noreply, redirect(socket, external: "https://#{socket.assigns.hostname}")}
+    {:noreply, replace_navigate(socket, "https://#{socket.assigns.hostname}")}
   end
 
   @impl true
@@ -97,6 +97,22 @@ defmodule BatesWeb.LoadingLive do
       </div>
     </main>
     """
+  end
+
+  # The loading page should not stay in browser history: once the app is
+  # ready, hitting "back" from the app should go to wherever the user was
+  # before, not back through the loading page. On the dead-render path
+  # `live_render/3` emits a normal 302 (which browsers handle as a
+  # history *replace*), so that branch is fine; on the connected path
+  # LiveView's external redirect goes through `window.location = url`
+  # which *pushes*. We use a custom client event + `location.replace`
+  # to make the connected path also replace.
+  defp replace_navigate(socket, url) do
+    if connected?(socket) do
+      push_event(socket, "bates:replace-navigate", %{url: url})
+    else
+      redirect(socket, external: url)
+    end
   end
 
   defp safe_up(app_name) do
