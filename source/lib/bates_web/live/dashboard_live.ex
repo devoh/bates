@@ -230,7 +230,6 @@ defmodule BatesWeb.DashboardLive do
       <div class="bates-services">
         <div class="bates-services__head">
           <div class="bates-services__cell">Service</div>
-          <div class="bates-services__cell">Hostname</div>
           <div class="bates-services__cell">Status</div>
           <div class="bates-services__cell">Port</div>
         </div>
@@ -252,12 +251,11 @@ defmodule BatesWeb.DashboardLive do
 
     ~H"""
     <div class="bates-services__row">
-      <div class="bates-services__cell bates-services__cell--name">{@svc.name}</div>
-      <div class="bates-services__cell bates-services__cell--host">
+      <div class="bates-services__cell bates-services__cell--name">
         <%= if @svc.hostname do %>
-          <a href={"https://#{@svc.hostname}"}>{@svc.hostname}</a>
+          <a href={"https://#{@svc.hostname}"}>{@svc.name}</a>
         <% else %>
-          <span class="bates-services__cell--dim">—</span>
+          <span class="bates-services__cell--dim">{@svc.name}</span>
         <% end %>
       </div>
       <div class="bates-services__cell">

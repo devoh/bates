@@ -93,6 +93,15 @@
 html, body { margin: 0; padding: 0; min-height: 100vh; }
 button { font: inherit; }
 
+a {
+  color: var(--fg);
+  text-decoration-color: var(--dove-soft);
+}
+a:hover {
+  color: var(--accent);
+  text-decoration-color: var(--accent);
+}
+
 /* ============================================================
    Page
    ============================================================ */
@@ -298,9 +307,7 @@ body.bates-page {
   font-family: var(--font-mono);
   font-size: 12px;
   color: var(--fg-muted);
-  text-decoration: none;
 }
-.bates-app__domain:hover { color: var(--accent); }
 
 .bates-app__error-tag {
   font-family: var(--font-serif);
@@ -364,12 +371,6 @@ body.bates-page {
 }
 
 .bates-services__cell--name { font-weight: 500; }
-
-.bates-services__cell--host a {
-  color: var(--fg);
-  text-decoration: none;
-}
-.bates-services__cell--host a:hover { color: var(--accent); }
 
 .bates-services__cell--dim { color: var(--fg-muted); }
 
