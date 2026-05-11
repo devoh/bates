@@ -511,6 +511,67 @@ body.bates-page {
 }
 
 /* ============================================================
+   Loading page
+   ============================================================ */
+.bates-loading {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+}
+
+.bates-loading__inner {
+  max-width: 480px;
+  width: 100%;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 36px;
+}
+
+.bates-loading__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.bates-loading__title {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-weight: 400;
+  font-size: 28px;
+  letter-spacing: -0.005em;
+  line-height: 1.15;
+  color: var(--fg);
+}
+
+.bates-loading__status--error .bates-loading__title { color: var(--error); }
+
+.bates-loading__host {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--fg-muted);
+  margin-top: -22px;
+}
+
+.bates-loading__detail {
+  margin: 0;
+  padding: 14px 18px;
+  background: var(--bg-raised);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--fg);
+  white-space: pre-wrap;
+  text-align: left;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+/* ============================================================
    Selection
    ============================================================ */
 ::selection { background: var(--brass-polished); color: var(--ink); }

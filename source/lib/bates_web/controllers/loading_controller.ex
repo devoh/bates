@@ -6,6 +6,32 @@ defmodule BatesWeb.LoadingController do
   @timeout Application.compile_env(:bates, :readiness_timeout, 60_000)
 
   def show(conn, %{"app_name" => app_name, "service_name" => service_name}) do
+    if browser?(conn) do
+      Phoenix.LiveView.Controller.live_render(conn, BatesWeb.LoadingLive,
+        session: %{
+          "app_name" => app_name,
+          "service_name" => service_name
+        }
+      )
+    else
+      show_blocking(conn, app_name, service_name)
+    end
+  end
+
+  # The Accept header is the standard proxy for "this is a browser
+  # request": every browser sends `text/html` on navigation, while
+  # curl/wget/HTTP API clients send `*/*` or `application/json`. We use
+  # this to route browsers through the LiveView (visible loading UI +
+  # WebSocket-driven redirect) while keeping the blocking path for
+  # non-browser clients — `App.up` must fire regardless, so the dead
+  # render in `LoadingLive.mount/3` kicks it off too.
+  defp browser?(conn) do
+    conn
+    |> get_req_header("accept")
+    |> Enum.any?(&String.contains?(&1, "text/html"))
+  end
+
+  defp show_blocking(conn, app_name, service_name) do
     Phoenix.PubSub.subscribe(
       Bates.PubSub,
       "service:#{app_name}:#{service_name}"

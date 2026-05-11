@@ -68,6 +68,19 @@ defmodule BatesWeb.LoadingControllerTest do
     assert redirected_to(conn) == "https://myapp.test"
   end
 
+  test "renders the LiveView loading page for browser clients", %{conn: conn} do
+    config = service_config("myapp", "sleep 999")
+    start_supervised!({App, config})
+
+    conn =
+      conn
+      |> put_req_header("accept", "text/html")
+      |> get("/loading/myapp/myapp")
+
+    assert html_response(conn, 200) =~ "Starting"
+    assert conn.resp_body =~ "myapp"
+  end
+
   test "returns 502 when an upstream dependency crashes", %{conn: conn} do
     config =
       {"myapp", ".",
