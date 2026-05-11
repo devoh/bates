@@ -130,6 +130,7 @@ body.bates-page {
   padding-bottom: 22px;
   border-bottom: 1px solid var(--rule-strong);
   margin-bottom: 36px;
+  width: 100%;
 }
 
 .bates-topbar__right {
@@ -508,6 +509,7 @@ body.bates-page {
   font-size: 13px;
   letter-spacing: 0.18em;
   color: var(--fg-muted);
+  width: 100%;
 }
 
 /* ============================================================

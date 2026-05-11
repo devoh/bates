@@ -74,10 +74,12 @@ defmodule BatesWeb.LoadingLive do
     ~H"""
     <main class="bates-loading">
       <div class="bates-loading__inner">
-        <div class="bates-wordmark">
-          <span class="bates-wordmark__name">Bates</span>
-          <span class="bates-wordmark__tag">at your service</span>
-        </div>
+        <header class="bates-topbar">
+          <div class="bates-wordmark">
+            <span class="bates-wordmark__name">Bates</span>
+            <span class="bates-wordmark__tag">at your service</span>
+          </div>
+        </header>
 
         <%= if @status == "crashed" do %>
           <div class="bates-loading__status bates-loading__status--error">
@@ -94,6 +96,9 @@ defmodule BatesWeb.LoadingLive do
           </div>
           <div class="bates-loading__host">{@hostname}</div>
         <% end %>
+
+        <footer class="bates-footer">
+        </footer>
       </div>
     </main>
     """
