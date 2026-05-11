@@ -504,9 +504,8 @@ body.bates-page {
   align-items: baseline;
   font-family: var(--font-serif);
   font-style: italic;
-  font-size: 10px;
+  font-size: 13px;
   letter-spacing: 0.18em;
-  text-transform: uppercase;
   color: var(--fg-muted);
 }
 

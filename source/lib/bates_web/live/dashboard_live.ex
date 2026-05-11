@@ -124,8 +124,8 @@ defmodule BatesWeb.DashboardLive do
       <% end %>
 
       <footer class="bates-footer">
-        <span>§ Bates</span>
-        <span>{@apps |> length()} app{if length(@apps) == 1, do: "", else: "s"}</span>
+        <span>Bates</span>
+        <span>v. {Application.spec(:bates, :vsn)}</span>
       </footer>
     </div>
     """
