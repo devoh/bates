@@ -526,7 +526,6 @@ body.bates-page {
 .bates-loading__inner {
   max-width: 480px;
   width: 100%;
-  text-align: center;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -540,6 +539,7 @@ body.bates-page {
 }
 
 .bates-loading__title {
+  margin: 0;
   font-family: var(--font-serif);
   font-style: italic;
   font-weight: 400;
@@ -549,13 +549,27 @@ body.bates-page {
   color: var(--fg);
 }
 
-.bates-loading__status--error .bates-loading__title { color: var(--error); }
+.bates-loading__title--error { color: var(--error); }
 
-.bates-loading__host {
+.bates-loading__chain {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.bates-loading__row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.bates-loading__service {
   font-family: var(--font-mono);
-  font-size: 13px;
-  color: var(--fg-muted);
-  margin-top: -22px;
+  font-size: 14px;
+  color: var(--fg);
 }
 
 .bates-loading__detail {

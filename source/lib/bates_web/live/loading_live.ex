@@ -21,12 +21,24 @@ defmodule BatesWeb.LoadingLive do
       safe_up(app_name)
     end
 
+    services = safe_services(app_name)
+    chain = dependency_chain(services, service_name)
+
     if connected?(socket) do
-      Phoenix.PubSub.subscribe(Bates.PubSub, "service:#{app_name}:#{service_name}")
+      # Per-service broadcasts don't include the service name in the
+      # payload, so we subscribe to each topic in the chain and just
+      # re-fetch services on every event below.
+      for svc <- chain do
+        Phoenix.PubSub.subscribe(
+          Bates.PubSub,
+          "service:#{app_name}:#{svc.name}"
+        )
+      end
+
       Phoenix.PubSub.subscribe(Bates.PubSub, "app:#{app_name}")
     end
 
-    hostname = find_hostname(app_name, service_name) || "#{app_name}.test"
+    hostname = service_hostname(services, service_name) || "#{app_name}.test"
     status = safe_status(app_name)
 
     socket =
@@ -35,6 +47,7 @@ defmodule BatesWeb.LoadingLive do
       |> assign(:service_name, service_name)
       |> assign(:hostname, hostname)
       |> assign(:status, status)
+      |> assign(:chain, chain)
       |> assign(:error_details, nil)
 
     if status == "up" do
@@ -46,22 +59,37 @@ defmodule BatesWeb.LoadingLive do
 
   @impl true
   def handle_info({:status, "up"}, socket) do
-    {:noreply, replace_navigate(socket, "https://#{socket.assigns.hostname}")}
+    case safe_status(socket.assigns.app_name) do
+      "up" ->
+        {:noreply, replace_navigate(socket, "https://#{socket.assigns.hostname}")}
+
+      _ ->
+        {:noreply, refresh_chain(socket)}
+    end
   end
 
   @impl true
   def handle_info({:status, "crashed", details}, socket) do
-    {:noreply, assign(socket, status: "crashed", error_details: details)}
+    {:noreply,
+     socket
+     |> assign(status: "crashed", error_details: details)
+     |> refresh_chain()}
   end
 
   @impl true
   def handle_info({:status, "crashed"}, socket) do
-    {:noreply, assign(socket, status: "crashed")}
+    {:noreply,
+     socket
+     |> assign(:status, "crashed")
+     |> refresh_chain()}
   end
 
   @impl true
   def handle_info({:status, status}, socket) do
-    {:noreply, assign(socket, status: status)}
+    {:noreply,
+     socket
+     |> assign(:status, status)
+     |> refresh_chain()}
   end
 
   @impl true
@@ -81,21 +109,22 @@ defmodule BatesWeb.LoadingLive do
           </div>
         </header>
 
-        <%= if @status == "crashed" do %>
-          <div class="bates-loading__status bates-loading__status--error">
-            <span class="bates-lamp bates-lamp--error" aria-hidden="true"></span>
-            <span class="bates-loading__title">{@app_name} crashed</span>
-          </div>
-          <%= if @error_details && @error_details != "" do %>
-            <pre class="bates-loading__detail">{@error_details}</pre>
+          <%= if @status == "crashed" do %>
+            <h1 class="bates-loading__title bates-loading__title--error">{@app_name} crashed</h1>
+
+            <%= if @error_details && @error_details != "" do %>
+              <pre class="bates-loading__detail">{@error_details}</pre>
+            <% end %>
+          <% else %>
+            <h1 class="bates-loading__title">Starting {@app_name}…</h1>
+
+            <ul class="bates-loading__chain">
+              <li :for={svc <- @chain} class="bates-loading__row">
+                <span class={"bates-lamp bates-lamp--#{lamp_state(svc.status)}"} aria-hidden="true"></span>
+                <span class="bates-loading__service">{svc.name}</span>
+              </li>
+            </ul>
           <% end %>
-        <% else %>
-          <div class="bates-loading__status">
-            <span class="bates-lamp bates-lamp--starting" aria-hidden="true"></span>
-            <span class="bates-loading__title">Starting {@app_name}…</span>
-          </div>
-          <div class="bates-loading__host">{@hostname}</div>
-        <% end %>
 
         <footer class="bates-footer">
         </footer>
@@ -120,6 +149,49 @@ defmodule BatesWeb.LoadingLive do
     end
   end
 
+  defp refresh_chain(socket) do
+    services = safe_services(socket.assigns.app_name)
+    chain = dependency_chain(services, socket.assigns.service_name)
+    assign(socket, :chain, chain)
+  end
+
+  # Build the ordered list of services leading up to `service_name`:
+  # transitive dependencies first (in topological order), then the
+  # requested service last. Cycles and missing services are tolerated
+  # — App.Config rejects invalid graphs at startup, so this code only
+  # has to be correct for well-formed graphs.
+  defp dependency_chain(services, service_name) do
+    by_name = Map.new(services, &{&1.name, &1})
+    {chain, _visited} = walk(service_name, by_name, MapSet.new(), [])
+    chain
+  end
+
+  defp walk(name, by_name, visited, acc) do
+    cond do
+      MapSet.member?(visited, name) ->
+        {acc, visited}
+
+      svc = Map.get(by_name, name) ->
+        visited = MapSet.put(visited, name)
+
+        {acc, visited} =
+          Enum.reduce(svc.depends_on || [], {acc, visited}, fn dep, {a, v} ->
+            walk(dep, by_name, v, a)
+          end)
+
+        {acc ++ [svc], visited}
+
+      true ->
+        {acc, visited}
+    end
+  end
+
+  defp lamp_state("up"), do: "running"
+  defp lamp_state("down"), do: "stopped"
+  defp lamp_state("starting"), do: "starting"
+  defp lamp_state("crashed"), do: "error"
+  defp lamp_state(_), do: "stopped"
+
   defp safe_up(app_name) do
     App.up(app_name)
   catch
@@ -132,12 +204,15 @@ defmodule BatesWeb.LoadingLive do
     :exit, _ -> "unknown"
   end
 
-  defp find_hostname(app_name, service_name) do
+  defp safe_services(app_name) do
     App.services(app_name)
-    |> Enum.find_value(fn service ->
+  catch
+    :exit, _ -> []
+  end
+
+  defp service_hostname(services, service_name) do
+    Enum.find_value(services, fn service ->
       if service.name == service_name, do: service.hostname
     end)
-  catch
-    :exit, _ -> nil
   end
 end

@@ -77,8 +77,9 @@ defmodule BatesWeb.LoadingControllerTest do
       |> put_req_header("accept", "text/html")
       |> get("/loading/myapp/myapp")
 
-    assert html_response(conn, 200) =~ "Starting"
-    assert conn.resp_body =~ "myapp"
+    body = html_response(conn, 200)
+    assert body =~ "bates-loading__chain"
+    assert body =~ "myapp"
   end
 
   test "returns 502 when an upstream dependency crashes", %{conn: conn} do

@@ -138,7 +138,8 @@ defmodule Bates.App do
           name: svc.config.name,
           hostname: svc.config.hostname,
           status: service_status_name(svc),
-          port: svc.assigned_port
+          port: svc.assigned_port,
+          depends_on: svc.config.depends_on
         }
       end)
 
