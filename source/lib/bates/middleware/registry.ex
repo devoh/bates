@@ -2,6 +2,7 @@ defmodule Bates.Middleware.Registry do
   @builtins %{
     "asdf" => Bates.Middleware.Asdf,
     "direnv" => Bates.Middleware.Direnv,
+    "hostname" => Bates.Middleware.Hostname,
     "port" => Bates.Middleware.Port
   }
 

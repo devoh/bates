@@ -183,8 +183,15 @@ defmodule Bates.Config do
   defp merge_middleware(app_middleware, service_middleware, hostname) do
     merged = app_middleware ++ service_middleware
 
-    if hostname != nil and "port" not in merged do
-      merged ++ ["port"]
+    merged =
+      if hostname != nil and "port" not in merged do
+        merged ++ ["port"]
+      else
+        merged
+      end
+
+    if hostname != nil and "hostname" not in merged do
+      merged ++ ["hostname"]
     else
       merged
     end

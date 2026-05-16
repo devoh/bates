@@ -111,11 +111,11 @@ defmodule Bates.ConfigTest do
   end
 
   describe "middleware" do
-    test "auto-appends 'port' for routable services in single-service shorthand" do
+    test "auto-appends 'port' and 'hostname' for routable services in single-service shorthand" do
       [{_name, _root, [service]}] =
         Config.applications("test/fixtures/config.toml")
 
-      assert service.middleware == ["port"]
+      assert service.middleware == ["port", "hostname"]
     end
 
     test "does not auto-append 'port' for portless services" do
@@ -127,13 +127,13 @@ defmodule Bates.ConfigTest do
       assert worker.middleware == []
     end
 
-    test "auto-appends 'port' for routable services in multi-service config" do
+    test "auto-appends 'port' and 'hostname' for routable services in multi-service config" do
       [{_name, _root, services}] =
         Config.applications("test/fixtures/multi_service_config.toml")
 
       web = Enum.find(services, &(&1.name == "web"))
 
-      assert web.middleware == ["port"]
+      assert web.middleware == ["port", "hostname"]
     end
 
     test "prepends app-level middleware to each service's list" do
@@ -142,7 +142,7 @@ defmodule Bates.ConfigTest do
 
       service_map = Map.new(services, &{&1.name, &1})
 
-      assert service_map["web"].middleware == ["asdf", "port"]
+      assert service_map["web"].middleware == ["asdf", "port", "hostname"]
       assert service_map["worker"].middleware == ["asdf"]
     end
 
@@ -152,7 +152,7 @@ defmodule Bates.ConfigTest do
 
       vite = Enum.find(services, &(&1.name == "vite"))
 
-      assert vite.middleware == ["asdf", "port"]
+      assert vite.middleware == ["asdf", "port", "hostname"]
     end
 
     test "does not duplicate 'port' when user already listed it" do
@@ -170,7 +170,7 @@ defmodule Bates.ConfigTest do
           "test/fixtures/single_service_middleware_config.toml"
         )
 
-      assert service.middleware == ["asdf", "port"]
+      assert service.middleware == ["asdf", "port", "hostname"]
     end
 
     test "returns {:error, {:unknown_middleware, name}} for unknown middleware" do
