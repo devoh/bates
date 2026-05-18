@@ -22,6 +22,14 @@ defmodule BatesWeb.Router do
     post "/processes/:name/start", ProcessController, :start
     post "/processes/:name/stop", ProcessController, :stop
     post "/processes/:name/restart", ProcessController, :restart
+
+    post "/processes/:app/services/:service/start",
+         ProcessController,
+         :start_service
+
+    post "/processes/:app/services/:service/stop",
+         ProcessController,
+         :stop_service
   end
 
   scope "/", BatesWeb do

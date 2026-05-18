@@ -288,4 +288,211 @@ defmodule BatesWeb.ProcessControllerTest do
       assert worker.pid != nil
     end
   end
+
+  describe "start_service" do
+    defp chain_config do
+      {"testapp", ".",
+       [
+         %Service{
+           name: "vite",
+           command: "elixir test/support/test_server.ex",
+           port: nil,
+           hostname: "vite.testapp.test",
+           middleware: ["port"]
+         },
+         %Service{
+           name: "web",
+           command: "elixir test/support/test_server.ex",
+           port: nil,
+           hostname: "testapp.test",
+           middleware: ["port"],
+           depends_on: ["vite"]
+         },
+         %Service{
+           name: "worker",
+           command: "sleep 999",
+           port: nil,
+           hostname: nil,
+           depends_on: ["web"]
+         }
+       ]}
+    end
+
+    test "returns 200 with status `up` for the named service", %{conn: conn} do
+      config = chain_config()
+      start_supervised!({App, config})
+
+      conn = post(conn, "/processes/testapp/services/vite/start")
+
+      body = json_response(conn, 200)
+      assert body["app"] == "testapp"
+      assert body["service"] == "vite"
+      assert body["status"] == "up"
+      assert is_integer(body["port"])
+      assert body["hostname"] == "vite.testapp.test"
+    end
+
+    test "returns 404 for unknown app", %{conn: conn} do
+      conn = post(conn, "/processes/unknown/services/web/start")
+
+      body = json_response(conn, 404)
+      assert body["app"] == "unknown"
+      assert body["service"] == "web"
+      assert body["status"] == "unknown"
+      assert body["reason"] =~ "unknown application"
+    end
+
+    test "returns 404 for unknown service", %{conn: conn} do
+      config = chain_config()
+      start_supervised!({App, config})
+
+      conn = post(conn, "/processes/testapp/services/missing/start")
+
+      body = json_response(conn, 404)
+      assert body["app"] == "testapp"
+      assert body["service"] == "missing"
+      assert body["status"] == "unknown"
+      assert body["reason"] =~ "unknown service"
+    end
+
+    test "returns 422 when the service crashes during start", %{conn: conn} do
+      config =
+        {"testapp", ".",
+         [
+           %Service{
+             name: "web",
+             command: "/bin/false",
+             port: nil,
+             hostname: "testapp.test",
+             middleware: ["port"]
+           }
+         ]}
+
+      start_supervised!({App, config})
+
+      conn = post(conn, "/processes/testapp/services/web/start")
+
+      body = json_response(conn, 422)
+      assert body["app"] == "testapp"
+      assert body["service"] == "web"
+      assert body["status"] == "crashed"
+    end
+
+    test "returns 504 when readiness times out", %{conn: conn} do
+      original = Application.get_env(:bates, :readiness_timeout)
+      Application.put_env(:bates, :readiness_timeout, 50)
+
+      on_exit(fn ->
+        if original do
+          Application.put_env(:bates, :readiness_timeout, original)
+        else
+          Application.delete_env(:bates, :readiness_timeout)
+        end
+      end)
+
+      config =
+        {"testapp", ".",
+         [
+           %Service{
+             name: "slow",
+             command: "sleep 999",
+             port: nil,
+             hostname: "slow.testapp.test",
+             middleware: ["port"]
+           }
+         ]}
+
+      start_supervised!({App, config})
+
+      conn = post(conn, "/processes/testapp/services/slow/start")
+
+      body = json_response(conn, 504)
+      assert body["app"] == "testapp"
+      assert body["service"] == "slow"
+      assert body["status"] == "timeout"
+      assert body["reason"] =~ "timed out"
+    end
+  end
+
+  describe "stop_service" do
+    defp chain_config_for_stop do
+      {"testapp", ".",
+       [
+         %Service{
+           name: "vite",
+           command: "elixir test/support/test_server.ex",
+           port: nil,
+           hostname: "vite.testapp.test",
+           middleware: ["port"]
+         },
+         %Service{
+           name: "web",
+           command: "elixir test/support/test_server.ex",
+           port: nil,
+           hostname: "testapp.test",
+           middleware: ["port"],
+           depends_on: ["vite"]
+         },
+         %Service{
+           name: "worker",
+           command: "sleep 999",
+           port: nil,
+           hostname: nil,
+           depends_on: ["web"]
+         }
+       ]}
+    end
+
+    test "stops the named service and returns its cascaded dependents",
+         %{conn: conn} do
+      config = chain_config_for_stop()
+      start_supervised!({App, config})
+      :ok = App.up("testapp")
+      assert_eventually(fn -> App.status("testapp") == "up" end)
+
+      conn = post(conn, "/processes/testapp/services/vite/stop")
+
+      body = json_response(conn, 200)
+      assert body["app"] == "testapp"
+      assert body["service"] == "vite"
+      assert body["status"] == "down"
+
+      assert body["cascaded"] == [
+               %{"service" => "worker", "status" => "down"},
+               %{"service" => "web", "status" => "down"}
+             ]
+    end
+
+    test "returns empty cascade for a leaf", %{conn: conn} do
+      config = chain_config_for_stop()
+      start_supervised!({App, config})
+      :ok = App.up("testapp")
+      assert_eventually(fn -> App.status("testapp") == "up" end)
+
+      conn = post(conn, "/processes/testapp/services/worker/stop")
+
+      body = json_response(conn, 200)
+      assert body["status"] == "down"
+      assert body["cascaded"] == []
+    end
+
+    test "returns 404 for unknown app", %{conn: conn} do
+      conn = post(conn, "/processes/unknown/services/web/stop")
+
+      body = json_response(conn, 404)
+      assert body["status"] == "unknown"
+      assert body["reason"] =~ "unknown application"
+    end
+
+    test "returns 404 for unknown service", %{conn: conn} do
+      config = chain_config_for_stop()
+      start_supervised!({App, config})
+
+      conn = post(conn, "/processes/testapp/services/missing/stop")
+
+      body = json_response(conn, 404)
+      assert body["status"] == "unknown"
+      assert body["reason"] =~ "unknown service"
+    end
+  end
 end

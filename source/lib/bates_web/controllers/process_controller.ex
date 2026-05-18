@@ -79,6 +79,228 @@ defmodule BatesWeb.ProcessController do
     end
   end
 
+  def start_service(conn, %{"app" => app, "service" => service}) do
+    with {:ok, _pid} <- fetch_app(app),
+         {:ok, svc} <- fetch_service(app, service) do
+      Phoenix.PubSub.subscribe(Bates.PubSub, "service:#{app}:#{service}")
+
+      cond do
+        App.service_status(app, service) == "up" ->
+          respond_service_up(conn, app, service, svc)
+
+        true ->
+          dispatch_start_service(conn, app, service, svc)
+      end
+    else
+      {:error, :unknown_app} ->
+        conn
+        |> put_status(404)
+        |> json(%{
+          app: app,
+          service: service,
+          status: "unknown",
+          reason: "unknown application: #{app}"
+        })
+
+      {:error, :unknown_service} ->
+        conn
+        |> put_status(404)
+        |> json(%{
+          app: app,
+          service: service,
+          status: "unknown",
+          reason: "unknown service: #{service}"
+        })
+    end
+  end
+
+  defp dispatch_start_service(conn, app, service, svc) do
+    case start_app_service(app, service) do
+      :ok ->
+        await_service_settled(conn, app, service, svc, timeout())
+
+      {:error, :unknown_service} ->
+        conn
+        |> put_status(404)
+        |> json(%{
+          app: app,
+          service: service,
+          status: "unknown",
+          reason: "unknown service: #{service}"
+        })
+
+      {:error, reason} ->
+        Logger.error(
+          "App.up/2 exited for #{app}:#{service}: #{inspect(reason)}"
+        )
+
+        conn
+        |> put_status(500)
+        |> json(%{
+          app: app,
+          service: service,
+          status: "error",
+          reason: "internal error: #{inspect(reason)}"
+        })
+    end
+  end
+
+  def stop_service(conn, %{"app" => app, "service" => service}) do
+    with {:ok, _pid} <- fetch_app(app),
+         {:ok, _svc} <- fetch_service(app, service) do
+      case stop_app_service(app, service) do
+        {:ok, cascaded} ->
+          json(conn, %{
+            app: app,
+            service: service,
+            status: "down",
+            cascaded: cascaded
+          })
+
+        {:error, :unknown_service} ->
+          conn
+          |> put_status(404)
+          |> json(%{
+            app: app,
+            service: service,
+            status: "unknown",
+            reason: "unknown service: #{service}"
+          })
+
+        {:error, reason} ->
+          conn
+          |> put_status(422)
+          |> json(%{
+            app: app,
+            service: service,
+            error: inspect(reason)
+          })
+      end
+    else
+      {:error, :unknown_app} ->
+        conn
+        |> put_status(404)
+        |> json(%{
+          app: app,
+          service: service,
+          status: "unknown",
+          reason: "unknown application: #{app}"
+        })
+
+      {:error, :unknown_service} ->
+        conn
+        |> put_status(404)
+        |> json(%{
+          app: app,
+          service: service,
+          status: "unknown",
+          reason: "unknown service: #{service}"
+        })
+    end
+  end
+
+  defp fetch_app(app) do
+    case ProcessSupervisor.app_pid(app) do
+      nil -> {:error, :unknown_app}
+      pid -> {:ok, pid}
+    end
+  end
+
+  defp fetch_service(app, service) do
+    case Enum.find(App.services(app), &(&1.name == service)) do
+      nil -> {:error, :unknown_service}
+      svc -> {:ok, svc}
+    end
+  end
+
+  defp start_app_service(app, service) do
+    App.up(app, service)
+  catch
+    :exit, reason -> {:error, reason}
+  end
+
+  defp stop_app_service(app, service) do
+    App.down(app, service)
+  catch
+    :exit, reason -> {:error, reason}
+  end
+
+  defp await_service_settled(conn, app, service, svc, timeout) do
+    deadline = System.monotonic_time(:millisecond) + timeout
+    receive_service_settled(conn, app, service, svc, deadline)
+  end
+
+  defp receive_service_settled(conn, app, service, svc, deadline) do
+    remaining = deadline - System.monotonic_time(:millisecond)
+
+    if remaining <= 0 do
+      service_timeout_response(conn, app, service)
+    else
+      receive do
+        {:status, "up"} ->
+          respond_service_up(conn, app, service, svc)
+
+        {:status, "crashed", reason} ->
+          conn
+          |> put_status(422)
+          |> json(%{
+            app: app,
+            service: service,
+            status: "crashed",
+            reason: reason
+          })
+
+        {:status, "crashed"} ->
+          conn
+          |> put_status(422)
+          |> json(%{
+            app: app,
+            service: service,
+            status: "crashed",
+            reason: "service crashed"
+          })
+
+        _ ->
+          receive_service_settled(conn, app, service, svc, deadline)
+      after
+        remaining -> service_timeout_response(conn, app, service)
+      end
+    end
+  end
+
+  defp respond_service_up(conn, app, service, svc) do
+    case Enum.find(App.services(app), &(&1.name == service)) do
+      nil ->
+        json(conn, %{
+          app: app,
+          service: service,
+          status: "up",
+          port: svc.port,
+          hostname: svc.hostname
+        })
+
+      latest ->
+        json(conn, %{
+          app: app,
+          service: service,
+          status: "up",
+          port: latest.port,
+          hostname: latest.hostname
+        })
+    end
+  end
+
+  defp service_timeout_response(conn, app, service) do
+    conn
+    |> put_status(504)
+    |> json(%{
+      app: app,
+      service: service,
+      status: "timeout",
+      reason: "timed out waiting for #{service} to start"
+    })
+  end
+
   defp await_start_response(conn, name) do
     case App.snapshot(name) do
       %{status: "up", exports: exports} ->
