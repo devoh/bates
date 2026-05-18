@@ -51,6 +51,26 @@ defmodule BatesWeb.DashboardLive do
     {:noreply, socket}
   end
 
+  @impl true
+  def handle_event(
+        "start_service",
+        %{"app" => app, "service" => service},
+        socket
+      ) do
+    App.up(app, service)
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_event(
+        "stop_service",
+        %{"app" => app, "service" => service},
+        socket
+      ) do
+    App.down(app, service)
+    {:noreply, socket}
+  end
+
   defp build_app_list do
     for name <- ProcessSupervisor.app_names() |> Enum.sort() do
       status = App.status(name)
@@ -131,7 +151,7 @@ defmodule BatesWeb.DashboardLive do
     """
   end
 
-  attr :rest, :global
+  attr(:rest, :global)
 
   defp topbar(assigns) do
     ~H"""
@@ -156,7 +176,7 @@ defmodule BatesWeb.DashboardLive do
     """
   end
 
-  attr :stat, :map, required: true
+  attr(:stat, :map, required: true)
 
   defp stat(assigns) do
     ~H"""
@@ -172,7 +192,7 @@ defmodule BatesWeb.DashboardLive do
     """
   end
 
-  attr :state, :string, required: true
+  attr(:state, :string, required: true)
 
   defp status_lamp(assigns) do
     ~H"""
@@ -180,7 +200,7 @@ defmodule BatesWeb.DashboardLive do
     """
   end
 
-  attr :app, :map, required: true
+  attr(:app, :map, required: true)
 
   defp app_card(assigns) do
     assigns =
@@ -232,14 +252,24 @@ defmodule BatesWeb.DashboardLive do
           <div class="bates-services__cell">Service</div>
           <div class="bates-services__cell">Status</div>
           <div class="bates-services__cell">Port</div>
+          <%= if @app.multi_service do %>
+            <div class="bates-services__cell">Actions</div>
+          <% end %>
         </div>
-        <.service_row :for={svc <- @app.services} svc={svc} />
+        <.service_row
+          :for={svc <- @app.services}
+          svc={svc}
+          app_name={@app.name}
+          multi_service={@app.multi_service}
+        />
       </div>
     </article>
     """
   end
 
-  attr :svc, :map, required: true
+  attr(:svc, :map, required: true)
+  attr(:app_name, :string, required: true)
+  attr(:multi_service, :boolean, default: false)
 
   defp service_row(assigns) do
     lamp = lamp_state(assigns.svc.status)
@@ -248,6 +278,8 @@ defmodule BatesWeb.DashboardLive do
       assigns
       |> assign(:lamp, lamp)
       |> assign(:dim, assigns.svc.status in ["down", "crashed"])
+      |> assign(:start_disabled, assigns.svc.status in ["up", "starting"])
+      |> assign(:stop_disabled, assigns.svc.status == "down")
 
     ~H"""
     <div class="bates-services__row">
@@ -271,6 +303,24 @@ defmodule BatesWeb.DashboardLive do
           —
         <% end %>
       </div>
+      <%= if @multi_service do %>
+        <div class="bates-services__cell bates-services__cell--actions">
+          <button
+            class="bates-btn bates-btn--ghost"
+            phx-click="start_service"
+            phx-value-app={@app_name}
+            phx-value-service={@svc.name}
+            disabled={@start_disabled}
+          >Start</button>
+          <button
+            class="bates-btn bates-btn--ghost-destructive"
+            phx-click="stop_service"
+            phx-value-app={@app_name}
+            phx-value-service={@svc.name}
+            disabled={@stop_disabled}
+          >Stop</button>
+        </div>
+      <% end %>
     </div>
     """
   end

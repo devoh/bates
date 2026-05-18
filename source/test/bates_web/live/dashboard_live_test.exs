@@ -210,6 +210,155 @@ defmodule BatesWeb.DashboardLiveTest do
     refute html =~ "background: #fafafa"
   end
 
+  describe "per-service buttons" do
+    defp multi_service_chain_config do
+      {"myapp", ".",
+       [
+         %Service{
+           name: "web",
+           command: "sleep 999",
+           port: Bates.PortNumber.next(),
+           hostname: "myapp.test",
+           middleware: ["port"]
+         },
+         %Service{
+           name: "worker",
+           command: "sleep 999",
+           port: nil,
+           hostname: nil
+         }
+       ]}
+    end
+
+    test "multi-service app renders per-service Start/Stop buttons",
+         %{conn: conn} do
+      config = multi_service_chain_config()
+      start_supervised!({App, config})
+
+      {:ok, _live, html} = live(conn, "/")
+
+      assert html =~ "phx-click=\"start_service\""
+      assert html =~ "phx-click=\"stop_service\""
+      assert html =~ "phx-value-service=\"web\""
+      assert html =~ "phx-value-service=\"worker\""
+    end
+
+    test "single-service app does not render per-service buttons",
+         %{conn: conn} do
+      config = single_service_config("myapp")
+      start_supervised!({App, config})
+
+      {:ok, _live, html} = live(conn, "/")
+
+      refute html =~ "phx-click=\"start_service\""
+      refute html =~ "phx-click=\"stop_service\""
+    end
+
+    test "start_service event triggers App.up/2", %{conn: conn} do
+      config =
+        {"myapp", ".",
+         [
+           %Service{
+             name: "web",
+             command: "sleep 999",
+             port: Bates.PortNumber.next(),
+             hostname: "myapp.test",
+             middleware: ["port"]
+           },
+           %Service{
+             name: "worker",
+             command: "sleep 999",
+             port: nil,
+             hostname: nil
+           }
+         ]}
+
+      start_supervised!({App, config})
+
+      {:ok, live, _html} = live(conn, "/")
+
+      live
+      |> element(~s(button[phx-value-service="worker"]), "Start")
+      |> render_click()
+
+      assert_eventually(fn ->
+        App.service_status("myapp", "worker") == "up"
+      end)
+    end
+
+    test "stop_service event cascades to dependents", %{conn: conn} do
+      config =
+        {"myapp", ".",
+         [
+           %Service{
+             name: "web",
+             command: "elixir test/support/test_server.ex",
+             port: nil,
+             hostname: "myapp.test",
+             middleware: ["port"]
+           },
+           %Service{
+             name: "worker",
+             command: "sleep 999",
+             port: nil,
+             hostname: nil,
+             depends_on: ["web"]
+           }
+         ]}
+
+      start_supervised!({App, config})
+      :ok = App.up("myapp")
+
+      assert_eventually(fn ->
+        App.service_status("myapp", "worker") == "up"
+      end)
+
+      {:ok, live, _html} = live(conn, "/")
+
+      live
+      |> element(~s(button[phx-value-service="web"][phx-click="stop_service"]))
+      |> render_click()
+
+      assert_eventually(fn -> App.service_status("myapp", "web") == "down" end)
+
+      assert_eventually(fn ->
+        App.service_status("myapp", "worker") == "down"
+      end)
+    end
+
+    test "Start button is disabled for an up service", %{conn: conn} do
+      # Worker is portless, so it reaches "up" immediately on App.up.
+      config = multi_service_chain_config()
+      start_supervised!({App, config})
+      :ok = App.up("myapp")
+
+      assert_eventually(fn ->
+        App.service_status("myapp", "worker") == "up"
+      end)
+
+      {:ok, _live, html} = live(conn, "/")
+
+      assert html =~
+               ~r/phx-value-service="worker"[^>]*disabled[^>]*>Start/
+
+      refute html =~
+               ~r/phx-value-service="worker"[^>]*disabled[^>]*>Stop/
+    end
+
+    test "Stop button is disabled for a down service", %{conn: conn} do
+      config = multi_service_chain_config()
+      start_supervised!({App, config})
+
+      {:ok, _live, html} = live(conn, "/")
+
+      assert html =~
+               ~r/phx-value-service="worker"[^>]*disabled[^>]*>Stop/
+
+      refute html =~
+               ~r/phx-value-service="worker"[^>]*disabled[^>]*>Start/
+    end
+  end
+
   test "partial status shows start, stop, and restart buttons", %{conn: conn} do
     config =
       {"myapp", ".",
