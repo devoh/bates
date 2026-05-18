@@ -461,6 +461,7 @@ body.bates-page {
   transition: background var(--dur) var(--ease),
               color var(--dur) var(--ease),
               border-color var(--dur) var(--ease);
+  text-decoration: none;
 }
 
 .bates-btn--ghost {

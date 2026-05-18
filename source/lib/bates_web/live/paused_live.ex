@@ -43,10 +43,6 @@ defmodule BatesWeb.PausedLive do
 
         <h1 class="bates-loading__title">{@app_name} is paused</h1>
 
-        <p class="bates-loading__detail">
-          This application was stopped. Resume it to continue.
-        </p>
-
         <ul class="bates-loading__chain">
           <li :for={svc <- @services} class="bates-loading__row">
             <span
