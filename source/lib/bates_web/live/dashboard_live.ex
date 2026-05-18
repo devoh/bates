@@ -253,7 +253,7 @@ defmodule BatesWeb.DashboardLive do
           <div class="bates-services__cell">Status</div>
           <div class="bates-services__cell">Port</div>
           <%= if @app.multi_service do %>
-            <div class="bates-services__cell">Actions</div>
+            <div class="bates-services__cell bates-services__cell--actions">Actions</div>
           <% end %>
         </div>
         <.service_row

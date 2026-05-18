@@ -375,6 +375,12 @@ body.bates-page {
 
 .bates-services__cell--dim { color: var(--fg-muted); }
 
+.bates-services__cell--actions {
+  justify-content: flex-end;
+  text-align: right;
+  gap: 8px;
+}
+
 .bates-services__status {
   display: inline-flex;
   align-items: center;
