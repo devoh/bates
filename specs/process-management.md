@@ -129,6 +129,51 @@ requested service; the loading page subscribes to the specific service
 that was requested and redirects when that service is `up`, regardless
 of where it sits in the graph.
 
+### Per-Service Lifecycle Operations
+
+Bates also supports starting and stopping individual services within
+an application. The grammar is `<app>:<service>` for both the CLI
+(`bates up <app>:<service>`, `bates down <app>:<service>`) and the
+JSON API (`POST .../services/:service/start|stop`). Single-service
+apps work uniformly under this grammar — `<app>:<app>` is equivalent
+to `<app>`.
+
+**Cascade-stop.** Stopping a single service stops every service that
+transitively `depends_on` it, in reverse-topological order (outer
+dependent first, deepest dependency last). This is the inverse of
+the dependency closure: it's the set of services that would lose a
+hard dependency if the target stopped. The API response and CLI
+output both report the cascaded list so the caller knows exactly
+what stopped.
+
+**Transitive auto-start.** Starting a single service walks forward
+across `depends_on` to start every transitively required service
+that isn't already `up`. The fixpoint completes through the
+existing readiness callbacks — each time a deeper dependency
+becomes `up`, the next layer becomes eligible and starts. The named
+service is the last to enter `starting` (only after every transitive
+dependency is `up`).
+
+**The paused flag.** Per-application, Bates tracks a boolean
+`paused` flag held in the application GenServer's state (not
+persisted to disk). Any user-initiated stop (`App.down/1` or
+`App.down/2`) sets the flag. Any user-initiated start
+(`App.up/1` or `App.up/2`) clears it. The loading controller reads
+the flag via `App.paused?/1` and, when set, suppresses its
+otherwise on-demand `App.up/1` call in favor of a paused page
+(browsers) or a 503 JSON response (other clients). This is what
+makes `bates down myapp:web && mix ecto.reset && bates up myapp:web`
+work — without paused, a stray browser tab would silently re-start
+`web` between the two commands.
+
+**No per-service restart.** There is intentionally no `bates restart
+<app>:<service>` and no API equivalent. A service's environment is
+seeded from its dependencies' exports at start time, and a
+per-service restart would not refresh the seed for dependents.
+Omitting the operation structurally avoids the easy-to-hit
+stale-export window described in the "Service Environment Exports"
+section.
+
 ## Service Dependencies
 
 A service's `depends_on` field lists sibling services within the same
@@ -288,6 +333,13 @@ keeps the stale value until the consumer itself is restarted. This
 stale-export window is intentional: it matches Bates's stance that
 restarts are an explicit developer action, not something the runtime
 papers over.
+
+The "Per-Service Lifecycle Operations" decision to omit a per-
+service `restart` is the structural complement to this rule: a
+single-service restart would not refresh dependents' seeded
+environment, so Bates only exposes `down` then `up`, which makes
+the stop-then-start step (and the resulting dependent restarts via
+cascade) explicit at the call site.
 
 ### Built-in Middleware
 

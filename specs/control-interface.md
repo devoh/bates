@@ -32,16 +32,37 @@ application row with no nesting.
 
 ### Controls
 
-Each application has controls to:
+Each application has application-level controls to:
 
-- **Start** — boot all services in the application.
-- **Stop** — gracefully shut down all services.
+- **Start all** — boot all services in the application.
+- **Stop all** — gracefully shut down all services.
 - **Restart** — stop then start all services.
 
-Controls reflect current state: a running app shows stop and restart,
-a starting app shows stop, a stopped app shows start, a crashed app
-shows start, a partial app shows start, stop, and restart. Controls
-are application-level only — there are no per-service controls.
+Application-level controls reflect current state: a running app shows
+stop and restart, a starting app shows stop, a stopped app shows
+start, a crashed app shows start, a partial app shows start, stop,
+and restart.
+
+Multi-service applications additionally render per-service **Start**
+and **Stop** buttons on each service row. Single-service applications
+do not render per-service controls (the application-level controls
+already cover the same operations). The per-service buttons reflect
+the service's current state: Start is disabled when the service is
+`up` or `starting`; Stop is disabled when the service is `down`.
+
+Per-service stop cascades through the service's dependents (every
+service that transitively `depends_on` the target stops too, in
+reverse-topological order). Per-service start auto-walks the
+service's dependency closure forward (every service the target
+transitively `depends_on` starts first, then the target itself once
+its dependencies are `up`). There is no per-service Restart control
+— stop-then-start is structurally avoided to keep exports consistent
+across the dependency graph.
+
+Any user-initiated stop (application-level or per-service) marks the
+application as **paused** until an explicit user-initiated start
+clears it. The loading page intercepts on-demand startup for paused
+applications (see Loading Page below).
 
 ## Loading Page
 
@@ -75,6 +96,30 @@ The flow:
 Because the loading page is served from `bates.test` (the control host),
 its connection is not disrupted when Caddy updates the app's route
 upstream on startup.
+
+### Paused Apps
+
+When an application is paused (any user-initiated stop has occurred
+and no user-initiated start has cleared it since), the loading page
+does NOT run the blocking start flow. Instead:
+
+- **Browsers** see a static **paused page** (a LiveView) listing the
+  application's services with current status lamps and a **Resume**
+  button. Resume re-issues the same request with `?resume=true`,
+  which falls through to the normal loading flow. The normal flow's
+  `App.up/1` call clears the paused flag and the browser lands on
+  the application as usual.
+- **Non-HTML clients** (curl, HTTP libraries, anything whose
+  `Accept` header excludes `text/html`) receive a **503** response
+  with a JSON body of the form
+  `{"app": "<name>", "status": "paused", "reason": "..."}`. The
+  body's `reason` points the caller at `bates.test` and the
+  `bates up <app>` CLI command.
+
+This is the mechanism that makes per-service stop useful: without
+paused, a browser tab polling `myapp.test` would silently re-start
+the service the user just stopped. With paused, on-demand startup
+defers to the user.
 
 ## API
 
@@ -150,6 +195,11 @@ POST bates.test/processes/<name>/stop
 → 422  {"name": "myapp", "error": "..."}
 ```
 
+Stopping an application also marks it as **paused** so the loading
+page intercepts on-demand startup until a user-initiated start
+clears the flag. This is a behavior change vs. an earlier API where
+stop was purely transactional.
+
 **Restart an application:**
 
 ```
@@ -158,6 +208,64 @@ POST bates.test/processes/<name>/restart
 → 200  {"name": "myapp", "status": "up"}
 → 422  {"name": "myapp", "error": "..."}
 ```
+
+Restart has no per-service form. Stale environment exports propagate
+through restarts, so per-service restart is structurally omitted in
+favor of explicit `stop`/`start` pairs.
+
+**Start a service within an application:**
+
+```
+POST bates.test/processes/<app>/services/<service>/start
+
+→ 200
+{
+  "app": "myapp",
+  "service": "web",
+  "status": "up",
+  "port": 52341,
+  "hostname": "myapp.test"
+}
+→ 422  {"app": "myapp", "service": "web", "status": "crashed", "reason": "..."}
+→ 504  {"app": "myapp", "service": "web", "status": "timeout", "reason": "..."}
+→ 404  {"app": "myapp", "service": "web", "status": "unknown", "reason": "..."}
+```
+
+Auto-walks the service's dependency closure forward. Blocks until
+the named service settles to `up`, broadcasts `crashed`, or the
+readiness timeout fires. The 200 response is status-only (no
+`exports` field); callers that need merged application exports use
+the application-level start endpoint.
+
+A user-initiated per-service start clears the application's paused
+flag.
+
+**Stop a service within an application:**
+
+```
+POST bates.test/processes/<app>/services/<service>/stop
+
+→ 200
+{
+  "app": "myapp",
+  "service": "postgresql",
+  "status": "down",
+  "cascaded": [
+    {"service": "web", "status": "down"},
+    {"service": "worker", "status": "down"}
+  ]
+}
+→ 422  {"app": "myapp", "service": "postgresql", "error": "..."}
+→ 404  {"app": "myapp", "service": "missing", "status": "unknown", "reason": "..."}
+```
+
+Cascades through the service's dependents in reverse-topological
+order and returns the additionally stopped services in the
+`cascaded` array (the target itself is NOT repeated in the array).
+The order matches the broadcast order: outermost dependent first.
+For a leaf service, `cascaded` is `[]`.
+
+A user-initiated per-service stop marks the application as paused.
 
 **Application exports** (e.g., `PGHOST`, `PGPORT` from the
 `postgresql` addon) are returned as part of the

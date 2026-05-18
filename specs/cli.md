@@ -47,17 +47,74 @@ followed by indented service rows.
 
 ### `bates up <name>`
 
-Starts an application and all its services. Requires the server to be
-running.
+Starts an application or a single service within one. Requires the
+server to be running.
+
+- `bates up <app>` boots every service in the application.
+- `bates up <app>:<service>` boots the named service plus every
+  service it transitively `depends_on`.
+
+Both forms clear the application's paused flag, so subsequent
+on-demand DNS-driven startup proceeds normally.
+
+On success, the command writes one of:
+
+```
+bates: started <app>
+bates: started <app>:<service>
+```
+
+A name with no colon hits the application-level endpoint; a name of
+the form `<app>:<service>` hits the per-service endpoint. Empty
+names and names with more than one colon are rejected with a usage
+error and exit code 2.
 
 ### `bates down <name>`
 
-Stops an application and all its services. Requires the server to be
-running.
+Stops an application or a single service within one, and marks the
+application as paused so the loading page intercepts further
+on-demand startup. Requires the server to be running.
+
+- `bates down <app>` stops every service in the application.
+- `bates down <app>:<service>` stops the named service and every
+  service that transitively `depends_on` it (reverse-topological
+  cascade).
+
+The per-service form's success line includes the cascaded list when
+non-empty:
+
+```
+bates: stopped <app>:<service>
+bates: stopped <app>:<service> (also stopped: <other1>, <other2>)
+```
+
+A user-initiated `down` (application-level or per-service) sets the
+application's paused flag. The flag is cleared by a user-initiated
+`up`. The loading page checks the flag before starting an
+application on demand; while paused, browsers see a paused page
+with a Resume button and non-HTML clients get a 503 JSON response.
+
+Same parsing rules as `bates up`: empty/multi-colon names exit with
+code 2.
 
 ### `bates restart <name>`
 
 Stops then starts an application. Requires the server to be running.
+
+There is no per-service form. `bates restart myapp:web` exits with
+code 2 and writes a usage error pointing at the explicit two-step
+workaround:
+
+```
+bates restart does not support per-service form;
+use 'bates down <app>:<service>' followed by 'bates up <app>:<service>'
+```
+
+The decision avoids the easy-to-hit stale-export window that a
+per-service restart would introduce: a downstream service's
+environment is seeded from its dependencies' exports at start time,
+and per-service restart would not refresh the seeded environment of
+dependents.
 
 ### `bates env <name>`
 
