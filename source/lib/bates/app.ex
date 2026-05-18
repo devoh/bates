@@ -189,7 +189,7 @@ defmodule Bates.App do
           |> Enum.reject(&(&1 == service_name))
           |> Enum.map(&%{service: &1, status: "down"})
 
-        new_state = %{new_state | paused: true}
+        new_state = %{new_state | exports_broadcast: false, paused: true}
         {:reply, {:ok, cascaded}, new_state}
     end
   end

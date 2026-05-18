@@ -876,6 +876,42 @@ defmodule Bates.AppTest do
       :ok = App.up("testapp")
       assert_receive {:exports_settled, %{}}, 5_000
     end
+
+    test "fires again after per-service :down then whole-app :up" do
+      Application.put_env(:bates, :export_producer_exports, %{
+        "producer" => %{"PGHOST" => "127.0.0.1"}
+      })
+
+      config =
+        {"testapp", ".",
+         [
+           %Service{
+             name: "producer",
+             command: "elixir test/support/test_server.ex",
+             port: nil,
+             hostname: "producer.testapp.test",
+             middleware: ["port", "export_producer"]
+           },
+           %Service{
+             name: "consumer",
+             command: "sleep 999",
+             port: nil,
+             hostname: nil,
+             depends_on: ["producer"]
+           }
+         ]}
+
+      start_supervised!({App, config})
+      :ok = App.up("testapp")
+      assert_receive {:exports_settled, %{"PGHOST" => "127.0.0.1"}}, 10_000
+
+      # Stop the leaf (consumer). Producer stays up; its exports must
+      # still be discoverable when the next `:up` settles.
+      {:ok, _} = App.down("testapp", "consumer")
+
+      :ok = App.up("testapp")
+      assert_receive {:exports_settled, %{"PGHOST" => "127.0.0.1"}}, 10_000
+    end
   end
 
   describe "snapshot/1" do
