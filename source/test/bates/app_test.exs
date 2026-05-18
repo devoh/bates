@@ -908,6 +908,181 @@ defmodule Bates.AppTest do
     end
   end
 
+  describe "paused state" do
+    test "starts not paused" do
+      config = single_service_config()
+      start_supervised!({App, config})
+      refute App.paused?("testapp")
+    end
+
+    test "down/1 sets paused" do
+      config = single_service_config()
+      start_supervised!({App, config})
+      :ok = App.down("testapp")
+      assert App.paused?("testapp")
+    end
+
+    test "up/1 clears paused" do
+      config = single_service_config()
+      start_supervised!({App, config})
+      :ok = App.down("testapp")
+      assert App.paused?("testapp")
+      :ok = App.up("testapp")
+      refute App.paused?("testapp")
+    end
+  end
+
+  describe "per-service down/up" do
+    setup do
+      Phoenix.PubSub.subscribe(Bates.PubSub, "service:testapp:web")
+      Phoenix.PubSub.subscribe(Bates.PubSub, "service:testapp:vite")
+      Phoenix.PubSub.subscribe(Bates.PubSub, "service:testapp:worker")
+      :ok
+    end
+
+    defp chain_config do
+      {"testapp", ".",
+       [
+         %Service{
+           name: "vite",
+           command: "elixir test/support/test_server.ex",
+           port: nil,
+           hostname: "vite.testapp.test",
+           middleware: ["port"]
+         },
+         %Service{
+           name: "web",
+           command: "elixir test/support/test_server.ex",
+           port: nil,
+           hostname: "testapp.test",
+           middleware: ["port"],
+           depends_on: ["vite"]
+         },
+         %Service{
+           name: "worker",
+           command: "sleep 999",
+           port: nil,
+           hostname: nil,
+           depends_on: ["web"]
+         }
+       ]}
+    end
+
+    test "down/2 of a dependency cascades through dependents in reverse-topo order" do
+      config = chain_config()
+      start_supervised!({App, config})
+      :ok = App.up("testapp")
+
+      assert_eventually(fn -> App.status("testapp") == "up" end)
+
+      {:ok, cascaded} = App.down("testapp", "vite")
+
+      assert App.service_status("testapp", "vite") == "down"
+      assert App.service_status("testapp", "web") == "down"
+      assert App.service_status("testapp", "worker") == "down"
+
+      assert cascaded == [
+               %{service: "worker", status: "down"},
+               %{service: "web", status: "down"}
+             ]
+    end
+
+    test "down/2 of a leaf only stops the leaf with empty cascade" do
+      config = chain_config()
+      start_supervised!({App, config})
+      :ok = App.up("testapp")
+
+      assert_eventually(fn -> App.status("testapp") == "up" end)
+
+      {:ok, cascaded} = App.down("testapp", "worker")
+
+      assert cascaded == []
+      assert App.service_status("testapp", "worker") == "down"
+      assert App.service_status("testapp", "web") == "up"
+      assert App.service_status("testapp", "vite") == "up"
+    end
+
+    test "down/2 with already-stopped dependents returns empty cascade and sets paused" do
+      config = chain_config()
+      start_supervised!({App, config})
+      :ok = App.up("testapp")
+
+      assert_eventually(fn -> App.status("testapp") == "up" end)
+
+      {:ok, _} = App.down("testapp", "worker")
+      {:ok, _} = App.down("testapp", "web")
+
+      {:ok, cascaded} = App.down("testapp", "vite")
+
+      assert cascaded == []
+      assert App.paused?("testapp")
+    end
+
+    test "down/2 sets paused" do
+      config = chain_config()
+      start_supervised!({App, config})
+      :ok = App.up("testapp")
+
+      assert_eventually(fn -> App.status("testapp") == "up" end)
+
+      refute App.paused?("testapp")
+
+      {:ok, _} = App.down("testapp", "worker")
+      assert App.paused?("testapp")
+    end
+
+    test "up/2 transitively auto-starts dependencies" do
+      config = chain_config()
+      start_supervised!({App, config})
+
+      :ok = App.up("testapp", "worker")
+
+      # Vite is the deepest dep; it gets started first. Web won't enter
+      # `starting` until vite is `up`.
+      assert App.service_status("testapp", "vite") in ["starting", "up"]
+      assert App.service_status("testapp", "web") == "down"
+
+      assert_eventually(fn ->
+        App.service_status("testapp", "vite") == "up"
+      end)
+
+      assert_eventually(fn ->
+        App.service_status("testapp", "web") in ["starting", "up"]
+      end)
+
+      assert_eventually(fn ->
+        App.service_status("testapp", "worker") == "up"
+      end)
+    end
+
+    test "up/2 clears paused" do
+      config = chain_config()
+      start_supervised!({App, config})
+
+      :ok = App.down("testapp")
+      assert App.paused?("testapp")
+
+      :ok = App.up("testapp", "worker")
+      refute App.paused?("testapp")
+    end
+
+    test "down/2 with unknown service returns error" do
+      config = chain_config()
+      start_supervised!({App, config})
+
+      assert {:error, :unknown_service} =
+               App.down("testapp", "does_not_exist")
+    end
+
+    test "up/2 with unknown service returns error" do
+      config = chain_config()
+      start_supervised!({App, config})
+
+      assert {:error, :unknown_service} =
+               App.up("testapp", "does_not_exist")
+    end
+  end
+
   defp assert_eventually(fun, attempts \\ 50) do
     Bates.TestHelpers.assert_eventually(fun, attempts)
   end

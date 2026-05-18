@@ -31,8 +31,20 @@ defmodule Bates.App do
     GenServer.call(via_tuple(name), :up, @timeout)
   end
 
+  def up(name, service_name) do
+    GenServer.call(via_tuple(name), {:up, service_name}, @timeout)
+  end
+
   def down(name) do
     GenServer.call(via_tuple(name), :down, @timeout)
+  end
+
+  def down(name, service_name) do
+    GenServer.call(via_tuple(name), {:down, service_name}, @timeout)
+  end
+
+  def paused?(name) do
+    GenServer.call(via_tuple(name), :paused?)
   end
 
   def status(name) do
@@ -83,14 +95,35 @@ defmodule Bates.App do
        root: root,
        services: service_states,
        pids: %{},
-       exports_broadcast: false
+       exports_broadcast: false,
+       paused: false
      }}
   end
 
   @impl GenServer
   def handle_call(:up, _from, state) do
+    state = %{state | paused: false}
     new_state = state |> start_eligible() |> maybe_broadcast_exports_settled()
     {:reply, :ok, new_state}
+  end
+
+  @impl GenServer
+  def handle_call({:up, service_name}, _from, state) do
+    case Map.get(state.services, service_name) do
+      nil ->
+        {:reply, {:error, :unknown_service}, state}
+
+      _service_state ->
+        state = %{state | paused: false}
+        closure = forward_closure(state.services, service_name)
+
+        new_state =
+          state
+          |> start_eligible(closure)
+          |> maybe_broadcast_exports_settled()
+
+        {:reply, :ok, new_state}
+    end
   end
 
   @impl GenServer
@@ -113,8 +146,50 @@ defmodule Bates.App do
         end
       end)
 
-    new_state = %{new_state | exports_broadcast: false}
+    new_state = %{new_state | exports_broadcast: false, paused: true}
     {:reply, :ok, new_state}
+  end
+
+  @impl GenServer
+  def handle_call({:down, service_name}, _from, state) do
+    case Map.get(state.services, service_name) do
+      nil ->
+        {:reply, {:error, :unknown_service}, state}
+
+      _service_state ->
+        closure = dependents_closure(state.services, service_name)
+
+        ordered =
+          state
+          |> reverse_topological_order()
+          |> Enum.filter(&MapSet.member?(closure, &1))
+
+        {new_state, stopped} =
+          Enum.reduce(ordered, {state, []}, fn name, {acc, acc_stopped} ->
+            svc = Map.fetch!(acc.services, name)
+
+            if svc.pid != nil do
+              {stop_service(acc, name, svc), [name | acc_stopped]}
+            else
+              {acc, acc_stopped}
+            end
+          end)
+
+        stopped = Enum.reverse(stopped)
+
+        cascaded =
+          stopped
+          |> Enum.reject(&(&1 == service_name))
+          |> Enum.map(&%{service: &1, status: "down"})
+
+        new_state = %{new_state | paused: true}
+        {:reply, {:ok, cascaded}, new_state}
+    end
+  end
+
+  @impl GenServer
+  def handle_call(:paused?, _from, state) do
+    {:reply, state.paused, state}
   end
 
   @impl GenServer
@@ -312,6 +387,42 @@ defmodule Bates.App do
         acc
       end
     end)
+  end
+
+  defp start_eligible(state, closure) do
+    state.services
+    |> Enum.filter(fn {service_name, _} ->
+      MapSet.member?(closure, service_name)
+    end)
+    |> Enum.reduce(state, fn {service_name, _}, acc ->
+      service_state = Map.fetch!(acc.services, service_name)
+
+      if eligible_to_start?(service_state, acc.services) do
+        start_service(acc, service_name, service_state)
+      else
+        acc
+      end
+    end)
+  end
+
+  defp forward_closure(services, service_name) do
+    graph = build_dependency_graph(services)
+
+    try do
+      MapSet.new(:digraph_utils.reachable([service_name], graph))
+    after
+      :digraph.delete(graph)
+    end
+  end
+
+  defp dependents_closure(services, service_name) do
+    graph = build_dependency_graph(services)
+
+    try do
+      MapSet.new(:digraph_utils.reaching([service_name], graph))
+    after
+      :digraph.delete(graph)
+    end
   end
 
   defp eligible_to_start?(%{pid: pid}, _services) when not is_nil(pid),
