@@ -56,4 +56,13 @@ defmodule Bates.CLI.RestartTest do
 
     assert stderr =~ "Bates is not running"
   end
+
+  test "rejects per-service form with usage error" do
+    stderr =
+      capture_io(:stderr, fn ->
+        assert Restart.run("myapp:web") == 2
+      end)
+
+    assert stderr =~ "does not support per-service form"
+  end
 end
