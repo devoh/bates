@@ -1066,6 +1066,44 @@ defmodule Bates.AppTest do
       refute App.paused?("testapp")
     end
 
+    test "up/2 of a dependency does not auto-start dependents" do
+      config = chain_config()
+      start_supervised!({App, config})
+
+      :ok = App.up("testapp", "vite")
+
+      assert_eventually(fn ->
+        App.service_status("testapp", "vite") == "up"
+      end)
+
+      # vite has dependents (web, worker) but they were not requested.
+      # Give the readiness cascade a chance to run, then verify they
+      # stayed `down`.
+      Process.sleep(200)
+
+      assert App.service_status("testapp", "web") == "down"
+      assert App.service_status("testapp", "worker") == "down"
+    end
+
+    test "up/2 of a mid-chain service starts its deps but not its dependents" do
+      config = chain_config()
+      start_supervised!({App, config})
+
+      :ok = App.up("testapp", "web")
+
+      assert_eventually(fn ->
+        App.service_status("testapp", "web") == "up"
+      end)
+
+      assert App.service_status("testapp", "vite") == "up"
+
+      # `worker` depends on `web`, but `worker` was not part of the
+      # requested closure, so it must stay `down`.
+      Process.sleep(200)
+
+      assert App.service_status("testapp", "worker") == "down"
+    end
+
     test "down/2 with unknown service returns error" do
       config = chain_config()
       start_supervised!({App, config})

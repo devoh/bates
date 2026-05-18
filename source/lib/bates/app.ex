@@ -85,7 +85,8 @@ defmodule Bates.App do
            exit_status: nil,
            exports: %{},
            log_buffer: :queue.new(),
-           log_count: 0
+           log_count: 0,
+           closure: nil
          }}
       end)
 
@@ -103,7 +104,13 @@ defmodule Bates.App do
   @impl GenServer
   def handle_call(:up, _from, state) do
     state = %{state | paused: false}
-    new_state = state |> start_eligible() |> maybe_broadcast_exports_settled()
+    closure = MapSet.new(Map.keys(state.services))
+
+    new_state =
+      state
+      |> start_eligible(closure)
+      |> maybe_broadcast_exports_settled()
+
     {:reply, :ok, new_state}
   end
 
@@ -244,9 +251,11 @@ defmodule Bates.App do
             broadcast_service(state.name, service_name, {:status, "up"})
             broadcast_app(state.name, {:status, derive_status(new_state)})
 
+            closure = new_svc.closure || MapSet.new()
+
             new_state =
               new_state
-              |> start_eligible()
+              |> start_eligible(closure)
               |> maybe_broadcast_exports_settled()
 
             {:noreply, new_state}
@@ -265,7 +274,8 @@ defmodule Bates.App do
                   ready: false,
                   started_at: nil,
                   exit_status: :timeout,
-                  exports: %{}
+                  exports: %{},
+                  closure: nil
               }
 
               new_state = %{state | pids: new_pids}
@@ -321,7 +331,7 @@ defmodule Bates.App do
       service_name ->
         svc = Map.fetch!(state.services, service_name)
         new_pids = Map.delete(state.pids, exit_pid)
-        new_svc = %{svc | pid: nil, exports: %{}}
+        new_svc = %{svc | pid: nil, exports: %{}, closure: nil}
 
         {new_svc, broadcast_msg} =
           if svc.exit_status == :timeout do
@@ -379,16 +389,6 @@ defmodule Bates.App do
     graph
   end
 
-  defp start_eligible(state) do
-    Enum.reduce(state.services, state, fn {service_name, service_state}, acc ->
-      if eligible_to_start?(service_state, acc.services) do
-        start_service(acc, service_name, service_state)
-      else
-        acc
-      end
-    end)
-  end
-
   defp start_eligible(state, closure) do
     state.services
     |> Enum.filter(fn {service_name, _} ->
@@ -398,6 +398,9 @@ defmodule Bates.App do
       service_state = Map.fetch!(acc.services, service_name)
 
       if eligible_to_start?(service_state, acc.services) do
+        # Persist the closure on the service so the readiness handler
+        # knows which cohort to keep cascading within.
+        service_state = %{service_state | closure: closure}
         start_service(acc, service_name, service_state)
       else
         acc
@@ -522,7 +525,8 @@ defmodule Bates.App do
         started_at: nil,
         exit_status: nil,
         assigned_port: nil,
-        exports: %{}
+        exports: %{},
+        closure: nil
     }
 
     new_pids = Map.delete(state.pids, pid)
