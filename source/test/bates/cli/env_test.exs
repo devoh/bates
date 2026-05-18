@@ -87,6 +87,43 @@ defmodule Bates.CLI.EnvTest do
       assert result == 1
     end
 
+    test "short-circuits without an HTTP call when `BATES_APP` matches",
+         %{bypass: bypass} do
+      # Bring the bypass down so any HTTP call would surface as the
+      # "Bates is not running" stderr message, which the assertions catch.
+      Bypass.down(bypass)
+
+      System.put_env("BATES_APP", "myapp")
+      on_exit(fn -> System.delete_env("BATES_APP") end)
+
+      {stdout, %{stderr: stderr, result: result}} =
+        with_captured_output(fn -> Env.run("myapp") end)
+
+      assert stdout == ""
+      assert stderr == ""
+      assert result == :ok
+    end
+
+    test "still calls the daemon when `BATES_APP` is set for a different app",
+         %{bypass: bypass} do
+      Bypass.expect_once(bypass, "POST", "/processes/myapp/start", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(
+          200,
+          ~s({"name":"myapp","status":"up","exports":{}})
+        )
+      end)
+
+      System.put_env("BATES_APP", "otherapp")
+      on_exit(fn -> System.delete_env("BATES_APP") end)
+
+      {_stdout, %{result: result}} =
+        with_captured_output(fn -> Env.run("myapp") end)
+
+      assert result == :ok
+    end
+
     defp with_captured_output(fun) do
       parent = self()
 

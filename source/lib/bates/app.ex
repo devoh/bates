@@ -454,7 +454,7 @@ defmodule Bates.App do
     invocation = build_invocation(config, assigned_port, state)
     command = invocation |> ProcessInvocation.compile() |> to_charlist()
     root = state.root |> Path.expand() |> to_charlist()
-    env = build_env(invocation.environment)
+    env = build_env(invocation.environment, state.name)
     opts = [:stdout, :stderr, cd: root, env: env]
 
     case :exec.run_link(command, opts) do
@@ -681,13 +681,19 @@ defmodule Bates.App do
     end
   end
 
-  defp build_env(environment) do
+  defp build_env(environment, app_name) do
     user_env =
       Enum.map(environment, fn {key, value} ->
         {to_charlist(key), to_charlist(value)}
       end)
 
-    scrub_path() ++ user_env
+    # `BATES_APP` lets `bates env <name>` detect that it's being invoked from
+    # inside a service that bates already started for the same app, and
+    # short-circuit instead of recursing into the daemon (which would deadlock
+    # against the in-flight start).
+    bates_env = [{~c"BATES_APP", to_charlist(app_name)}]
+
+    scrub_path() ++ bates_env ++ user_env
   end
 
   # When `batesd` runs as a Mix release, the launcher prepends

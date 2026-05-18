@@ -4,6 +4,17 @@ defmodule Bates.CLI.Env do
   alias Bates.CLI.Client
 
   def run(name) when is_binary(name) do
+    if System.get_env("BATES_APP") == name do
+      # Already running inside a bates-spawned service for this app — its
+      # environment is in scope, so re-invoking the daemon would deadlock
+      # against the in-flight start.
+      :ok
+    else
+      request(name)
+    end
+  end
+
+  defp request(name) do
     case Client.post("/processes/#{URI.encode(name)}/start") do
       {:ok, status, body} when status in 200..299 ->
         announce_started(name, body["status"])
