@@ -82,6 +82,56 @@ defmodule BatesWeb.LoadingControllerTest do
     assert body =~ "myapp"
   end
 
+  describe "paused" do
+    test "browser hit on paused app renders the paused LiveView",
+         %{conn: conn} do
+      config = service_config("myapp", "sleep 999")
+      start_supervised!({App, config})
+      :ok = App.down("myapp")
+      assert App.paused?("myapp")
+
+      conn =
+        conn
+        |> put_req_header("accept", "text/html")
+        |> get("/loading/myapp/myapp")
+
+      body = html_response(conn, 200)
+      assert body =~ "is paused"
+      assert body =~ "myapp"
+      assert body =~ "resume=true"
+    end
+
+    test "non-browser hit on paused app returns 503 JSON", %{conn: conn} do
+      config = service_config("myapp", "sleep 999")
+      start_supervised!({App, config})
+      :ok = App.down("myapp")
+      assert App.paused?("myapp")
+
+      conn =
+        conn
+        |> put_req_header("accept", "application/json")
+        |> get("/loading/myapp/myapp")
+
+      body = json_response(conn, 503)
+      assert body["app"] == "myapp"
+      assert body["status"] == "paused"
+      assert body["reason"] =~ "paused"
+    end
+
+    test "resume=true falls through to the normal loading flow",
+         %{conn: conn} do
+      config = service_config("myapp", "elixir test/support/test_server.ex")
+      start_supervised!({App, config})
+      :ok = App.down("myapp")
+      assert App.paused?("myapp")
+
+      conn = get(conn, "/loading/myapp/myapp?resume=true")
+
+      assert redirected_to(conn) == "https://myapp.test"
+      refute App.paused?("myapp")
+    end
+  end
+
   test "returns 502 when an upstream dependency crashes", %{conn: conn} do
     config =
       {"myapp", ".",

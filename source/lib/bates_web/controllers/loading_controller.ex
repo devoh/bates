@@ -6,6 +6,45 @@ defmodule BatesWeb.LoadingController do
   @timeout Application.compile_env(:bates, :readiness_timeout, 60_000)
 
   def show(conn, %{"app_name" => app_name, "service_name" => service_name}) do
+    cond do
+      paused?(app_name) and resume_requested?(conn) ->
+        show_loading(conn, app_name, service_name)
+
+      paused?(app_name) and browser?(conn) ->
+        Phoenix.LiveView.Controller.live_render(conn, BatesWeb.PausedLive,
+          session: %{
+            "app_name" => app_name,
+            "service_name" => service_name
+          }
+        )
+
+      paused?(app_name) ->
+        conn
+        |> put_status(:service_unavailable)
+        |> json(%{
+          app: app_name,
+          status: "paused",
+          reason:
+            "Application is paused. Visit https://bates.test to resume, " <>
+              "or run 'bates up #{app_name}'."
+        })
+
+      true ->
+        show_loading(conn, app_name, service_name)
+    end
+  end
+
+  defp paused?(app_name) do
+    App.paused?(app_name)
+  catch
+    :exit, _ -> false
+  end
+
+  defp resume_requested?(conn) do
+    conn.params["resume"] == "true"
+  end
+
+  defp show_loading(conn, app_name, service_name) do
     if browser?(conn) do
       Phoenix.LiveView.Controller.live_render(conn, BatesWeb.LoadingLive,
         session: %{
