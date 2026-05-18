@@ -16,7 +16,11 @@ defmodule BatesWeb.LoadingLive do
   alias Bates.App
 
   @impl true
-  def mount(_params, %{"app_name" => app_name, "service_name" => service_name}, socket) do
+  def mount(
+        _params,
+        %{"app_name" => app_name, "service_name" => service_name},
+        socket
+      ) do
     if not connected?(socket) do
       safe_up(app_name)
     end
@@ -61,7 +65,8 @@ defmodule BatesWeb.LoadingLive do
   def handle_info({:status, "up"}, socket) do
     case safe_status(socket.assigns.app_name) do
       "up" ->
-        {:noreply, replace_navigate(socket, "https://#{socket.assigns.hostname}")}
+        {:noreply,
+         replace_navigate(socket, "https://#{socket.assigns.hostname}")}
 
       _ ->
         {:noreply, refresh_chain(socket)}
