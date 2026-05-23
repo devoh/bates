@@ -3,12 +3,24 @@ defmodule Bates.CLI.Up do
 
   alias Bates.CLI.Client
 
+  def run do
+    case Client.resolve_app_by_cwd() do
+      {:ok, name} -> run(name)
+      {:error, message} -> resolution_error(message)
+    end
+  end
+
   def run(name) when is_binary(name) do
     case parse(name) do
       {:app, app} -> start_app(app)
       {:service, app, service} -> start_service(app, service)
       :invalid -> invalid_target(name)
     end
+  end
+
+  defp resolution_error(message) do
+    IO.write(:stderr, message <> "\n")
+    1
   end
 
   defp parse(name) do

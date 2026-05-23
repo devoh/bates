@@ -64,6 +64,34 @@ defmodule Bates.CLI.Client do
   def not_running_message,
     do: "Bates is not running. Start it with: batesd"
 
+  @doc """
+  Resolves the current working directory to a matching application by
+  asking the daemon. Returns `{:ok, name}` on a 200, or `{:error, message}`
+  on any other outcome (no match, transport failure, malformed response).
+  """
+  def resolve_app_by_cwd do
+    case File.cwd() do
+      {:ok, cwd} -> resolve_app(cwd)
+      {:error, reason} -> {:error, "bates: unable to read cwd: #{inspect(reason)}"}
+    end
+  end
+
+  defp resolve_app(cwd) do
+    case get("/apps/resolve?path=#{URI.encode_www_form(cwd)}") do
+      {:ok, 200, %{"name" => name}} when is_binary(name) ->
+        {:ok, name}
+
+      {:ok, 404, body} ->
+        {:error, body["reason"] || "no application matches #{cwd}"}
+
+      {:ok, _status, body} ->
+        {:error, body["reason"] || body["error"] || "request failed"}
+
+      {:error, reason} ->
+        {:error, transport_message(reason)}
+    end
+  end
+
   @doc false
   def ensure_apps do
     {:ok, _} = Application.ensure_all_started(:inets)

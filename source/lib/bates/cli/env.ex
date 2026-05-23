@@ -3,6 +3,13 @@ defmodule Bates.CLI.Env do
 
   alias Bates.CLI.Client
 
+  def run do
+    case Client.resolve_app_by_cwd() do
+      {:ok, name} -> run(name)
+      {:error, message} -> resolution_error(message)
+    end
+  end
+
   def run(name) when is_binary(name) do
     if System.get_env("BATES_APP") == name do
       # Already running inside a bates-spawned service for this app — its
@@ -12,6 +19,11 @@ defmodule Bates.CLI.Env do
     else
       request(name)
     end
+  end
+
+  defp resolution_error(message) do
+    IO.write(:stderr, message <> "\n")
+    1
   end
 
   defp request(name) do

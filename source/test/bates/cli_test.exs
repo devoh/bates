@@ -11,40 +11,15 @@ defmodule Bates.CLITest do
       assert output =~ "Usage:"
       assert output =~ "bates setup"
       assert output =~ "bates status"
-      assert output =~ "bates up <name>"
-      assert output =~ "bates down <name>"
-      assert output =~ "bates restart <name>"
-      assert output =~ "bates env <name>"
+      assert output =~ "bates up [<name>]"
+      assert output =~ "bates down [<name>]"
+      assert output =~ "bates restart [<name>]"
+      assert output =~ "bates env [<name>]"
     end
 
     test "unknown subcommand writes usage and returns exit code 2" do
       {output, exit_code} = run_dispatch(["bogus"])
 
-      assert exit_code == 2
-      assert output =~ "Usage:"
-    end
-
-    test "`env` with no name writes usage and returns exit code 2" do
-      {output, exit_code} = run_dispatch(["env"])
-
-      assert exit_code == 2
-      assert output =~ "Usage:"
-    end
-
-    test "`up` with no name writes usage and returns exit code 2" do
-      {output, exit_code} = run_dispatch(["up"])
-      assert exit_code == 2
-      assert output =~ "Usage:"
-    end
-
-    test "`down` with no name writes usage and returns exit code 2" do
-      {output, exit_code} = run_dispatch(["down"])
-      assert exit_code == 2
-      assert output =~ "Usage:"
-    end
-
-    test "`restart` with no name writes usage and returns exit code 2" do
-      {output, exit_code} = run_dispatch(["restart"])
       assert exit_code == 2
       assert output =~ "Usage:"
     end
@@ -130,6 +105,40 @@ defmodule Bates.CLITest do
         capture_io(fn -> assert Bates.CLI.dispatch(["status"]) == :ok end)
 
       assert output =~ "NAME"
+    end
+
+    test "resolves `env` (no arg) via /apps/resolve, then posts to that app",
+         %{bypass: bypass} do
+      Bypass.expect_once(bypass, "GET", "/apps/resolve", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, ~s({"name":"myapp","root":"/Users/me/myapp"}))
+      end)
+
+      Bypass.expect_once(bypass, "POST", "/processes/myapp/env", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, ~s({"name":"myapp","status":"up","exports":{}}))
+      end)
+
+      capture_io(fn -> assert Bates.CLI.dispatch(["env"]) == :ok end)
+    end
+
+    test "writes the resolve error to stderr when the cwd has no app",
+         %{bypass: bypass} do
+      Bypass.expect_once(bypass, "GET", "/apps/resolve", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(
+          404,
+          ~s({"status":"unknown","reason":"no application matches /tmp/elsewhere"})
+        )
+      end)
+
+      {output, exit_code} = run_dispatch(["env"])
+
+      assert exit_code == 1
+      assert output =~ "no application matches"
     end
   end
 
