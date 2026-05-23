@@ -306,6 +306,20 @@ the `exports` field on the process invocation. Middleware writes to
 `exports` the same way it writes to `environment`. Exports are not a
 user-facing field in TOML; they exist only as a middleware concern.
 
+Exports come in two flavors:
+
+| Flavor | Source | Lifetime |
+|--------|--------|----------|
+| **Static** | Derivable from configuration alone (e.g., the app's primary hostname). Middleware publishes via the optional `static_exports/1` callback. | Always available, even when no service is running. |
+| **Dynamic** | Computed during process spawn (e.g., an auto-assigned `PGPORT`). Middleware publishes by writing to `invocation.exports` from `apply/2`. | Stamped on the service when it spawns; cleared on `down` or crash. |
+
+`bates env` returns the merge of every service's static exports and
+the dynamic exports of the application's running addons. Because
+static exports do not depend on any process being up, `bates env`
+surfaces them even when the application's app service is down — for
+example, the app's `HOST` keeps flowing to direnv while you're
+debugging a crash.
+
 When a service starts, Bates seeds its initial `environment` with the
 union of `exports` from every service in its transitive `depends_on`
 closure. The service's own middleware pipeline runs on top of that
@@ -348,6 +362,7 @@ cascade) explicit at the call site.
 | `asdf` | Adds `source $(brew --prefix)/opt/asdf/libexec/asdf.sh` to the prologue, enabling asdf-managed runtimes. |
 | `direnv` | Adds `eval "$(direnv export bash)"` to the prologue, loading the working directory's `.envrc` into the environment. |
 | `port` | Sets the `PORT` environment variable to the service's assigned port. Applied automatically for services with a hostname; users do not need to list it. |
+| `hostname` | Sets `HOST=<app>.test` in the service's environment and publishes the same value as a static export. Applied automatically when the service's hostname matches the application's primary hostname. |
 
 ## Addons
 

@@ -118,34 +118,39 @@ dependents.
 
 ### `bates env <name>`
 
-Prints shell-eval'able `export` lines for the union of exports
-published by every service in the application. In v1, this is
-effectively the addon exports (e.g., `PGHOST`, `PGPORT` from the
-`postgresql` addon).
+Prints shell-eval'able `export` lines for the application's exports —
+the merge of static exports (config-derived values like `HOST`) and
+the dynamic exports published by the application's addons (e.g.,
+`PGHOST`, `PGPORT` from the `postgresql` addon).
 
 ```
 $ bates env myapp
+export HOST='myapp.test'
 export PGHOST='127.0.0.1'
 export PGPORT='52345'
 ```
 
-If the application is `down`, `bates env` triggers it to start —
-there is no separate `bates up` step. The command blocks until each
-service has either spawned (and produced its exports) or
+`bates env` starts the application's addons if they're not already
+up — but it does **not** start the application's own service. That's
+`bates up`'s job. The decoupling means a slow or crashing app service
+never holds up directory entry: `bates env` blocks only on the
+addons, which are typically fast to start (Postgres boots in under a
+second).
+
+The command blocks until each addon has either become ready or
 terminal-failed, then prints the merged exports. After a cold boot
 it writes a single `bates: started <name>` line to stderr; when the
-application was already `up` the command stays silent on stderr.
-The decision is based on the `status` field of the start response:
-`up` means no boot occurred, anything else means the request
-triggered one.
+addons were already `up` the command stays silent on stderr. The
+decision is based on the `status` field of the response: `up` means
+no boot occurred, anything else means the request triggered one.
 
 Output uses POSIX `export KEY='value'` syntax with single-quoted
 values; embedded single quotes are escaped (`'\''`). Compatible with
 bash and zsh. No alternate shell flavors are emitted in v1.
 
 Intended for use in a project's `.envrc` so a console started in the
-application directory inherits the same connection details its
-services see:
+application directory inherits the same connection details the
+application's services see:
 
 ```bash
 # .envrc
@@ -153,7 +158,7 @@ eval "$(bates env myapp)"
 ```
 
 The command exits 0 on success and non-zero on any failure (Bates
-not running, application unknown, application crashed during start,
+not running, application unknown, an addon crashed during start,
 readiness timeout). Failure messages are written to stderr and no
 output is written to stdout. Callers that want resilience in
 `.envrc` (e.g., before Bates has been started for the day) can wrap
