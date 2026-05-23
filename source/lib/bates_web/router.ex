@@ -30,6 +30,7 @@ defmodule BatesWeb.Router do
     pipe_through :api
 
     get "/status", ProcessController, :status
+    get "/apps/resolve", ProcessController, :resolve
     get "/processes/:name/logs", ProcessController, :logs
     post "/processes/:name/start", ProcessController, :start
     post "/processes/:name/stop", ProcessController, :stop

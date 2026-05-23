@@ -629,4 +629,94 @@ defmodule BatesWeb.ProcessControllerTest do
              } = json_response(conn, 422)
     end
   end
+
+  describe "resolve" do
+    setup do
+      tmp = System.tmp_dir!()
+
+      config_path =
+        Path.join(tmp, "resolve_#{System.unique_integer([:positive])}.toml")
+
+      original = Application.get_env(:bates, :config_path)
+      Application.put_env(:bates, :config_path, config_path)
+
+      on_exit(fn ->
+        File.rm(config_path)
+
+        if original do
+          Application.put_env(:bates, :config_path, original)
+        else
+          Application.delete_env(:bates, :config_path)
+        end
+      end)
+
+      {:ok, config_path: config_path}
+    end
+
+    test "returns 200 with the matching app's name and root",
+         %{conn: conn, config_path: config_path} do
+      File.write!(config_path, """
+      [myapp]
+      root = "/Users/me/Code/myapp"
+      command = "bin/server"
+      hostname = true
+      """)
+
+      conn = get(conn, "/apps/resolve", path: "/Users/me/Code/myapp/lib")
+
+      assert %{
+               "name" => "myapp",
+               "root" => "/Users/me/Code/myapp"
+             } = json_response(conn, 200)
+    end
+
+    test "returns the deepest match when apps nest",
+         %{conn: conn, config_path: config_path} do
+      File.write!(config_path, """
+      [outer]
+      root = "/Users/me/Code"
+      command = "bin/outer"
+      hostname = true
+
+      [inner]
+      root = "/Users/me/Code/myapp"
+      command = "bin/inner"
+      hostname = true
+      """)
+
+      conn = get(conn, "/apps/resolve", path: "/Users/me/Code/myapp/lib")
+
+      assert %{"name" => "inner"} = json_response(conn, 200)
+    end
+
+    test "returns 404 when no app's root contains the path",
+         %{conn: conn, config_path: config_path} do
+      File.write!(config_path, """
+      [myapp]
+      root = "/Users/me/Code/myapp"
+      command = "bin/server"
+      hostname = true
+      """)
+
+      conn = get(conn, "/apps/resolve", path: "/tmp/elsewhere")
+
+      assert %{
+               "status" => "unknown",
+               "reason" => reason
+             } = json_response(conn, 404)
+
+      assert reason =~ "no application matches"
+    end
+
+    test "returns 400 when the path parameter is missing", %{conn: conn} do
+      conn = get(conn, "/apps/resolve")
+
+      assert %{
+               "status" => "invalid",
+               "reason" => reason
+             } = json_response(conn, 400)
+
+      assert reason =~ "missing required parameter"
+    end
+  end
 end

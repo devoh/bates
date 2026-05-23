@@ -3,7 +3,33 @@ defmodule BatesWeb.ProcessController do
 
   require Logger
 
-  alias Bates.{App, ProcessSupervisor}
+  alias Bates.{App, Config, ProcessSupervisor}
+
+  def resolve(conn, %{"path" => path}) when is_binary(path) and path != "" do
+    case Config.find_by_path(path) do
+      {name, root, _services} ->
+        json(conn, %{name: name, root: root})
+
+      nil ->
+        conn
+        |> put_status(404)
+        |> json(%{
+          status: "unknown",
+          reason: "no application matches path #{path}"
+        })
+
+      {:error, reason} ->
+        conn
+        |> put_status(500)
+        |> json(%{status: "error", reason: inspect(reason)})
+    end
+  end
+
+  def resolve(conn, _params) do
+    conn
+    |> put_status(400)
+    |> json(%{status: "invalid", reason: "missing required parameter: path"})
+  end
 
   def status(conn, _params) do
     processes =
