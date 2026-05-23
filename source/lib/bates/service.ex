@@ -7,7 +7,8 @@ defmodule Bates.Service do
           port: :auto | non_neg_integer() | nil,
           hostname: String.t() | nil,
           middleware: [String.t()],
-          depends_on: [String.t()]
+          depends_on: [String.t()],
+          addon?: boolean()
         }
 
   defstruct name: "",
@@ -15,5 +16,6 @@ defmodule Bates.Service do
             port: nil,
             hostname: nil,
             middleware: [],
-            depends_on: []
+            depends_on: [],
+            addon?: false
 end

@@ -165,7 +165,8 @@ defmodule Bates.Config do
       port: port,
       hostname: nil,
       middleware: app_middleware ++ definition.middleware,
-      depends_on: []
+      depends_on: [],
+      addon?: true
     }
   end
 
