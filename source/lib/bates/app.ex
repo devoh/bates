@@ -569,8 +569,27 @@ defmodule Bates.App do
   end
 
   defp merge_exports(state) do
+    dynamic =
+      Enum.reduce(state.services, %{}, fn {_name, svc}, acc ->
+        Map.merge(acc, svc.exports)
+      end)
+
+    Map.merge(static_exports(state), dynamic)
+  end
+
+  defp static_exports(state) do
     Enum.reduce(state.services, %{}, fn {_name, svc}, acc ->
-      Map.merge(acc, svc.exports)
+      context = %{
+        service: svc.config,
+        app_name: state.name,
+        root: state.root,
+        assigned_port: nil
+      }
+
+      modules =
+        Enum.map(svc.config.middleware, &Bates.Middleware.Registry.lookup!/1)
+
+      Map.merge(acc, Bates.Middleware.collect_static_exports(modules, context))
     end)
   end
 
