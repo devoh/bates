@@ -55,6 +55,8 @@ server to be running.
   service it transitively `depends_on`.
 - `bates up` (no name) resolves the application from the current
   working directory — see [Working Directory Resolution](#working-directory-resolution).
+- `bates up :<service>` resolves the application from the current
+  working directory and boots the named service within it.
 
 Both forms clear the application's paused flag, so subsequent
 on-demand DNS-driven startup proceeds normally.
@@ -82,6 +84,9 @@ on-demand startup. Requires the server to be running.
   cascade).
 - `bates down` (no name) resolves the application from the current
   working directory — see [Working Directory Resolution](#working-directory-resolution).
+- `bates down :<service>` resolves the application from the current
+  working directory and stops the named service within it (with the
+  same dependents cascade).
 
 The per-service form's success line includes the cascaded list when
 non-empty:
