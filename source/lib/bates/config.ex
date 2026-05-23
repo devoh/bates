@@ -31,6 +31,38 @@ defmodule Bates.Config do
     Application.get_env(:bates, :config_path, default_path())
   end
 
+  @doc """
+  Returns the application whose configured root is the deepest ancestor
+  of `path`, or `nil` when no application matches.
+
+  Roots and `path` are both expanded before comparison so `~` and
+  relative segments resolve consistently. When multiple applications
+  match (one root nested inside another), the longest root wins.
+  """
+  def find_by_path(path, config_path \\ path()) when is_binary(path) do
+    case applications(config_path) do
+      {:error, _} = error -> error
+      apps when is_list(apps) -> find_in_applications(apps, path)
+    end
+  end
+
+  defp find_in_applications(apps, path) do
+    expanded = Path.expand(path)
+
+    apps
+    |> Enum.filter(fn {_name, root, _services} ->
+      path_under?(expanded, Path.expand(root))
+    end)
+    |> Enum.max_by(
+      fn {_name, root, _services} -> String.length(Path.expand(root)) end,
+      fn -> nil end
+    )
+  end
+
+  defp path_under?(path, root) do
+    path == root or String.starts_with?(path, root <> "/")
+  end
+
   defp default_path do
     Path.join([System.user_home!(), ".config", "bates", "config.toml"])
   end

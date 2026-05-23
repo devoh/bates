@@ -466,4 +466,101 @@ defmodule Bates.ConfigTest do
       assert sidekick.port == nil
     end
   end
+
+  describe "find_by_path/2" do
+    setup do
+      tmp = System.tmp_dir!()
+      path = Path.join(tmp, "find_by_path_#{System.unique_integer([:positive])}.toml")
+      on_exit(fn -> File.rm(path) end)
+      {:ok, fixture_path: path}
+    end
+
+    defp write_config(path, contents) do
+      File.write!(path, contents)
+      path
+    end
+
+    test "returns the app when the cwd equals its root", %{fixture_path: path} do
+      write_config(path, """
+      [myapp]
+      root = "/Users/me/Code/myapp"
+      command = "bin/server"
+      hostname = true
+      """)
+
+      assert {"myapp", "/Users/me/Code/myapp", _} =
+               Config.find_by_path("/Users/me/Code/myapp", path)
+    end
+
+    test "returns the app when the cwd is nested under its root",
+         %{fixture_path: path} do
+      write_config(path, """
+      [myapp]
+      root = "/Users/me/Code/myapp"
+      command = "bin/server"
+      hostname = true
+      """)
+
+      assert {"myapp", _, _} =
+               Config.find_by_path("/Users/me/Code/myapp/lib/foo", path)
+    end
+
+    test "picks the longest matching root when apps nest",
+         %{fixture_path: path} do
+      write_config(path, """
+      [outer]
+      root = "/Users/me/Code"
+      command = "bin/outer"
+      hostname = true
+
+      [inner]
+      root = "/Users/me/Code/myapp"
+      command = "bin/inner"
+      hostname = true
+      """)
+
+      assert {"inner", _, _} =
+               Config.find_by_path("/Users/me/Code/myapp/sub", path)
+
+      assert {"outer", _, _} =
+               Config.find_by_path("/Users/me/Code/other", path)
+    end
+
+    test "returns nil when no app's root contains the path",
+         %{fixture_path: path} do
+      write_config(path, """
+      [myapp]
+      root = "/Users/me/Code/myapp"
+      command = "bin/server"
+      hostname = true
+      """)
+
+      assert Config.find_by_path("/tmp/elsewhere", path) == nil
+    end
+
+    test "does not match a sibling directory with a shared prefix",
+         %{fixture_path: path} do
+      write_config(path, """
+      [myapp]
+      root = "/Users/me/Code/foo"
+      command = "bin/server"
+      hostname = true
+      """)
+
+      assert Config.find_by_path("/Users/me/Code/foobar", path) == nil
+    end
+
+    test "expands `~` in the root before comparing", %{fixture_path: path} do
+      write_config(path, """
+      [myapp]
+      root = "~/Code/myapp"
+      command = "bin/server"
+      hostname = true
+      """)
+
+      cwd = Path.expand("~/Code/myapp/lib")
+
+      assert {"myapp", _, _} = Config.find_by_path(cwd, path)
+    end
+  end
 end
