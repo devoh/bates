@@ -14,7 +14,15 @@ defmodule Bates.CLI.Up do
     case parse(name) do
       {:app, app} -> start_app(app)
       {:service, app, service} -> start_service(app, service)
+      {:cwd_service, service} -> resolve_then_start_service(service)
       :invalid -> invalid_target(name)
+    end
+  end
+
+  defp resolve_then_start_service(service) do
+    case Client.resolve_app_by_cwd() do
+      {:ok, app} -> start_service(app, service)
+      {:error, message} -> resolution_error(message)
     end
   end
 
@@ -27,6 +35,9 @@ defmodule Bates.CLI.Up do
     case String.split(name, ":") do
       [app] when app != "" ->
         {:app, app}
+
+      ["", service] when service != "" ->
+        {:cwd_service, service}
 
       [app, service] when app != "" and service != "" ->
         {:service, app, service}

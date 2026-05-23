@@ -133,15 +133,6 @@ defmodule Bates.CLI.DownTest do
       assert stderr =~ "invalid target"
     end
 
-    test "rejects a leading colon" do
-      stderr =
-        capture_io(:stderr, fn ->
-          assert Down.run(":web") == 2
-        end)
-
-      assert stderr =~ "invalid target"
-    end
-
     test "rejects a trailing colon" do
       stderr =
         capture_io(:stderr, fn ->

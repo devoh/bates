@@ -140,6 +140,62 @@ defmodule Bates.CLITest do
       assert exit_code == 1
       assert output =~ "no application matches"
     end
+
+    test "resolves `up :service` to the cwd app then starts that service",
+         %{bypass: bypass} do
+      Bypass.expect_once(bypass, "GET", "/apps/resolve", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, ~s({"name":"myapp","root":"/Users/me/myapp"}))
+      end)
+
+      Bypass.expect_once(
+        bypass,
+        "POST",
+        "/processes/myapp/services/web/start",
+        fn conn ->
+          conn
+          |> Plug.Conn.put_resp_content_type("application/json")
+          |> Plug.Conn.resp(
+            200,
+            ~s({"app":"myapp","service":"web","status":"up"})
+          )
+        end
+      )
+
+      output =
+        capture_io(fn -> assert Bates.CLI.dispatch(["up", ":web"]) == :ok end)
+
+      assert output =~ "started myapp:web"
+    end
+
+    test "resolves `down :service` to the cwd app then stops that service",
+         %{bypass: bypass} do
+      Bypass.expect_once(bypass, "GET", "/apps/resolve", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, ~s({"name":"myapp","root":"/Users/me/myapp"}))
+      end)
+
+      Bypass.expect_once(
+        bypass,
+        "POST",
+        "/processes/myapp/services/web/stop",
+        fn conn ->
+          conn
+          |> Plug.Conn.put_resp_content_type("application/json")
+          |> Plug.Conn.resp(
+            200,
+            ~s({"app":"myapp","service":"web","status":"down","cascaded":[]})
+          )
+        end
+      )
+
+      output =
+        capture_io(fn -> assert Bates.CLI.dispatch(["down", ":web"]) == :ok end)
+
+      assert output =~ "stopped myapp:web"
+    end
   end
 
   defp run_dispatch(argv) do
