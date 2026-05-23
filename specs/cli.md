@@ -45,7 +45,7 @@ Single-service apps (like `api` above) show one row with no nesting.
 Multi-service apps show the application row with derived status,
 followed by indented service rows.
 
-### `bates up <name>`
+### `bates up [<name>]`
 
 Starts an application or a single service within one. Requires the
 server to be running.
@@ -53,6 +53,8 @@ server to be running.
 - `bates up <app>` boots every service in the application.
 - `bates up <app>:<service>` boots the named service plus every
   service it transitively `depends_on`.
+- `bates up` (no name) resolves the application from the current
+  working directory — see [Working Directory Resolution](#working-directory-resolution).
 
 Both forms clear the application's paused flag, so subsequent
 on-demand DNS-driven startup proceeds normally.
@@ -65,11 +67,10 @@ bates: started <app>:<service>
 ```
 
 A name with no colon hits the application-level endpoint; a name of
-the form `<app>:<service>` hits the per-service endpoint. Empty
-names and names with more than one colon are rejected with a usage
-error and exit code 2.
+the form `<app>:<service>` hits the per-service endpoint. Names with
+more than one colon are rejected with a usage error and exit code 2.
 
-### `bates down <name>`
+### `bates down [<name>]`
 
 Stops an application or a single service within one, and marks the
 application as paused so the loading page intercepts further
@@ -79,6 +80,8 @@ on-demand startup. Requires the server to be running.
 - `bates down <app>:<service>` stops the named service and every
   service that transitively `depends_on` it (reverse-topological
   cascade).
+- `bates down` (no name) resolves the application from the current
+  working directory — see [Working Directory Resolution](#working-directory-resolution).
 
 The per-service form's success line includes the cascaded list when
 non-empty:
@@ -94,12 +97,13 @@ application's paused flag. The flag is cleared by a user-initiated
 application on demand; while paused, browsers see a paused page
 with a Resume button and non-HTML clients get a 503 JSON response.
 
-Same parsing rules as `bates up`: empty/multi-colon names exit with
-code 2.
+Same parsing rules as `bates up`: multi-colon names exit with code 2.
 
-### `bates restart <name>`
+### `bates restart [<name>]`
 
 Stops then starts an application. Requires the server to be running.
+With no name, the target application is resolved from the current
+working directory — see [Working Directory Resolution](#working-directory-resolution).
 
 There is no per-service form. `bates restart myapp:web` exits with
 code 2 and writes a usage error pointing at the explicit two-step
@@ -116,12 +120,14 @@ environment is seeded from its dependencies' exports at start time,
 and per-service restart would not refresh the seeded environment of
 dependents.
 
-### `bates env <name>`
+### `bates env [<name>]`
 
 Prints shell-eval'able `export` lines for the application's exports —
 the merge of static exports (config-derived values like `HOST`) and
 the dynamic exports published by the application's addons (e.g.,
-`PGHOST`, `PGPORT` from the `postgresql` addon).
+`PGHOST`, `PGPORT` from the `postgresql` addon). With no name, the
+target application is resolved from the current working directory —
+see [Working Directory Resolution](#working-directory-resolution).
 
 ```
 $ bates env myapp
@@ -171,6 +177,25 @@ eval "$(bates env myapp 2>/dev/null || true)"
 `direnv` caches `.envrc` evaluation; running `direnv reload` picks up
 exports that changed since the shell loaded the file (for example,
 after a stop/start cycle assigned a fresh `PGPORT`).
+
+### Working Directory Resolution
+
+When `up`, `down`, `restart`, or `env` is invoked without a name, the
+CLI asks the daemon to look up the application whose configured
+`root` is the deepest ancestor of the current working directory. The
+lookup is exact: a path equal to `root` matches, as does a path
+nested under `root`; sibling directories with a shared prefix do not.
+
+When two applications' roots nest (e.g., a workspace root with an
+application nested inside it), the longest root wins. This lets a
+monorepo declare a broad fallback `root` alongside narrower
+per-application roots without ambiguity.
+
+If no application's `root` contains the current directory, the
+command writes a diagnostic to stderr and exits with a non-zero
+status. Manual `bates env <name>` (and peers) always override
+resolution and can target any configured application from any
+directory.
 
 ## Daemon
 
