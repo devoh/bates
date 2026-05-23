@@ -35,6 +35,10 @@ defmodule Bates.App do
     GenServer.call(via_tuple(name), {:up, service_name}, @timeout)
   end
 
+  def up_addons(name) do
+    GenServer.call(via_tuple(name), :up_addons, @timeout)
+  end
+
   def down(name) do
     GenServer.call(via_tuple(name), :down, @timeout)
   end
@@ -53,6 +57,10 @@ defmodule Bates.App do
 
   def snapshot(name) do
     GenServer.call(via_tuple(name), :snapshot)
+  end
+
+  def addon_snapshot(name) do
+    GenServer.call(via_tuple(name), :addon_snapshot)
   end
 
   def service_status(name, service_name) do
@@ -97,6 +105,7 @@ defmodule Bates.App do
        services: service_states,
        pids: %{},
        exports_broadcast: false,
+       addons_broadcast: false,
        paused: false
      }}
   end
@@ -109,6 +118,7 @@ defmodule Bates.App do
     new_state =
       state
       |> start_eligible(closure)
+      |> maybe_broadcast_addons_settled()
       |> maybe_broadcast_exports_settled()
 
     {:reply, :ok, new_state}
@@ -127,6 +137,7 @@ defmodule Bates.App do
         new_state =
           state
           |> start_eligible(closure)
+          |> maybe_broadcast_addons_settled()
           |> maybe_broadcast_exports_settled()
 
         {:reply, :ok, new_state}
@@ -134,8 +145,26 @@ defmodule Bates.App do
   end
 
   @impl GenServer
+  def handle_call(:up_addons, _from, state) do
+    state = %{state | paused: false}
+    closure = MapSet.new(addon_names(state))
+
+    new_state =
+      state
+      |> start_eligible(closure)
+      |> maybe_broadcast_addons_settled()
+
+    {:reply, :ok, new_state}
+  end
+
+  @impl GenServer
   def handle_call(:snapshot, _from, state) do
     {:reply, build_snapshot(state), state}
+  end
+
+  @impl GenServer
+  def handle_call(:addon_snapshot, _from, state) do
+    {:reply, build_addon_snapshot(state), state}
   end
 
   @impl GenServer
@@ -153,7 +182,13 @@ defmodule Bates.App do
         end
       end)
 
-    new_state = %{new_state | exports_broadcast: false, paused: true}
+    new_state = %{
+      new_state
+      | exports_broadcast: false,
+        addons_broadcast: false,
+        paused: true
+    }
+
     {:reply, :ok, new_state}
   end
 
@@ -189,7 +224,13 @@ defmodule Bates.App do
           |> Enum.reject(&(&1 == service_name))
           |> Enum.map(&%{service: &1, status: "down"})
 
-        new_state = %{new_state | exports_broadcast: false, paused: true}
+        new_state = %{
+          new_state
+          | exports_broadcast: false,
+            addons_broadcast: false,
+            paused: true
+        }
+
         {:reply, {:ok, cascaded}, new_state}
     end
   end
@@ -256,6 +297,7 @@ defmodule Bates.App do
             new_state =
               new_state
               |> start_eligible(closure)
+              |> maybe_broadcast_addons_settled()
               |> maybe_broadcast_exports_settled()
 
             {:noreply, new_state}
@@ -288,7 +330,13 @@ defmodule Bates.App do
               )
 
               broadcast_app(state.name, {:status, derive_status(new_state)})
-              {:noreply, maybe_broadcast_exports_settled(new_state)}
+
+              new_state =
+                new_state
+                |> maybe_broadcast_addons_settled()
+                |> maybe_broadcast_exports_settled()
+
+              {:noreply, new_state}
             else
               Process.send_after(
                 self(),
@@ -357,7 +405,12 @@ defmodule Bates.App do
           broadcast_app(state.name, {:status, derive_status(new_state)})
         end
 
-        {:noreply, maybe_broadcast_exports_settled(new_state)}
+        new_state =
+          new_state
+          |> maybe_broadcast_addons_settled()
+          |> maybe_broadcast_exports_settled()
+
+        {:noreply, new_state}
     end
   end
 
@@ -479,7 +532,10 @@ defmodule Bates.App do
           new_state = put_in(new_state, [:services, service_name], new_svc)
           broadcast_service(state.name, service_name, {:status, "up"})
           broadcast_app(state.name, {:status, derive_status(new_state)})
-          maybe_broadcast_exports_settled(new_state)
+
+          new_state
+          |> maybe_broadcast_addons_settled()
+          |> maybe_broadcast_exports_settled()
         else
           Process.send_after(
             self(),
@@ -492,7 +548,10 @@ defmodule Bates.App do
           new_state = %{state | pids: new_pids}
           new_state = put_in(new_state, [:services, service_name], new_svc)
           broadcast_app(state.name, {:status, derive_status(new_state)})
-          maybe_broadcast_exports_settled(new_state)
+
+          new_state
+          |> maybe_broadcast_addons_settled()
+          |> maybe_broadcast_exports_settled()
         end
 
       {:error, reason} ->
@@ -562,10 +621,57 @@ defmodule Bates.App do
     end
   end
 
+  defp maybe_broadcast_addons_settled(state) do
+    cond do
+      state.addons_broadcast ->
+        state
+
+      addon_names(state) == [] ->
+        # No addons in this app — there's nothing to settle. Mark the
+        # gate so we don't keep re-evaluating, and broadcast the static
+        # exports so callers waiting on the addon path can proceed.
+        broadcast_app(
+          state.name,
+          {:addons_settled, merge_addon_exports(state)}
+        )
+
+        %{state | addons_broadcast: true}
+
+      all_addons_settled?(state) ->
+        broadcast_app(
+          state.name,
+          {:addons_settled, merge_addon_exports(state)}
+        )
+
+        %{state | addons_broadcast: true}
+
+      true ->
+        state
+    end
+  end
+
   defp all_services_settled?(state) do
     Enum.all?(state.services, fn {_name, svc} ->
       svc.pid != nil or svc.exit_status != nil
     end)
+  end
+
+  defp all_addons_settled?(state) do
+    state
+    |> addon_states()
+    |> Enum.all?(fn svc -> svc.pid != nil or svc.exit_status != nil end)
+  end
+
+  defp addon_names(state) do
+    state.services
+    |> Enum.filter(fn {_name, svc} -> svc.config.addon? end)
+    |> Enum.map(fn {name, _svc} -> name end)
+  end
+
+  defp addon_states(state) do
+    state.services
+    |> Enum.filter(fn {_name, svc} -> svc.config.addon? end)
+    |> Enum.map(fn {_name, svc} -> svc end)
   end
 
   defp merge_exports(state) do
@@ -573,6 +679,15 @@ defmodule Bates.App do
       Enum.reduce(state.services, %{}, fn {_name, svc}, acc ->
         Map.merge(acc, svc.exports)
       end)
+
+    Map.merge(static_exports(state), dynamic)
+  end
+
+  defp merge_addon_exports(state) do
+    dynamic =
+      state
+      |> addon_states()
+      |> Enum.reduce(%{}, fn svc, acc -> Map.merge(acc, svc.exports) end)
 
     Map.merge(static_exports(state), dynamic)
   end
@@ -600,6 +715,29 @@ defmodule Bates.App do
     %{status: status, exports: exports, reason: reason}
   end
 
+  defp build_addon_snapshot(state) do
+    status = derive_addon_status(state)
+    exports = merge_addon_exports(state)
+    reason = addon_crash_reason(state, status)
+    %{status: status, exports: exports, reason: reason}
+  end
+
+  defp derive_addon_status(state) do
+    statuses =
+      state
+      |> addon_states()
+      |> Enum.map(&service_status_name/1)
+
+    cond do
+      statuses == [] -> "up"
+      Enum.all?(statuses, &(&1 == "up")) -> "up"
+      Enum.all?(statuses, &(&1 == "down")) -> "down"
+      Enum.any?(statuses, &(&1 == "crashed")) -> "crashed"
+      Enum.all?(statuses, &(&1 in ["starting", "up"])) -> "starting"
+      true -> "partial"
+    end
+  end
+
   defp crash_reason(state, "crashed") do
     state.services
     |> Enum.sort_by(fn {name, _svc} -> name end)
@@ -613,6 +751,21 @@ defmodule Bates.App do
   end
 
   defp crash_reason(_state, _), do: nil
+
+  defp addon_crash_reason(state, "crashed") do
+    state.services
+    |> Enum.filter(fn {_name, svc} -> svc.config.addon? end)
+    |> Enum.sort_by(fn {name, _svc} -> name end)
+    |> Enum.find_value(fn {name, svc} ->
+      case svc.exit_status do
+        nil -> nil
+        :normal -> nil
+        status -> "addon #{name} failed: #{inspect(status)}"
+      end
+    end)
+  end
+
+  defp addon_crash_reason(_state, _), do: nil
 
   defp service_status_name(%{pid: pid, ready: true}) when not is_nil(pid),
     do: "up"
