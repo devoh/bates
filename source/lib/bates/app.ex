@@ -659,7 +659,15 @@ defmodule Bates.App do
   defp all_addons_settled?(state) do
     state
     |> addon_states()
-    |> Enum.all?(fn svc -> svc.pid != nil or svc.exit_status != nil end)
+    |> Enum.all?(fn svc ->
+      # An addon is "settled" only once its dynamic exports are
+      # trustworthy: either it became ready (the port is open and
+      # `PGPORT` et al. point at a real listener) or it terminal-failed
+      # (exports are gone but the caller deserves to hear why).
+      # "Spawned but not yet ready" is not enough — `bates env` would
+      # then hand the shell a port that isn't accepting connections.
+      svc.exit_status != nil or (svc.pid != nil and svc.ready)
+    end)
   end
 
   defp addon_names(state) do

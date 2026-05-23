@@ -50,6 +50,23 @@ defmodule BatesWeb.ProcessController do
     end
   end
 
+  def env(conn, %{"name" => name}) do
+    case ProcessSupervisor.app_pid(name) do
+      nil ->
+        conn
+        |> put_status(404)
+        |> json(%{
+          name: name,
+          status: "unknown",
+          reason: "unknown application: #{name}"
+        })
+
+      _pid ->
+        Phoenix.PubSub.subscribe(Bates.PubSub, "app:#{name}")
+        await_env_response(conn, name)
+    end
+  end
+
   def stop(conn, %{"name" => name}) do
     case App.down(name) do
       :ok ->
@@ -404,6 +421,94 @@ defmodule BatesWeb.ProcessController do
       name: name,
       status: "timeout",
       reason: "timed out waiting for exports"
+    })
+  end
+
+  defp await_env_response(conn, name) do
+    case App.addon_snapshot(name) do
+      %{status: "up", exports: exports} ->
+        json(conn, %{name: name, status: "up", exports: exports})
+
+      %{status: "crashed", reason: reason} ->
+        conn
+        |> put_status(422)
+        |> json(%{
+          name: name,
+          status: "crashed",
+          reason: reason || "addon crashed"
+        })
+
+      _ ->
+        case start_addons(name) do
+          :ok ->
+            await_addons_settled(conn, name, timeout())
+
+          {:error, reason} ->
+            Logger.error("App.up_addons/1 exited for #{name}: #{inspect(reason)}")
+
+            conn
+            |> put_status(500)
+            |> json(%{
+              name: name,
+              status: "error",
+              reason: "internal error: #{inspect(reason)}"
+            })
+        end
+    end
+  end
+
+  defp start_addons(name) do
+    App.up_addons(name)
+  catch
+    :exit, reason -> {:error, reason}
+  end
+
+  defp await_addons_settled(conn, name, timeout) do
+    deadline = System.monotonic_time(:millisecond) + timeout
+    receive_addons_settled(conn, name, deadline)
+  end
+
+  defp receive_addons_settled(conn, name, deadline) do
+    remaining = deadline - System.monotonic_time(:millisecond)
+
+    if remaining <= 0 do
+      addons_timeout_response(conn, name)
+    else
+      receive do
+        {:addons_settled, exports} ->
+          respond_addons_settled(conn, name, exports)
+
+        _ ->
+          receive_addons_settled(conn, name, deadline)
+      after
+        remaining -> addons_timeout_response(conn, name)
+      end
+    end
+  end
+
+  defp respond_addons_settled(conn, name, exports) do
+    case App.addon_snapshot(name) do
+      %{status: "crashed", reason: reason} ->
+        conn
+        |> put_status(422)
+        |> json(%{
+          name: name,
+          status: "crashed",
+          reason: reason || "addon crashed"
+        })
+
+      %{status: status} ->
+        json(conn, %{name: name, status: status, exports: exports})
+    end
+  end
+
+  defp addons_timeout_response(conn, name) do
+    conn
+    |> put_status(504)
+    |> json(%{
+      name: name,
+      status: "timeout",
+      reason: "timed out waiting for addons"
     })
   end
 end

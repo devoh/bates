@@ -25,6 +25,11 @@ defmodule Bates.Middleware do
   def collect_static_exports(modules, context)
       when is_list(modules) and is_map(context) do
     Enum.reduce(modules, %{}, fn module, acc ->
+      # Load the module before probing for the callback — `function_exported?/3`
+      # only inspects loaded modules and would otherwise silently skip
+      # middleware that legitimately implements `static_exports/1`.
+      Code.ensure_loaded(module)
+
       if function_exported?(module, :static_exports, 1) do
         Map.merge(acc, module.static_exports(context))
       else

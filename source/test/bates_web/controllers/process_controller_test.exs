@@ -495,4 +495,138 @@ defmodule BatesWeb.ProcessControllerTest do
       assert body["reason"] =~ "unknown service"
     end
   end
+
+  describe "env" do
+    setup do
+      Bates.Middleware.Registry.register("export_producer", ExportProducer)
+
+      on_exit(fn ->
+        Bates.Middleware.Registry.unregister("export_producer")
+        Application.delete_env(:bates, :export_producer_exports)
+      end)
+
+      :ok
+    end
+
+    defp addon_config(opts \\ []) do
+      addon_command = Keyword.get(opts, :addon_command, "sleep 999")
+      app_command = Keyword.get(opts, :app_command, "sleep 999")
+
+      {"testapp", ".",
+       [
+         %Service{
+           name: "pgsql",
+           command: addon_command,
+           port: nil,
+           hostname: nil,
+           middleware: ["export_producer"],
+           addon?: true
+         },
+         %Service{
+           name: "testapp",
+           command: app_command,
+           port: nil,
+           hostname: "testapp.test",
+           middleware: ["port", "hostname"],
+           depends_on: ["pgsql"]
+         }
+       ]}
+    end
+
+    test "returns merged static and addon exports without starting the app",
+         %{conn: conn} do
+      Application.put_env(:bates, :export_producer_exports, %{
+        "pgsql" => %{"PGPORT" => "12345"}
+      })
+
+      start_supervised!({App, addon_config()})
+
+      conn = post(conn, "/processes/testapp/env")
+
+      assert %{
+               "name" => "testapp",
+               "status" => "up",
+               "exports" => exports
+             } = json_response(conn, 200)
+
+      assert exports == %{"HOST" => "testapp.test", "PGPORT" => "12345"}
+
+      # App service was never started.
+      app_pid =
+        GenServer.whereis({:via, Registry, {Bates.ProcessRegistry, "testapp"}})
+
+      state = :sys.get_state(app_pid)
+      assert state.services["testapp"].pid == nil
+      assert state.services["pgsql"].pid != nil
+    end
+
+    test "returns static exports when no addons are configured",
+         %{conn: conn} do
+      config =
+        {"testapp", ".",
+         [
+           %Service{
+             name: "testapp",
+             command: "sleep 999",
+             port: nil,
+             hostname: "testapp.test",
+             middleware: ["port", "hostname"]
+           }
+         ]}
+
+      start_supervised!({App, config})
+
+      conn = post(conn, "/processes/testapp/env")
+
+      assert %{
+               "name" => "testapp",
+               "status" => "up",
+               "exports" => %{"HOST" => "testapp.test"}
+             } = json_response(conn, 200)
+    end
+
+    test "returns 404 for unknown application", %{conn: conn} do
+      conn = post(conn, "/processes/unknown/env")
+
+      assert %{
+               "name" => "unknown",
+               "status" => "unknown",
+               "reason" => reason
+             } = json_response(conn, 404)
+
+      assert reason =~ "unknown application"
+    end
+
+    test "returns 422 when an addon crashes during boot", %{conn: conn} do
+      config =
+        {"testapp", ".",
+         [
+           %Service{
+             name: "pgsql",
+             command: "exit 1",
+             port: nil,
+             hostname: "pgsql.testapp.test",
+             middleware: ["port"],
+             addon?: true
+           },
+           %Service{
+             name: "testapp",
+             command: "sleep 999",
+             port: nil,
+             hostname: "testapp.test",
+             middleware: ["port", "hostname"],
+             depends_on: ["pgsql"]
+           }
+         ]}
+
+      start_supervised!({App, config})
+
+      conn = post(conn, "/processes/testapp/env")
+
+      assert %{
+               "name" => "testapp",
+               "status" => "crashed"
+             } = json_response(conn, 422)
+    end
+  end
 end

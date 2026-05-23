@@ -34,6 +34,7 @@ defmodule BatesWeb.Router do
     post "/processes/:name/start", ProcessController, :start
     post "/processes/:name/stop", ProcessController, :stop
     post "/processes/:name/restart", ProcessController, :restart
+    post "/processes/:name/env", ProcessController, :env
 
     post "/processes/:app/services/:service/start",
          ProcessController,

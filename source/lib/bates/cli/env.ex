@@ -15,7 +15,7 @@ defmodule Bates.CLI.Env do
   end
 
   defp request(name) do
-    case Client.post("/processes/#{URI.encode(name)}/start") do
+    case Client.post("/processes/#{URI.encode(name)}/env") do
       {:ok, status, body} when status in 200..299 ->
         announce_started(name, body["status"])
 

@@ -21,7 +21,7 @@ defmodule Bates.CLI.EnvTest do
 
     test "emits exports in sorted order on a 200 with status \"up\"",
          %{bypass: bypass} do
-      Bypass.expect_once(bypass, "POST", "/processes/myapp/start", fn conn ->
+      Bypass.expect_once(bypass, "POST", "/processes/myapp/env", fn conn ->
         conn
         |> Plug.Conn.put_resp_content_type("application/json")
         |> Plug.Conn.resp(
@@ -42,7 +42,7 @@ defmodule Bates.CLI.EnvTest do
 
     test "writes a stderr announcement when status is anything but \"up\"",
          %{bypass: bypass} do
-      Bypass.expect_once(bypass, "POST", "/processes/myapp/start", fn conn ->
+      Bypass.expect_once(bypass, "POST", "/processes/myapp/env", fn conn ->
         conn
         |> Plug.Conn.put_resp_content_type("application/json")
         |> Plug.Conn.resp(
@@ -60,7 +60,7 @@ defmodule Bates.CLI.EnvTest do
 
     test "writes the response reason to stderr on a non-2xx",
          %{bypass: bypass} do
-      Bypass.expect_once(bypass, "POST", "/processes/myapp/start", fn conn ->
+      Bypass.expect_once(bypass, "POST", "/processes/myapp/env", fn conn ->
         conn
         |> Plug.Conn.put_resp_content_type("application/json")
         |> Plug.Conn.resp(
@@ -106,7 +106,7 @@ defmodule Bates.CLI.EnvTest do
 
     test "still calls the daemon when `BATES_APP` is set for a different app",
          %{bypass: bypass} do
-      Bypass.expect_once(bypass, "POST", "/processes/myapp/start", fn conn ->
+      Bypass.expect_once(bypass, "POST", "/processes/myapp/env", fn conn ->
         conn
         |> Plug.Conn.put_resp_content_type("application/json")
         |> Plug.Conn.resp(
