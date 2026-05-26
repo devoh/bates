@@ -76,9 +76,10 @@ The configuration file is defined in [TOML][] format.
 
 ```toml
 [test_server]
-environment = { SECRET = "Shh…" }
 root = "/apps/test_server"
-command = "bundle exec rackup -p $PORT"
+command = "rails server -p $PORT"
+addons = ["postgresql"]
+middleware = ["direnv"]
 ```
 
 ## Methodology
