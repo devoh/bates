@@ -11,7 +11,8 @@ defmodule Bates.Config do
          {:ok, config} <- Toml.decode(toml),
          {:ok, applications} <- build_applications(config),
          :ok <- validate_middleware(applications),
-         :ok <- validate_dependencies(applications) do
+         :ok <- validate_dependencies(applications),
+         :ok <- validate_environment(applications) do
       applications
     else
       {:error, :enoent} -> []
@@ -79,20 +80,30 @@ defmodule Bates.Config do
   defp build_application({name, options}) do
     root = Map.fetch!(options, "root")
     app_middleware = Map.get(options, "middleware", [])
+    app_environment = Map.get(options, "environment", %{})
     addon_names = parse_addons(Map.get(options, "addons"))
 
-    with {:ok, services} <- build_services(name, options, app_middleware),
+    with {:ok, services} <-
+           build_services(name, options, app_middleware, app_environment),
          {:ok, expanded} <-
            expand_addons(name, services, addon_names, app_middleware) do
       {:ok, {name, root, expanded}}
     end
   end
 
-  defp build_services(name, options, app_middleware) do
+  defp build_services(name, options, app_middleware, app_environment) do
     if Map.has_key?(options, "services") do
-      build_multi_services(name, options["services"], app_middleware)
+      build_multi_services(
+        name,
+        options["services"],
+        app_middleware,
+        app_environment
+      )
     else
-      {:ok, [build_single_service(name, options, app_middleware)]}
+      {:ok,
+       [
+         build_single_service(name, options, app_middleware, app_environment)
+       ]}
     end
   end
 
@@ -103,7 +114,7 @@ defmodule Bates.Config do
     map |> Map.keys() |> Enum.sort()
   end
 
-  defp build_single_service(name, options, app_middleware) do
+  defp build_single_service(name, options, app_middleware, app_environment) do
     middleware = merge_middleware(app_middleware, [], "#{name}.test")
 
     %Service{
@@ -111,11 +122,17 @@ defmodule Bates.Config do
       command: Map.fetch!(options, "command"),
       port: nil,
       hostname: "#{name}.test",
-      middleware: middleware
+      middleware: middleware,
+      environment: app_environment
     }
   end
 
-  defp build_multi_services(app_name, services_map, app_middleware) do
+  defp build_multi_services(
+         app_name,
+         services_map,
+         app_middleware,
+         app_environment
+       ) do
     Enum.reduce_while(services_map, {:ok, []}, fn {service_name, options},
                                                   {:ok, acc} ->
       case resolve_port(options["port"]) do
@@ -127,6 +144,8 @@ defmodule Bates.Config do
             merge_middleware(app_middleware, service_middleware, hostname)
 
           depends_on = Map.get(options, "depends_on", [])
+          service_environment = Map.get(options, "environment", %{})
+          environment = Map.merge(app_environment, service_environment)
 
           service = %Service{
             name: service_name,
@@ -134,7 +153,8 @@ defmodule Bates.Config do
             port: port,
             hostname: hostname,
             middleware: middleware,
-            depends_on: depends_on
+            depends_on: depends_on,
+            environment: environment
           }
 
           {:cont, {:ok, acc ++ [service]}}
@@ -336,5 +356,51 @@ defmodule Bates.Config do
       ^first -> Enum.drop(cycle, -1)
       _ -> cycle
     end
+  end
+
+  defp validate_environment(applications) do
+    Enum.reduce_while(applications, :ok, fn {app_name, _root, services},
+                                            _acc ->
+      case validate_service_environments(app_name, services) do
+        :ok -> {:cont, :ok}
+        {:error, _} = error -> {:halt, error}
+      end
+    end)
+  end
+
+  defp validate_service_environments(app_name, services) do
+    Enum.reduce_while(services, :ok, fn %Service{
+                                          name: service_name,
+                                          environment: environment
+                                        },
+                                        _acc ->
+      case validate_environment_entries(app_name, service_name, environment) do
+        :ok -> {:cont, :ok}
+        {:error, _} = error -> {:halt, error}
+      end
+    end)
+  end
+
+  defp validate_environment_entries(app_name, service_name, environment) do
+    Enum.reduce_while(environment, :ok, fn {key, value}, _acc ->
+      validate_environment_value(app_name, service_name, key, value)
+    end)
+  end
+
+  defp validate_environment_value(app_name, service_name, key, value)
+       when is_binary(value) do
+    case Bates.Environment.validate(value) do
+      :ok ->
+        {:cont, :ok}
+
+      {:error, :malformed} ->
+        {:halt,
+         {:error, {:malformed_environment_value, app_name, service_name, key}}}
+    end
+  end
+
+  defp validate_environment_value(app_name, service_name, key, value) do
+    {:halt,
+     {:error, {:invalid_environment_value, app_name, service_name, key, value}}}
   end
 end

@@ -563,4 +563,47 @@ defmodule Bates.ConfigTest do
       assert {"myapp", _, _} = Config.find_by_path(cwd, path)
     end
   end
+
+  describe "environment" do
+    test "parses an app-level [environment] table into each service" do
+      [{_name, _root, services}] =
+        Config.applications("test/fixtures/environment_config.toml")
+
+      service_map = Map.new(services, &{&1.name, &1})
+
+      assert service_map["worker"].environment == %{
+               "RAILS_ENV" => "development",
+               "LOG_LEVEL" => "debug"
+             }
+    end
+
+    test "service-level entries override app-level on key conflict" do
+      [{_name, _root, services}] =
+        Config.applications("test/fixtures/environment_config.toml")
+
+      web = Enum.find(services, &(&1.name == "web"))
+
+      assert web.environment == %{
+               "RAILS_ENV" => "test",
+               "LOG_LEVEL" => "debug",
+               "VITE_RUBY_PORT" => "$PORT"
+             }
+    end
+
+    test "returns {:error, {:malformed_environment_value, ...}} for unclosed ${" do
+      assert Config.applications(
+               "test/fixtures/malformed_environment_config.toml"
+             ) ==
+               {:error,
+                {:malformed_environment_value, "myapp", "myapp", "BROKEN"}}
+    end
+
+    test "returns {:error, {:invalid_environment_value, ...}} for a non-string value" do
+      assert Config.applications(
+               "test/fixtures/non_string_environment_config.toml"
+             ) ==
+               {:error,
+                {:invalid_environment_value, "myapp", "myapp", "PORT_COUNT", 5}}
+    end
+  end
 end

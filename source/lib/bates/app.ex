@@ -825,7 +825,17 @@ defmodule Bates.App do
       root: state.root
     }
 
-    Middleware.apply_pipeline(initial, modules, context)
+    initial
+    |> Middleware.apply_pipeline(modules, context)
+    |> apply_user_environment(config)
+  end
+
+  defp apply_user_environment(%ProcessInvocation{} = invocation, %Service{
+         name: name,
+         environment: user_env
+       }) do
+    resolved = Bates.Environment.apply(invocation.environment, user_env, name)
+    %{invocation | environment: resolved}
   end
 
   defp seed_environment(%Service{name: name}, state) do

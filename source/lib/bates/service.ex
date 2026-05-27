@@ -8,6 +8,7 @@ defmodule Bates.Service do
           hostname: String.t() | nil,
           middleware: [String.t()],
           depends_on: [String.t()],
+          environment: %{String.t() => String.t()},
           addon?: boolean()
         }
 
@@ -17,5 +18,6 @@ defmodule Bates.Service do
             hostname: nil,
             middleware: [],
             depends_on: [],
+            environment: %{},
             addon?: false
 end

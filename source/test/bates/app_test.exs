@@ -745,6 +745,46 @@ defmodule Bates.AppTest do
 
       assert service_state("testapp", "producer").exports == %{}
     end
+
+    test "consumer user-environment can reference a dependency's export" do
+      Application.put_env(:bates, :export_producer_exports, %{
+        "producer" => %{"DB_PORT" => "12345"}
+      })
+
+      env_file =
+        Path.join(
+          System.tmp_dir!(),
+          "bates_dep_env_#{System.unique_integer([:positive])}"
+        )
+
+      on_exit(fn -> File.rm(env_file) end)
+
+      consumer = %Service{
+        name: "consumer",
+        command:
+          ~s|sh -c 'echo "$DATABASE_URL" > #{env_file}; exec elixir test/support/test_server.ex'|,
+        port: nil,
+        hostname: "consumer.testapp.test",
+        middleware: ["port"],
+        depends_on: ["producer"],
+        environment: %{
+          "DATABASE_URL" => "postgres://localhost:$DB_PORT/foo"
+        }
+      }
+
+      config = {"testapp", ".", [producer("producer"), consumer]}
+
+      start_supervised!({App, config})
+      :ok = App.up("testapp")
+
+      assert_eventually(fn ->
+        services = App.services("testapp")
+        Enum.any?(services, &(&1.name == "consumer" and &1.status == "up"))
+      end)
+
+      assert env_file |> File.read!() |> String.trim() ==
+               "postgres://localhost:12345/foo"
+    end
   end
 
   describe "exports_settled broadcast" do
@@ -1154,6 +1194,73 @@ defmodule Bates.AppTest do
 
       assert {:error, :unknown_service} =
                App.up("testapp", "does_not_exist")
+    end
+  end
+
+  describe "user environment" do
+    test "substitutes $NAME against middleware-produced env values" do
+      env_file =
+        Path.join(
+          System.tmp_dir!(),
+          "bates_envsub_#{System.unique_integer([:positive])}"
+        )
+
+      on_exit(fn -> File.rm(env_file) end)
+
+      config =
+        {"testapp", ".",
+         [
+           %Service{
+             name: "web",
+             command:
+               ~s|sh -c 'echo "$VITE_RUBY_PORT" > #{env_file}; exec elixir test/support/test_server.ex'|,
+             port: nil,
+             hostname: "testapp.test",
+             middleware: ["port"],
+             environment: %{"VITE_RUBY_PORT" => "$PORT"}
+           }
+         ]}
+
+      start_supervised!({App, config})
+      :ok = App.up("testapp")
+
+      assert_eventually(fn -> App.status("testapp") == "up" end)
+
+      [service] = App.services("testapp")
+
+      assert env_file |> File.read!() |> String.trim() ==
+               Integer.to_string(service.port)
+    end
+
+    test "exposes a literal Service.environment value to the running service" do
+      env_file =
+        Path.join(
+          System.tmp_dir!(),
+          "bates_env_#{System.unique_integer([:positive])}"
+        )
+
+      on_exit(fn -> File.rm(env_file) end)
+
+      config =
+        {"testapp", ".",
+         [
+           %Service{
+             name: "web",
+             command:
+               ~s|sh -c 'echo "$RAILS_ENV" > #{env_file}; exec elixir test/support/test_server.ex'|,
+             port: nil,
+             hostname: "testapp.test",
+             middleware: ["port"],
+             environment: %{"RAILS_ENV" => "development"}
+           }
+         ]}
+
+      start_supervised!({App, config})
+      :ok = App.up("testapp")
+
+      assert_eventually(fn -> App.status("testapp") == "up" end)
+
+      assert env_file |> File.read!() |> String.trim() == "development"
     end
   end
 

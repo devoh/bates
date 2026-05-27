@@ -1,0 +1,7 @@
+[myapp]
+root = "/tmp/myapp"
+command = "bin/server"
+hostname = true
+
+[myapp.environment]
+BROKEN = "${PORT"

@@ -1,0 +1,17 @@
+[myapp]
+root = "/tmp/myapp"
+
+[myapp.environment]
+RAILS_ENV = "development"
+LOG_LEVEL = "debug"
+
+[myapp.services.web]
+command = "bin/rails server -p $PORT"
+hostname = true
+
+[myapp.services.web.environment]
+RAILS_ENV = "test"
+VITE_RUBY_PORT = "$PORT"
+
+[myapp.services.worker]
+command = "bin/sidekiq"
