@@ -2,19 +2,6 @@
 
 Local multi-application development server.
 
-## Repo Structure
-
-```
-source/          Elixir application (code, tests, config)
-specs/           Domain specs (what the system is and why)
-workflow/        Proposals, plans, and blueprints (CDD pipeline)
-playbook/        Coding conventions and code review checklist
-research/        Distilled external knowledge
-transcripts/     Cleaned call transcripts and meeting notes
-experiments/     Prototypes and POCs
-docs/            External-facing content
-```
-
 ## Setup
 
 ### Install Caddy
@@ -82,8 +69,21 @@ addons = ["postgresql"]
 middleware = ["direnv"]
 ```
 
-## Methodology
+The command will have the `$PORT` placeholder replaced with a dynamically
+assigned port at startup. A port may be manually specified via the `port` key,
+instead.
 
-This repo follows [Context-Driven Development](CDD.md). Every decision,
-conversation, and research finding is written down in the repo. Agents and
-humans navigate the same context.
+Multiple services are supported, as well.
+
+```toml
+[multi_service_app]
+root = "/apps/multi_service_app"
+middleware = ["direnv"]
+
+  [multi_service_app.services.web]
+  hostname = true
+  command = "bin/rails server"
+
+  [multi_service_app.services.css]
+  command = "bin/rails tailwindcss:watch[always]"
+```
