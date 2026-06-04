@@ -2,6 +2,8 @@
 
 Local multi-application development server.
 
+<a href="docs/images/dashboard.png"><img src="docs/images/dashboard.png" alt="Bates dashboard" width="400"></a>
+
 ## Setup
 
 ### Install Caddy
