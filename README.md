@@ -1,8 +1,18 @@
 # Bates
 
-Local multi-application development server.
+A local multi-application development server.
 
 <a href="docs/images/dashboard.png"><img src="docs/images/dashboard.png" alt="Bates dashboard" width="400"></a>
+
+There’s support for running multiple services for handling things like CSS
+preprocessors and background jobs (similar to [Foreman][]). There’s also
+built-in support for managing dependencies using [`asdf`][], loading
+environment variables with [`direnv`][], and running per-app instances of
+PostgreSQL.
+
+[Foreman]: http://blog.daviddollar.org/2011/05/06/introducing-foreman.html
+[`direnv`]: https://direnv.net
+[`asdf`]: https://asdf-vm.com
 
 ## Setup
 
