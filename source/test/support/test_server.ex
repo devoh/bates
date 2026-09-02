@@ -3,17 +3,24 @@ defmodule Bates.TestServer do
   A minimal TCP server that binds to `$PORT` and responds with HTTP 200 OK.
   Used for manual end-to-end testing of the Bates infrastructure.
 
+  Set `TEST_SERVER_INET6` to bind IPv6 loopback only, mimicking servers
+  like Vite that resolve `localhost` to `::1`.
+
   Start with: `elixir test/support/test_server.ex`
   """
 
-  def start(port) do
+  def start(port, options \\ []) do
     {:ok, socket} =
-      :gen_tcp.listen(port, [
-        :binary,
-        packet: :http_bin,
-        active: false,
-        reuseaddr: true
-      ])
+      :gen_tcp.listen(
+        port,
+        options ++
+          [
+            :binary,
+            packet: :http_bin,
+            active: false,
+            reuseaddr: true
+          ]
+      )
 
     IO.puts("Test server listening on port #{port}")
     accept_loop(socket)
@@ -44,5 +51,13 @@ end
 
 if System.get_env("PORT") do
   port = System.get_env("PORT") |> String.to_integer()
-  Bates.TestServer.start(port)
+
+  options =
+    if System.get_env("TEST_SERVER_INET6") do
+      [:inet6, ip: {0, 0, 0, 0, 0, 0, 0, 1}]
+    else
+      []
+    end
+
+  Bates.TestServer.start(port, options)
 end

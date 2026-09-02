@@ -110,7 +110,9 @@ defmodule Bates.Caddy do
               "handle" => [
                 %{
                   "handler" => "reverse_proxy",
-                  "upstreams" => [%{"dial" => "127.0.0.1:#{port}"}],
+                  # `localhost` rather than `127.0.0.1` so Caddy also reaches
+                  # services that bind IPv6 loopback only (e.g. Vite).
+                  "upstreams" => [%{"dial" => "localhost:#{port}"}],
                   "handle_response" => [
                     %{
                       "match" => %{"status_code" => [502]},

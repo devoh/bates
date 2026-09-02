@@ -47,6 +47,22 @@ defmodule Bates.AppTest do
     assert App.status("testapp") == "up"
   end
 
+  test "transitions to 'up' when port listens on IPv6 loopback only" do
+    {name, root, [service]} =
+      single_service_config(command: "elixir test/support/test_server.ex")
+
+    config =
+      {name, root, [%{service | environment: %{"TEST_SERVER_INET6" => "1"}}]}
+
+    start_supervised!({App, config})
+    :ok = App.up("testapp")
+
+    assert_received {:status, "starting"}
+    assert_receive {:status, "up"}, 10_000
+
+    assert App.status("testapp") == "up"
+  end
+
   test "transitions to 'crashed' on readiness timeout" do
     config = single_service_config(command: "sleep 999")
     start_supervised!({App, config})

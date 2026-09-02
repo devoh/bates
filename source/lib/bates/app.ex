@@ -284,7 +284,7 @@ defmodule Bates.App do
     case Map.get(state.services, service_name) do
       %{pid: pid, ready: false, assigned_port: port} = svc
       when not is_nil(pid) ->
-        case :gen_tcp.connect(~c"127.0.0.1", port, [], 100) do
+        case connect_loopback(port) do
           {:ok, socket} ->
             :gen_tcp.close(socket)
             new_svc = %{svc | ready: true}
@@ -809,6 +809,16 @@ defmodule Bates.App do
 
   defp drain_log_buffer(%{log_buffer: buffer}) do
     :queue.to_list(buffer) |> Enum.join("\n")
+  end
+
+  # Node binds `localhost` to whatever the resolver returns first, which on
+  # macOS is `::1`, so a server like Vite listens on IPv6 loopback only.
+  # Probe both families before declaring the service unreachable.
+  defp connect_loopback(port) do
+    case :gen_tcp.connect(~c"127.0.0.1", port, [], 100) do
+      {:ok, socket} -> {:ok, socket}
+      {:error, _} -> :gen_tcp.connect(~c"::1", port, [:inet6], 100)
+    end
   end
 
   defp build_invocation(%Service{} = config, assigned_port, state) do
