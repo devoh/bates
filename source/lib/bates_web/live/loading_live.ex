@@ -103,6 +103,11 @@ defmodule BatesWeb.LoadingLive do
   end
 
   @impl true
+  def handle_info({:addons_settled, _exports}, socket) do
+    {:noreply, socket}
+  end
+
+  @impl true
   def render(assigns) do
     ~H"""
     <main class="bates-loading">
