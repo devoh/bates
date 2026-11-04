@@ -427,7 +427,7 @@ location, version handling — are specified per-addon below.
 
 A per-application Postgres server.
 
-- **Command:** `postgres -D $PGDATA -p $PORT -k $PGDATA`. The `-k`
+- **Command:** `postgres -D "$PGDATA" -p $PORT -k "$PGDATA"`. The `-k`
   flag points the Unix-domain socket directory at `$PGDATA` so the
   socket lives alongside the data directory rather than in
   `/tmp`.

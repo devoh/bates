@@ -7,7 +7,7 @@ defmodule Bates.Addons.PostgresqlTest do
   describe "definition/0" do
     test "returns the postgres command and the port + postgresql middleware" do
       assert Postgresql.definition() == %{
-               command: "postgres -D $PGDATA -p $PORT -k $PGDATA",
+               command: ~s(postgres -D "$PGDATA" -p $PORT -k "$PGDATA"),
                middleware: ["port", "postgresql"]
              }
     end
@@ -16,7 +16,7 @@ defmodule Bates.Addons.PostgresqlTest do
   describe "apply/2" do
     setup do
       invocation = %ProcessInvocation{
-        command: "postgres -D $PGDATA -p $PORT -k $PGDATA"
+        command: ~s(postgres -D "$PGDATA" -p $PORT -k "$PGDATA")
       }
 
       context = %{root: "/tmp/myapp", assigned_port: 5_555}
@@ -91,7 +91,7 @@ defmodule Bates.Addons.PostgresqlTest do
       assert Bates.Addons.Registry.lookup("postgresql") ==
                {:ok,
                 %{
-                  command: "postgres -D $PGDATA -p $PORT -k $PGDATA",
+                  command: ~s(postgres -D "$PGDATA" -p $PORT -k "$PGDATA"),
                   middleware: ["port", "postgresql"]
                 }}
     end

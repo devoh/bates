@@ -48,7 +48,12 @@ defmodule Bates.Addons.PostgresqlIntegrationTest do
        [
          %Service{
            name: "postgresql",
-           command: "#{postgres_path} -D $PGDATA -p $PORT -k $PGDATA",
+           command:
+             String.replace_prefix(
+               Bates.Addons.Postgresql.definition().command,
+               "postgres",
+               postgres_path
+             ),
            port: :auto,
            hostname: nil,
            middleware: ["port", "postgresql"],
@@ -107,9 +112,10 @@ defmodule Bates.Addons.PostgresqlIntegrationTest do
   # macOS' default `System.tmp_dir!/0` lives under
   # `/var/folders/<...>/T`, which produces a Unix-domain socket path
   # that exceeds the 103-byte sun_path limit. `/tmp` is short enough.
+  # The space guards against unquoted `$PGDATA` in the addon command.
   defp make_temp_root do
     suffix = System.unique_integer([:positive])
-    path = Path.join("/tmp", "bates_pg_#{suffix}")
+    path = Path.join("/tmp", "bates pg #{suffix}")
     File.mkdir_p!(path)
     path
   end

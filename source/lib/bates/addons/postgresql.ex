@@ -4,7 +4,7 @@ defmodule Bates.Addons.Postgresql do
 
   alias Bates.ProcessInvocation
 
-  @command "postgres -D $PGDATA -p $PORT -k $PGDATA"
+  @command ~s(postgres -D "$PGDATA" -p $PORT -k "$PGDATA")
   @middleware ["port", "postgresql"]
   @data_subdir ".bates/postgresql"
 
