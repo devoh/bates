@@ -11,6 +11,7 @@ settles.
 | Date | What Changed |
 |------|-------------|
 | 2026-11-10 | Plan created from accepted proposal. Four phases, one commit each, specs updated alongside code. |
+| 2026-11-10 | Executed. App-level start changed to wait for readiness (approved mid-execution); see Deviations. |
 
 ## Why This Matters
 
@@ -21,24 +22,24 @@ crashed, and has to guess an application's URL.
 
 ## Acceptance Criteria
 
-- [ ] `bates logs` in an application directory prints that
+- [x] `bates logs` in an application directory prints that
       application's recent output; `bates logs myapp:web --lines 5`
       prints at most five unprefixed lines.
-- [ ] `GET /processes/ghost/logs` returns a JSON 404, not a 500.
-- [ ] After a service restarts, its buffer holds only the new run's
+- [x] `GET /processes/ghost/logs` returns a JSON 404, not a 500.
+- [x] After a service restarts, its buffer holds only the new run's
       output.
-- [ ] `bates up myapp` against a service running `exit 3` prints
+- [x] `bates up myapp` against a service running `exit 3` prints
       `service <name> exited with status 3` followed by its last log
       lines, and exits 1. Same for `bates up myapp:<service>`,
       `bates restart`, and `bates env` (for addons).
-- [ ] `bates restart myapp` exits 1 with crash output when the
+- [x] `bates restart myapp` exits 1 with crash output when the
       application crashes on start, and 0 only once it has settled.
-- [ ] The loading page's crash view is unchanged.
-- [ ] `bates info` in an application directory prints its name,
+- [x] The loading page's crash view is unchanged.
+- [x] `bates info` in an application directory prints its name,
       expanded root, status, and per-service `https://` URLs, status,
       and ports. `bates info ghost` exits 1; `bates info a:b` exits 2.
-- [ ] `bates status` output is unchanged.
-- [ ] `mix test` passes.
+- [x] `bates status` output is unchanged.
+- [x] `mix test` passes.
 
 ## Phase 1 — `bates logs`
 
@@ -209,3 +210,44 @@ Resolution list); `root` in the `/status` example in
 Run `mix test` from `source/` for a baseline. Phase 1 step 4 (shared
 target parsing) is a refactor; land it inside Phase 1's commit only
 after `Up` and `Down` tests pass against it.
+
+## Execution Notes
+
+### Deviations
+
+- **App-level start waits for readiness.** `POST /processes/<app>/start`
+  returned once every service had spawned, so a server crashing during
+  boot still reported success and crash output had nothing to attach
+  to. With approval, start (and therefore restart) now unblocks on the
+  app's derived status reaching `up` or `crashed`. `bates env` has its
+  own endpoint and is unaffected.
+- **Starting a crashed app retries it.** Stopping skips services that
+  already crashed, so the start endpoint's early return on a `crashed`
+  snapshot made restart and `bates up` after a fix report the stale
+  crash. The early return was removed (Phase 3 commit).
+- **Output chunks are split into lines.** The buffer stored raw output
+  chunks, so `--lines` counted chunks. Each chunk is now split on
+  newlines; a line split across two chunks is still recorded as two
+  (marked with a `shortcut:` comment).
+- **Service order is map order, not config order.** `/status` and the
+  dashboard already list services in `state.services` map order, so
+  logs follow the same order for consistency.
+
+### Gotchas
+
+- Commands run as `exec <command>`, so test fixtures with `;` or shell
+  builtins need `sh -c '...'`. `exec exit 1` fails with status 127.
+- Portless services count as `up` as soon as they spawn, so an
+  immediate crash in one can still produce a 200 from start.
+- Several files were already unformatted on `master`; only touched
+  hunks were formatted.
+- `start_service returns 200 with status up` failed once under a full
+  run and passed in 11 reruns; it boots an Elixir test server and looks
+  timing-sensitive.
+
+### Follow-ups
+
+- The env endpoint still returns an addon's earlier crash without
+  retrying, the same pattern fixed for start.
+- `specs/control-interface.md` says "There is no separate env
+  endpoint", which predates this work and is wrong.
