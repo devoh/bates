@@ -24,10 +24,7 @@ defmodule Bates.CLI.Up do
         :ok
 
       {:ok, _status, body} ->
-        IO.write(
-          :stderr,
-          (body["reason"] || body["error"] || "request failed") <> "\n"
-        )
+        IO.write(:stderr, Client.error_message(body))
 
         1
 
@@ -47,10 +44,7 @@ defmodule Bates.CLI.Up do
         :ok
 
       {:ok, _status, body} ->
-        IO.write(
-          :stderr,
-          (body["reason"] || body["error"] || "request failed") <> "\n"
-        )
+        IO.write(:stderr, Client.error_message(body))
 
         1
 

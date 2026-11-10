@@ -68,6 +68,15 @@ bates: started <app>
 bates: started <app>:<service>
 ```
 
+Both forms wait until the target is ready (its port is bound) or has
+crashed. On a crash, the command exits 1 and writes the reason and
+the crashed service's last log lines to stderr:
+
+```
+service web exited with status 1
+  ** (Mix) Could not start application myapp: ...
+```
+
 A name with no colon hits the application-level endpoint; a name of
 the form `<app>:<service>` hits the per-service endpoint. Names with
 more than one colon are rejected with a usage error and exit code 2.
@@ -170,7 +179,8 @@ eval "$(bates env myapp)"
 
 The command exits 0 on success and non-zero on any failure (Bates
 not running, application unknown, an addon crashed during start,
-readiness timeout). Failure messages are written to stderr and no
+readiness timeout). Failure messages are written to stderr, followed
+by the crashed addon's last log lines when there are any, and no
 output is written to stdout. Callers that want resilience in
 `.envrc` (e.g., before Bates has been started for the day) can wrap
 the call:

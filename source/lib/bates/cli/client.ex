@@ -60,6 +60,22 @@ defmodule Bates.CLI.Client do
   def transport_message(reason),
     do: "bates: request failed: #{inspect(reason)}"
 
+  @doc """
+  Formats an error response body for stderr: the reason, followed by
+  the crashed service's log tail indented by two spaces when present.
+  """
+  def error_message(body) do
+    reason = body["reason"] || body["error"] || "request failed"
+
+    lines =
+      case body["logs"] do
+        %{"lines" => lines} when is_list(lines) -> lines
+        _ -> []
+      end
+
+    Enum.join([reason | Enum.map(lines, &("  " <> &1))], "\n") <> "\n"
+  end
+
   @doc false
   def not_running_message,
     do: "Bates is not running. Start it with: batesd"

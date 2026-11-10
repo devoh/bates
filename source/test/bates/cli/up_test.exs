@@ -48,6 +48,25 @@ defmodule Bates.CLI.UpTest do
     assert stderr =~ "boom"
   end
 
+  test "writes the crash log tail after the reason", %{bypass: bypass} do
+    Bypass.expect_once(bypass, "POST", "/processes/myapp/start", fn conn ->
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.resp(
+        422,
+        Jason.encode!(%{
+          name: "myapp",
+          status: "crashed",
+          reason: "service web exited with status 1",
+          logs: %{service: "web", lines: ["boom"]}
+        })
+      )
+    end)
+
+    stderr = capture_io(:stderr, fn -> assert Up.run("myapp") == 1 end)
+    assert stderr == "service web exited with status 1\n  boom\n"
+  end
+
   test "writes the response reason on a 404", %{bypass: bypass} do
     Bypass.expect_once(bypass, "POST", "/processes/ghost/start", fn conn ->
       conn

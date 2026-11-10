@@ -80,6 +80,28 @@ defmodule Bates.CLI.ClientTest do
     end
   end
 
+  describe "error_message/1" do
+    test "prints the reason followed by the indented log tail" do
+      body = %{
+        "reason" => "service web exited with status 1",
+        "logs" => %{"service" => "web", "lines" => ["boom", "trace"]}
+      }
+
+      assert Client.error_message(body) ==
+               "service web exited with status 1\n  boom\n  trace\n"
+    end
+
+    test "prints the reason alone without logs" do
+      assert Client.error_message(%{"reason" => "nope", "logs" => nil}) ==
+               "nope\n"
+    end
+
+    test "falls back to error, then a generic message" do
+      assert Client.error_message(%{"error" => "bad"}) == "bad\n"
+      assert Client.error_message(%{}) == "request failed\n"
+    end
+  end
+
   describe "transport_message/1" do
     test "maps :nxdomain to the canonical not-running message" do
       assert Client.transport_message(:nxdomain) ==

@@ -180,6 +180,33 @@ defmodule BatesWeb.ProcessControllerTest do
        ]}
     end
 
+    test "returns the exit status and log tail when a service crashes",
+         %{conn: conn} do
+      # Portless services count as up once spawned, so the crashing
+      # service needs a port for the start to wait on it.
+      config =
+        {"testapp", ".",
+         [
+           %Service{
+             name: "web",
+             command: "sh -c 'echo boom; exit 3'",
+             port: nil,
+             hostname: "testapp.test",
+             middleware: ["port"]
+           }
+         ]}
+
+      start_supervised!({App, config})
+
+      conn = post(conn, "/processes/testapp/start")
+
+      assert %{
+               "status" => "crashed",
+               "reason" => "service web exited with status 3",
+               "logs" => %{"service" => "web", "lines" => ["boom"]}
+             } = json_response(conn, 422)
+    end
+
     test "returns 200 with exports when app is already up", %{conn: conn} do
       Application.put_env(:bates, :export_producer_exports, %{
         "worker" => %{"FOO" => "bar"}
@@ -461,6 +488,32 @@ defmodule BatesWeb.ProcessControllerTest do
       assert body["status"] == "crashed"
     end
 
+    test "returns the crashed service's exit status and log tail",
+         %{conn: conn} do
+      config =
+        {"testapp", ".",
+         [
+           %Service{
+             name: "web",
+             command: "sh -c 'echo boom >&2; exit 2'",
+             port: nil,
+             hostname: "testapp.test",
+             middleware: ["port"]
+           }
+         ]}
+
+      start_supervised!({App, config})
+
+      conn = post(conn, "/processes/testapp/services/web/start")
+
+      assert %{
+               "app" => "testapp",
+               "service" => "web",
+               "reason" => "service web exited with status 2",
+               "logs" => %{"service" => "web", "lines" => ["boom"]}
+             } = json_response(conn, 422)
+    end
+
     test "returns 504 when readiness times out", %{conn: conn} do
       original = Application.get_env(:bates, :readiness_timeout)
       Application.put_env(:bates, :readiness_timeout, 50)
@@ -708,7 +761,10 @@ defmodule BatesWeb.ProcessControllerTest do
 
       assert %{
                "name" => "testapp",
-               "status" => "crashed"
+               "status" => "crashed",
+               # `exit` is a shell builtin, so `exec exit 1` fails with 127.
+               "reason" => "addon pgsql exited with status 127",
+               "logs" => %{"service" => "pgsql", "lines" => [_ | _]}
              } = json_response(conn, 422)
     end
   end

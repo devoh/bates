@@ -169,22 +169,41 @@ POST bates.test/processes/<name>/start
     "PGPORT": "52345"
   }
 }
-→ 422  {"name": "myapp", "status": "crashed", "reason": "..."}
+→ 422  {"name": "myapp", "status": "crashed", "reason": "...", "logs": {...}}
 → 504  {"name": "myapp", "status": "timeout", "reason": "..."}
 → 404  {"name": "myapp", "status": "unknown", "reason": "..."}
 ```
 
-Blocks until the application's services have either spawned (and
-produced their exports) or terminal-failed, up to a 60-second
-readiness timeout. When the app is already `up`, returns
+Blocks until every service in the application is `up` (port-bearing
+services have bound their port) or one has crashed, up to a
+60-second readiness timeout. When the app is already `up`, returns
 immediately. Concurrent callers against a `down` app each receive
 the same merged exports without duplicate spawns.
 
-The `status` field reflects the application's actual derived
-status at response time. For port-bearing services this can be
-`starting` (services have spawned and exports are populated, but
-the TCP port is not yet bound) — exports are still valid and
-intended to be consumed; readiness is the caller's concern.
+Services without a port count as `up` as soon as they spawn, so a
+portless service that exits right after starting can still produce
+a 200.
+
+**Crash responses.** Every 422 with `"status": "crashed"` (from
+starting an application, starting a service, restarting, or
+requesting exports) names the first crashed service alphabetically
+and includes the last 20 lines of its output:
+
+```
+{
+  "name": "myapp",
+  "status": "crashed",
+  "reason": "service web exited with status 1",
+  "logs": {"service": "web", "lines": ["...", "..."]}
+}
+```
+
+`reason` is one of `<kind> <name> exited with status <code>`,
+`<kind> <name> was killed by signal <signal>`, or
+`<kind> <name> did not become ready in time`, where `<kind>` is
+`service`, or `addon` for the exports endpoint. `logs` is `null`
+when no crashed service could be identified, in which case `reason`
+falls back to a generic message.
 
 **Stop an application:**
 
@@ -226,7 +245,7 @@ POST bates.test/processes/<app>/services/<service>/start
   "port": 52341,
   "hostname": "myapp.test"
 }
-→ 422  {"app": "myapp", "service": "web", "status": "crashed", "reason": "..."}
+→ 422  {"app": "myapp", "service": "web", "status": "crashed", "reason": "...", "logs": {...}}
 → 504  {"app": "myapp", "service": "web", "status": "timeout", "reason": "..."}
 → 404  {"app": "myapp", "service": "web", "status": "unknown", "reason": "..."}
 ```

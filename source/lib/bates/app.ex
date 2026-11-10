@@ -6,6 +6,7 @@ defmodule Bates.App do
 
   @timeout 60_000
   @max_log_lines 1_000
+  @crash_log_lines 20
   @poll_interval Application.compile_env(:bates, :poll_interval, 200)
   @readiness_timeout Application.compile_env(
                        :bates,
@@ -739,16 +740,22 @@ defmodule Bates.App do
 
   defp build_snapshot(state) do
     status = derive_status(state)
-    exports = merge_exports(state)
-    reason = crash_reason(state, status)
-    %{status: status, exports: exports, reason: reason}
+    services = Map.values(state.services)
+
+    Map.merge(
+      %{status: status, exports: merge_exports(state)},
+      crash_details(status, services, "service")
+    )
   end
 
   defp build_addon_snapshot(state) do
     status = derive_addon_status(state)
-    exports = merge_addon_exports(state)
-    reason = addon_crash_reason(state, status)
-    %{status: status, exports: exports, reason: reason}
+    addons = state.services |> Map.values() |> Enum.filter(& &1.config.addon?)
+
+    Map.merge(
+      %{status: status, exports: merge_addon_exports(state)},
+      crash_details(status, addons, "addon")
+    )
   end
 
   defp derive_addon_status(state) do
@@ -767,34 +774,34 @@ defmodule Bates.App do
     end
   end
 
-  defp crash_reason(state, "crashed") do
-    state.services
-    |> Enum.sort_by(fn {name, _svc} -> name end)
-    |> Enum.find_value(fn {name, svc} ->
-      case svc.exit_status do
-        nil -> nil
-        :normal -> nil
-        status -> "service #{name} failed: #{inspect(status)}"
-      end
-    end)
+  # Names the first crashed service (alphabetically) so the reason and
+  # the log tail always describe the same one.
+  defp crash_details("crashed", services, kind) do
+    services
+    |> Enum.sort_by(& &1.config.name)
+    |> Enum.find(&(&1.exit_status not in [nil, :normal]))
+    |> case do
+      nil ->
+        %{reason: nil, logs: nil}
+
+      svc ->
+        %{
+          reason:
+            "#{kind} #{svc.config.name} #{describe_exit(svc.exit_status)}",
+          logs: %{
+            service: svc.config.name,
+            lines: tail(svc.log_buffer, @crash_log_lines)
+          }
+        }
+    end
   end
 
-  defp crash_reason(_state, _), do: nil
+  defp crash_details(_status, _services, _kind), do: %{reason: nil, logs: nil}
 
-  defp addon_crash_reason(state, "crashed") do
-    state.services
-    |> Enum.filter(fn {_name, svc} -> svc.config.addon? end)
-    |> Enum.sort_by(fn {name, _svc} -> name end)
-    |> Enum.find_value(fn {name, svc} ->
-      case svc.exit_status do
-        nil -> nil
-        :normal -> nil
-        status -> "addon #{name} failed: #{inspect(status)}"
-      end
-    end)
-  end
-
-  defp addon_crash_reason(_state, _), do: nil
+  defp describe_exit({:status, code}), do: "exited with status #{code}"
+  defp describe_exit({:signal, signal}), do: "was killed by signal #{signal}"
+  defp describe_exit(:timeout), do: "did not become ready in time"
+  defp describe_exit(_), do: "crashed"
 
   defp service_status_name(%{pid: pid, ready: true}) when not is_nil(pid),
     do: "up"
@@ -1011,7 +1018,14 @@ defmodule Bates.App do
   end
 
   defp extract_exit_status(:normal), do: :normal
-  defp extract_exit_status({:exit_status, _status}), do: :crashed
+
+  defp extract_exit_status({:exit_status, raw}) do
+    case :exec.status(raw) do
+      {:status, code} -> {:status, code}
+      {:signal, signal, _core_dumped} -> {:signal, signal}
+    end
+  end
+
   defp extract_exit_status(_), do: :crashed
 
   defp via_tuple(name) when is_binary(name) do

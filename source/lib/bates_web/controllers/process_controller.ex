@@ -288,6 +288,18 @@ defmodule BatesWeb.ProcessController do
     end
   end
 
+  defp crash_response(conn, identity, snapshot, fallback_reason) do
+    conn
+    |> put_status(422)
+    |> json(
+      Map.merge(identity, %{
+        status: "crashed",
+        reason: snapshot.reason || fallback_reason,
+        logs: snapshot.logs
+      })
+    )
+  end
+
   defp fetch_app(app) do
     case ProcessSupervisor.app_pid(app) do
       nil -> {:error, :unknown_app}
@@ -329,25 +341,23 @@ defmodule BatesWeb.ProcessController do
         {:status, "up"} ->
           respond_service_up(conn, app, service, svc)
 
-        {:status, "crashed", reason} ->
-          conn
-          |> put_status(422)
-          |> json(%{
-            app: app,
-            service: service,
-            status: "crashed",
-            reason: reason
-          })
+        # The payload is the full buffer, meant for the loading page;
+        # the response takes a one-line reason and tail from the snapshot.
+        {:status, "crashed", _output} ->
+          crash_response(
+            conn,
+            %{app: app, service: service},
+            App.snapshot(app),
+            "service crashed"
+          )
 
         {:status, "crashed"} ->
-          conn
-          |> put_status(422)
-          |> json(%{
-            app: app,
-            service: service,
-            status: "crashed",
-            reason: "service crashed"
-          })
+          crash_response(
+            conn,
+            %{app: app, service: service},
+            App.snapshot(app),
+            "service crashed"
+          )
 
         _ ->
           receive_service_settled(conn, app, service, svc, deadline)
@@ -395,14 +405,8 @@ defmodule BatesWeb.ProcessController do
       %{status: "up", exports: exports} ->
         json(conn, %{name: name, status: "up", exports: exports})
 
-      %{status: "crashed", reason: reason} ->
-        conn
-        |> put_status(422)
-        |> json(%{
-          name: name,
-          status: "crashed",
-          reason: reason || "application crashed"
-        })
+      %{status: "crashed"} = snapshot ->
+        crash_response(conn, %{name: name}, snapshot, "application crashed")
 
       _ ->
         case start_app(name) do
@@ -444,23 +448,20 @@ defmodule BatesWeb.ProcessController do
     if remaining <= 0 do
       timeout_response(conn, name)
     else
+      # Every state change rebroadcasts the derived status, so waiting
+      # for "up" covers port readiness, not just spawn.
       receive do
-        {:exports_settled, exports} ->
-          respond_settled(conn, name, exports)
-
-        {:status, "crashed", reason} ->
-          conn
-          |> put_status(422)
-          |> json(%{name: name, status: "crashed", reason: reason})
+        {:status, "up"} ->
+          %{exports: exports} = App.snapshot(name)
+          json(conn, %{name: name, status: "up", exports: exports})
 
         {:status, "crashed"} ->
-          conn
-          |> put_status(422)
-          |> json(%{
-            name: name,
-            status: "crashed",
-            reason: "application crashed"
-          })
+          crash_response(
+            conn,
+            %{name: name},
+            App.snapshot(name),
+            "application crashed"
+          )
 
         _ ->
           receive_settled(conn, name, deadline)
@@ -470,29 +471,13 @@ defmodule BatesWeb.ProcessController do
     end
   end
 
-  defp respond_settled(conn, name, exports) do
-    case App.snapshot(name) do
-      %{status: "crashed", reason: reason} ->
-        conn
-        |> put_status(422)
-        |> json(%{
-          name: name,
-          status: "crashed",
-          reason: reason || "application crashed"
-        })
-
-      %{status: status} ->
-        json(conn, %{name: name, status: status, exports: exports})
-    end
-  end
-
   defp timeout_response(conn, name) do
     conn
     |> put_status(504)
     |> json(%{
       name: name,
       status: "timeout",
-      reason: "timed out waiting for exports"
+      reason: "timed out waiting for services to become ready"
     })
   end
 
@@ -501,14 +486,8 @@ defmodule BatesWeb.ProcessController do
       %{status: "up", exports: exports} ->
         json(conn, %{name: name, status: "up", exports: exports})
 
-      %{status: "crashed", reason: reason} ->
-        conn
-        |> put_status(422)
-        |> json(%{
-          name: name,
-          status: "crashed",
-          reason: reason || "addon crashed"
-        })
+      %{status: "crashed"} = snapshot ->
+        crash_response(conn, %{name: name}, snapshot, "addon crashed")
 
       _ ->
         case start_addons(name) do
@@ -562,14 +541,8 @@ defmodule BatesWeb.ProcessController do
 
   defp respond_addons_settled(conn, name, exports) do
     case App.addon_snapshot(name) do
-      %{status: "crashed", reason: reason} ->
-        conn
-        |> put_status(422)
-        |> json(%{
-          name: name,
-          status: "crashed",
-          reason: reason || "addon crashed"
-        })
+      %{status: "crashed"} = snapshot ->
+        crash_response(conn, %{name: name}, snapshot, "addon crashed")
 
       %{status: status} ->
         json(conn, %{name: name, status: status, exports: exports})

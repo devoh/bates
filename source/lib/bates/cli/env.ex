@@ -38,7 +38,7 @@ defmodule Bates.CLI.Env do
         :ok
 
       {:ok, _status, body} ->
-        IO.write(:stderr, (body["reason"] || "request failed") <> "\n")
+        IO.write(:stderr, Client.error_message(body))
         1
 
       {:error, reason} ->
