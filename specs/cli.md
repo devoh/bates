@@ -183,13 +183,50 @@ eval "$(bates env myapp 2>/dev/null || true)"
 exports that changed since the shell loaded the file (for example,
 after a stop/start cycle assigned a fresh `PGPORT`).
 
+### `bates logs [<name>] [--lines <count>]`
+
+Prints recent output from an application's services, read from each
+service's in-memory ring buffer (see
+[Process Management](process-management.md#logging)). Requires the
+server to be running.
+
+- `bates logs <app>` prints every service in the application.
+- `bates logs <app>:<service>` prints one service.
+- `bates logs` (no name) and `bates logs :<service>` resolve the
+  application from the current working directory — see
+  [Working Directory Resolution](#working-directory-resolution).
+
+`--lines <count>` keeps the last `count` lines of each service
+(default 100). It must be a positive integer.
+
+A single service's lines are printed as-is. When several services are
+printed, each line is prefixed with the service name, and output is
+grouped by service rather than interleaved by time:
+
+```
+$ bates logs myapp
+[web] Listening on http://127.0.0.1:52341
+[worker] Processing jobs...
+```
+
+The buffer is cleared each time a service starts, so the output
+covers the current run, or the last run if the service is down or
+crashed. There is no `--follow`; run the command again for newer
+output.
+
+Unknown applications and services exit 1 with the server's reason on
+stderr. Malformed arguments (an unknown option, a non-positive
+`--lines`, more than one name, or a name with more than one colon)
+exit 2.
+
 ### Working Directory Resolution
 
-When `up`, `down`, `restart`, or `env` is invoked without a name, the
-CLI asks the daemon to look up the application whose configured
-`root` is the deepest ancestor of the current working directory. The
-lookup is exact: a path equal to `root` matches, as does a path
-nested under `root`; sibling directories with a shared prefix do not.
+When `up`, `down`, `restart`, `env`, or `logs` is invoked without a
+name, the CLI asks the daemon to look up the application whose
+configured `root` is the deepest ancestor of the current working
+directory. The lookup is exact: a path equal to `root` matches, as
+does a path nested under `root`; sibling directories with a shared
+prefix do not.
 
 When two applications' roots nest (e.g., a workspace root with an
 application nested inside it), the longest root wins. This lets a
@@ -231,7 +268,7 @@ A future proposal will install a launchd job via `bates setup` so
 
 ## Server Communication
 
-Control commands (`status`, `up`, `down`, `restart`, `env`)
+Control commands (`status`, `up`, `down`, `restart`, `env`, `logs`)
 communicate with the running server via the JSON API on `bates.test`.
 If the server is not running, they exit with a clear error message:
 

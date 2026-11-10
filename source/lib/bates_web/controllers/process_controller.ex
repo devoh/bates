@@ -105,9 +105,55 @@ defmodule BatesWeb.ProcessController do
     end
   end
 
-  def logs(conn, %{"name" => name}) do
-    logs = App.logs(name)
-    json(conn, %{name: name, services: logs})
+  def logs(conn, %{"name" => name} = params) do
+    respond_logs(conn, name, nil, params)
+  end
+
+  def service_logs(conn, %{"app" => app, "service" => service} = params) do
+    respond_logs(conn, app, service, params)
+  end
+
+  defp respond_logs(conn, app, service, params) do
+    with {:ok, lines} <- parse_lines(params["lines"]),
+         {:ok, _pid} <- fetch_app(app),
+         {:ok, services} <- App.logs(app, service: service, lines: lines) do
+      json(conn, %{name: app, services: services})
+    else
+      {:error, :invalid_lines} ->
+        conn
+        |> put_status(400)
+        |> json(%{
+          status: "invalid",
+          reason: "lines must be a positive integer"
+        })
+
+      {:error, :unknown_app} ->
+        conn
+        |> put_status(404)
+        |> json(%{
+          name: app,
+          status: "unknown",
+          reason: "unknown application: #{app}"
+        })
+
+      {:error, :unknown_service} ->
+        conn
+        |> put_status(404)
+        |> json(%{
+          name: app,
+          status: "unknown",
+          reason: "unknown service: #{service}"
+        })
+    end
+  end
+
+  defp parse_lines(nil), do: {:ok, nil}
+
+  defp parse_lines(value) do
+    case Integer.parse(value) do
+      {lines, ""} when lines > 0 -> {:ok, lines}
+      _ -> {:error, :invalid_lines}
+    end
   end
 
   def restart(conn, %{"name" => name}) do

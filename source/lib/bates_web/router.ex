@@ -44,6 +44,10 @@ defmodule BatesWeb.Router do
     post "/processes/:app/services/:service/stop",
          ProcessController,
          :stop_service
+
+    get "/processes/:app/services/:service/logs",
+        ProcessController,
+        :service_logs
   end
 
   scope "/", BatesWeb do

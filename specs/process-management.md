@@ -577,12 +577,18 @@ Each service's stdout and stderr are captured and handled in two ways:
    (e.g., `[myapp:web]`). This provides a single stream for watching
    all activity.
 
-2. **Per-service ring buffer.** Each service keeps its recent output in
-   an in-memory ring buffer. This provides isolated, per-service access
-   to recent log output without writing to disk. The buffer is used by
-   the loading page to display crash output, and can be exposed via the
-   API for CLI access (e.g., `bates logs myapp:web`). Logs are lost on
-   Bates restart, which is acceptable for a development server.
+2. **Per-service ring buffer.** Each service keeps its last 1,000
+   lines of output in an in-memory ring buffer. This provides isolated,
+   per-service access to recent log output without writing to disk.
+   The buffer is used by the loading page to display crash output and
+   is exposed through the logs API and `bates logs`. It is cleared each
+   time the service starts, so it only holds the current (or most
+   recent) run. Logs are lost on Bates restart, which is acceptable for
+   a development server.
+
+Output arrives from the OS process in chunks. Each chunk is split on
+newlines, so both the interleaved stream and the buffer hold one entry
+per line. A line split across two chunks is recorded as two lines.
 
 ## How It Connects
 

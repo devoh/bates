@@ -27,6 +27,7 @@ defmodule Bates.CLI do
 
   def dispatch(["env"]), do: Bates.CLI.Env.run()
   def dispatch(["env", name]) when is_binary(name), do: Bates.CLI.Env.run(name)
+  def dispatch(["logs" | args]), do: Bates.CLI.Logs.run(args)
   def dispatch(_), do: usage()
 
   defp usage do
@@ -38,6 +39,7 @@ defmodule Bates.CLI do
       bates down [<name>]
       bates restart [<name>]
       bates env [<name>]
+      bates logs [<name>] [--lines <count>]
 
     When <name> is omitted, the application is resolved from the
     current working directory using each application's configured root.

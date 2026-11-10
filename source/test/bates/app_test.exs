@@ -1280,6 +1280,37 @@ defmodule Bates.AppTest do
     end
   end
 
+  describe "logs" do
+    defp log_lines do
+      {:ok, [%{lines: lines}]} = App.logs("testapp")
+      lines
+    end
+
+    test "buffers each line of a multi-line chunk separately" do
+      config =
+        single_service_config(command: "sh -c 'printf \"a\\nb\\n\"; sleep 30'")
+
+      start_supervised!({App, config})
+      :ok = App.up("testapp")
+
+      assert_eventually(fn -> log_lines() == ["a", "b"] end)
+    end
+
+    test "clears the buffer when a service starts again" do
+      config = single_service_config(command: "sh -c 'echo run; sleep 30'")
+      start_supervised!({App, config})
+
+      :ok = App.up("testapp")
+      assert_eventually(fn -> log_lines() == ["run"] end)
+      :ok = App.down("testapp")
+      :ok = App.up("testapp")
+
+      assert_eventually(fn -> log_lines() == ["run"] end)
+      Process.sleep(200)
+      assert log_lines() == ["run"]
+    end
+  end
+
   defp assert_eventually(fun, attempts \\ 50) do
     Bates.TestHelpers.assert_eventually(fun, attempts)
   end

@@ -276,7 +276,8 @@ service start order.
 **Get application logs:**
 
 ```
-GET bates.test/processes/<name>/logs
+GET bates.test/processes/<name>/logs?lines=N
+GET bates.test/processes/<app>/services/<service>/logs?lines=N
 
 → 200
 {
@@ -286,11 +287,18 @@ GET bates.test/processes/<name>/logs
     {"name": "worker", "lines": ["Worker started", "Processing jobs..."]}
   ]
 }
+→ 404  {"name": "myapp", "status": "unknown", "reason": "unknown application: myapp"}
+→ 404  {"name": "myapp", "status": "unknown", "reason": "unknown service: web"}
+→ 400  {"status": "invalid", "reason": "lines must be a positive integer"}
 ```
 
 Returns the recent output from each service's in-memory ring buffer.
 Lines are ordered oldest to newest. Services that haven't produced
-output return an empty list.
+output return an empty list. The per-service form returns the same
+envelope with one entry in `services`.
+
+`lines` is optional; when present, each service's list is trimmed to
+its last `N` lines.
 
 ### Content Negotiation
 

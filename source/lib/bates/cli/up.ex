@@ -1,50 +1,20 @@
 defmodule Bates.CLI.Up do
   @moduledoc false
 
-  alias Bates.CLI.Client
+  alias Bates.CLI.{Client, Target}
 
-  def run do
-    case Client.resolve_app_by_cwd() do
-      {:ok, name} -> run(name)
-      {:error, message} -> resolution_error(message)
-    end
-  end
-
-  def run(name) when is_binary(name) do
-    case parse(name) do
+  def run(name \\ nil) do
+    case Target.resolve(name) do
       {:app, app} -> start_app(app)
       {:service, app, service} -> start_service(app, service)
-      {:cwd_service, service} -> resolve_then_start_service(service)
-      :invalid -> invalid_target(name)
-    end
-  end
-
-  defp resolve_then_start_service(service) do
-    case Client.resolve_app_by_cwd() do
-      {:ok, app} -> start_service(app, service)
       {:error, message} -> resolution_error(message)
+      :invalid -> invalid_target(name)
     end
   end
 
   defp resolution_error(message) do
     IO.write(:stderr, message <> "\n")
     1
-  end
-
-  defp parse(name) do
-    case String.split(name, ":") do
-      [app] when app != "" ->
-        {:app, app}
-
-      ["", service] when service != "" ->
-        {:cwd_service, service}
-
-      [app, service] when app != "" and service != "" ->
-        {:service, app, service}
-
-      _ ->
-        :invalid
-    end
   end
 
   defp start_app(app) do

@@ -69,6 +69,89 @@ defmodule BatesWeb.ProcessControllerTest do
     assert [%{"name" => "testapp", "lines" => []}] = services
   end
 
+  describe "logs" do
+    defp chatty_config do
+      {"testapp", ".",
+       [
+         %Service{
+           name: "web",
+           command: "sh -c 'echo one; echo two; echo three; sleep 30'",
+           port: nil,
+           hostname: nil,
+           middleware: []
+         },
+         %Service{
+           name: "worker",
+           command: "sh -c 'echo working; sleep 30'",
+           port: nil,
+           hostname: nil,
+           middleware: []
+         }
+       ]}
+    end
+
+    defp start_chatty_app do
+      start_supervised!({App, chatty_config()})
+      :ok = App.up("testapp")
+
+      assert_eventually(fn ->
+        {:ok, services} = App.logs("testapp")
+        Enum.sum(Enum.map(services, &length(&1.lines))) == 4
+      end)
+    end
+
+    test "trims each service to the last N lines", %{conn: conn} do
+      start_chatty_app()
+
+      conn = get(conn, "/processes/testapp/logs?lines=2")
+
+      assert %{"services" => services} = json_response(conn, 200)
+
+      assert [
+               %{"name" => "web", "lines" => ["two", "three"]},
+               %{"name" => "worker", "lines" => ["working"]}
+             ] = services
+    end
+
+    test "returns one service from the per-service route", %{conn: conn} do
+      start_chatty_app()
+
+      conn = get(conn, "/processes/testapp/services/worker/logs")
+
+      assert %{
+               "name" => "testapp",
+               "services" => [%{"name" => "worker", "lines" => ["working"]}]
+             } = json_response(conn, 200)
+    end
+
+    test "returns 404 for an unknown application", %{conn: conn} do
+      conn = get(conn, "/processes/ghost/logs")
+
+      assert %{"status" => "unknown", "reason" => reason} =
+               json_response(conn, 404)
+
+      assert reason =~ "ghost"
+    end
+
+    test "returns 404 for an unknown service", %{conn: conn} do
+      start_supervised!({App, chatty_config()})
+
+      conn = get(conn, "/processes/testapp/services/ghost/logs")
+
+      assert %{"status" => "unknown", "reason" => "unknown service: ghost"} =
+               json_response(conn, 404)
+    end
+
+    test "returns 400 when lines is not a positive integer", %{conn: conn} do
+      start_supervised!({App, chatty_config()})
+
+      for value <- ["0", "-1", "abc", "2x"] do
+        conn = get(conn, "/processes/testapp/logs?lines=#{value}")
+        assert %{"status" => "invalid"} = json_response(conn, 400)
+      end
+    end
+  end
+
   describe "start" do
     setup do
       Bates.Middleware.Registry.register("export_producer", ExportProducer)

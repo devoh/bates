@@ -71,8 +71,16 @@ defmodule Bates.App do
     GenServer.call(via_tuple(name), :services)
   end
 
-  def logs(name) do
-    GenServer.call(via_tuple(name), :logs)
+  @doc """
+  Returns each service's buffered output as
+  `{:ok, [%{name: name, lines: lines}]}`.
+
+  Options: `:service` limits the result to one service (or returns
+  `{:error, :unknown_service}`), and `:lines` keeps only the last N
+  lines of each.
+  """
+  def logs(name, opts \\ []) do
+    GenServer.call(via_tuple(name), {:logs, opts})
   end
 
   # Callbacks
@@ -270,13 +278,16 @@ defmodule Bates.App do
   end
 
   @impl GenServer
-  def handle_call(:logs, _from, state) do
-    logs =
-      Enum.map(state.services, fn {_name, svc} ->
-        %{name: svc.config.name, lines: :queue.to_list(svc.log_buffer)}
-      end)
+  def handle_call({:logs, opts}, _from, state) do
+    reply =
+      with {:ok, services} <- select_services(state, opts[:service]) do
+        {:ok,
+         Enum.map(services, fn svc ->
+           %{name: svc.config.name, lines: tail(svc.log_buffer, opts[:lines])}
+         end)}
+      end
 
-    {:reply, logs, state}
+    {:reply, reply, state}
   end
 
   @impl GenServer
@@ -361,10 +372,18 @@ defmodule Bates.App do
         {:noreply, state}
 
       service_name ->
-        message = String.trim(data)
-        log(state.name, service_name, message)
+        # shortcut: a line split across two chunks is buffered as two
+        # lines; carry the partial tail between chunks if that matters.
+        lines =
+          data
+          |> String.trim_trailing()
+          |> String.split("\n")
+          |> Enum.map(&String.trim/1)
+
+        Enum.each(lines, &log(state.name, service_name, &1))
         svc = Map.fetch!(state.services, service_name)
-        new_svc = buffer_log(svc, message)
+        new_svc = Enum.reduce(lines, svc, &buffer_log(&2, &1))
+
         new_state = put_in(state, [:services, service_name], new_svc)
         {:noreply, new_state}
     end
@@ -517,7 +536,9 @@ defmodule Bates.App do
           | pid: pid,
             ready: false,
             exit_status: nil,
-            exports: invocation.exports
+            exports: invocation.exports,
+            log_buffer: :queue.new(),
+            log_count: 0
         }
 
         new_pids = Map.put(state.pids, pid, service_name)
@@ -806,6 +827,18 @@ defmodule Bates.App do
       %{svc | log_buffer: :queue.in(message, buffer), log_count: count + 1}
     end
   end
+
+  defp select_services(state, nil), do: {:ok, Map.values(state.services)}
+
+  defp select_services(state, service_name) do
+    case Map.fetch(state.services, service_name) do
+      {:ok, svc} -> {:ok, [svc]}
+      :error -> {:error, :unknown_service}
+    end
+  end
+
+  defp tail(buffer, nil), do: :queue.to_list(buffer)
+  defp tail(buffer, lines), do: buffer |> :queue.to_list() |> Enum.take(-lines)
 
   defp drain_log_buffer(%{log_buffer: buffer}) do
     :queue.to_list(buffer) |> Enum.join("\n")
