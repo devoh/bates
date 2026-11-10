@@ -37,10 +37,7 @@ defmodule Bates.CLI.Restart do
         :ok
 
       {:ok, _status, body} ->
-        IO.write(
-          :stderr,
-          (body["error"] || body["reason"] || "request failed") <> "\n"
-        )
+        IO.write(:stderr, Client.error_message(body))
 
         1
 

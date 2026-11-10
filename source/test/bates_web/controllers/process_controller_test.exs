@@ -42,6 +42,72 @@ defmodule BatesWeb.ProcessControllerTest do
     assert %{"name" => "testapp", "status" => "up"} = json_response(conn, 200)
   end
 
+  test "restart returns the crash when the app fails to start",
+       %{conn: conn} do
+    config =
+      {"testapp", ".",
+       [
+         %Service{
+           name: "web",
+           command: "sh -c 'echo boom; exit 1'",
+           port: nil,
+           hostname: "testapp.test",
+           middleware: ["port"]
+         }
+       ]}
+
+    start_supervised!({App, config})
+
+    conn = post(conn, "/processes/testapp/restart")
+
+    assert %{
+             "status" => "crashed",
+             "reason" => "service web exited with status 1",
+             "logs" => %{"service" => "web", "lines" => ["boom"]}
+           } = json_response(conn, 422)
+  end
+
+  test "restart returns 404 for an unknown application", %{conn: conn} do
+    conn = post(conn, "/processes/ghost/restart")
+
+    assert %{"status" => "unknown", "reason" => "unknown application: ghost"} =
+             json_response(conn, 404)
+  end
+
+  test "start retries an app that crashed earlier", %{conn: conn} do
+    flag =
+      Path.join(
+        System.tmp_dir!(),
+        "bates_retry_#{System.unique_integer([:positive])}"
+      )
+
+    on_exit(fn -> File.rm(flag) end)
+
+    config =
+      {"testapp", ".",
+       [
+         %Service{
+           name: "web",
+           command:
+             "sh -c 'if [ -f #{flag} ]; then exec elixir test/support/test_server.ex; " <>
+               "else echo boom; exit 1; fi'",
+           port: nil,
+           hostname: "testapp.test",
+           middleware: ["port"]
+         }
+       ]}
+
+    start_supervised!({App, config})
+
+    assert %{"status" => "crashed"} =
+             conn |> post("/processes/testapp/start") |> json_response(422)
+
+    File.write!(flag, "")
+
+    assert %{"status" => "up"} =
+             conn |> post("/processes/testapp/start") |> json_response(200)
+  end
+
   test "logs returns per-service log lines", %{conn: conn} do
     config = single_service_config()
     start_app(config)

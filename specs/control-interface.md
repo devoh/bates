@@ -174,6 +174,9 @@ POST bates.test/processes/<name>/start
 → 404  {"name": "myapp", "status": "unknown", "reason": "..."}
 ```
 
+An application that has crashed is started again rather than
+reporting the earlier crash.
+
 Blocks until every service in the application is `up` (port-bearing
 services have bound their port) or one has crashed, up to a
 60-second readiness timeout. When the app is already `up`, returns
@@ -224,9 +227,16 @@ stop was purely transactional.
 ```
 POST bates.test/processes/<name>/restart
 
-→ 200  {"name": "myapp", "status": "up"}
+→ 200  {"name": "myapp", "status": "up", "exports": {...}}
+→ 422  {"name": "myapp", "status": "crashed", "reason": "...", "logs": {...}}
 → 422  {"name": "myapp", "error": "..."}
+→ 504  {"name": "myapp", "status": "timeout", "reason": "..."}
+→ 404  {"name": "myapp", "status": "unknown", "reason": "..."}
 ```
+
+Stops the application, then starts it exactly as the start endpoint
+does and returns the same responses, blocking until it is `up` or
+has crashed. The `error` form of 422 means the stop itself failed.
 
 Restart has no per-service form. Stale environment exports propagate
 through restarts, so per-service restart is structurally omitted in

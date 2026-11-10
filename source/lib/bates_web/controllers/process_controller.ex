@@ -157,10 +157,20 @@ defmodule BatesWeb.ProcessController do
   end
 
   def restart(conn, %{"name" => name}) do
-    with :ok <- App.down(name),
-         :ok <- App.up(name) do
-      json(conn, %{name: name, status: "up"})
+    with {:ok, _pid} <- fetch_app(name),
+         :ok <- App.down(name) do
+      Phoenix.PubSub.subscribe(Bates.PubSub, "app:#{name}")
+      await_start_response(conn, name)
     else
+      {:error, :unknown_app} ->
+        conn
+        |> put_status(404)
+        |> json(%{
+          name: name,
+          status: "unknown",
+          reason: "unknown application: #{name}"
+        })
+
       {:error, reason} ->
         conn
         |> put_status(422)
@@ -401,12 +411,11 @@ defmodule BatesWeb.ProcessController do
   end
 
   defp await_start_response(conn, name) do
+    # A crashed app is started again rather than reporting the old
+    # crash, so a fix followed by `bates up` takes effect.
     case App.snapshot(name) do
       %{status: "up", exports: exports} ->
         json(conn, %{name: name, status: "up", exports: exports})
-
-      %{status: "crashed"} = snapshot ->
-        crash_response(conn, %{name: name}, snapshot, "application crashed")
 
       _ ->
         case start_app(name) do

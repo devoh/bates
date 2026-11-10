@@ -45,6 +45,25 @@ defmodule Bates.CLI.RestartTest do
     assert stderr =~ "failed_to_restart"
   end
 
+  test "writes the crash reason and log tail on a crash", %{bypass: bypass} do
+    Bypass.expect_once(bypass, "POST", "/processes/myapp/restart", fn conn ->
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.resp(
+        422,
+        Jason.encode!(%{
+          name: "myapp",
+          status: "crashed",
+          reason: "service web exited with status 1",
+          logs: %{service: "web", lines: ["boom"]}
+        })
+      )
+    end)
+
+    stderr = capture_io(:stderr, fn -> assert Restart.run("myapp") == 1 end)
+    assert stderr == "service web exited with status 1\n  boom\n"
+  end
+
   test "writes the canonical not-running message on transport error",
        %{bypass: bypass} do
     Bypass.down(bypass)

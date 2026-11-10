@@ -119,6 +119,10 @@ Stops then starts an application. Requires the server to be running.
 With no name, the target application is resolved from the current
 working directory — see [Working Directory Resolution](#working-directory-resolution).
 
+Like `bates up`, it waits until the application is ready or has
+crashed, and on a crash exits 1 with the reason and log tail on
+stderr. `bates: restarted <name>` means the application came back up.
+
 There is no per-service form. `bates restart myapp:web` exits with
 code 2 and writes a usage error pointing at the explicit two-step
 workaround:
