@@ -233,14 +233,41 @@ stderr. Malformed arguments (an unknown option, a non-positive
 `--lines`, more than one name, or a name with more than one colon)
 exit 2.
 
+### `bates info [<name>]`
+
+Shows where one application lives and how to reach it. Requires the
+server to be running. With no name, the application is resolved from
+the current working directory — see
+[Working Directory Resolution](#working-directory-resolution).
+
+```
+$ bates info
+name:   myapp
+root:   /Users/me/Work/myapp
+status: up
+services:
+  web     https://myapp.test       up  52341
+  vite    https://vite.myapp.test  up  52342
+  worker                           up  —
+```
+
+`root` is the application's configured root, expanded. Each service
+row shows its URL (blank when the service has no hostname), status,
+and port (`—` when none is assigned). Every service is listed, even
+for single-service applications.
+
+`info` is deliberately narrow: exports belong to `bates env` and
+output to `bates logs`. A `<app>:<service>` name exits 2, and an
+unknown application exits 1.
+
 ### Working Directory Resolution
 
-When `up`, `down`, `restart`, `env`, or `logs` is invoked without a
-name, the CLI asks the daemon to look up the application whose
-configured `root` is the deepest ancestor of the current working
-directory. The lookup is exact: a path equal to `root` matches, as
-does a path nested under `root`; sibling directories with a shared
-prefix do not.
+When `up`, `down`, `restart`, `env`, `logs`, or `info` is invoked
+without a name, the CLI asks the daemon to look up the application
+whose configured `root` is the deepest ancestor of the current
+working directory. The lookup is exact: a path equal to `root`
+matches, as does a path nested under `root`; sibling directories
+with a shared prefix do not.
 
 When two applications' roots nest (e.g., a workspace root with an
 application nested inside it), the longest root wins. This lets a
@@ -282,9 +309,10 @@ A future proposal will install a launchd job via `bates setup` so
 
 ## Server Communication
 
-Control commands (`status`, `up`, `down`, `restart`, `env`, `logs`)
-communicate with the running server via the JSON API on `bates.test`.
-If the server is not running, they exit with a clear error message:
+Control commands (`status`, `up`, `down`, `restart`, `env`, `logs`,
+`info`) communicate with the running server via the JSON API on
+`bates.test`. If the server is not running, they exit with a clear
+error message:
 
 ```
 Bates is not running. Start it with: batesd

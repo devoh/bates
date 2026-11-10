@@ -138,6 +138,7 @@ GET bates.test/status
   "processes": [
     {
       "name": "myapp",
+      "root": "/Users/me/Work/myapp",
       "status": "up",
       "services": [
         {"name": "web", "hostname": "myapp.test", "status": "up", "port": 52341},
@@ -146,6 +147,7 @@ GET bates.test/status
     },
     {
       "name": "api",
+      "root": "/Users/me/Work/api",
       "status": "down",
       "services": [
         {"name": "api", "hostname": "api.test", "status": "down", "port": 52342}

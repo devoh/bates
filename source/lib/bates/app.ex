@@ -56,6 +56,11 @@ defmodule Bates.App do
     GenServer.call(via_tuple(name), :status)
   end
 
+  @doc "Returns the application's root directory, expanded."
+  def root(name) do
+    GenServer.call(via_tuple(name), :root)
+  end
+
   def snapshot(name) do
     GenServer.call(via_tuple(name), :snapshot)
   end
@@ -276,6 +281,11 @@ defmodule Bates.App do
       end)
 
     {:reply, service_list, state}
+  end
+
+  @impl GenServer
+  def handle_call(:root, _from, state) do
+    {:reply, Path.expand(state.root), state}
   end
 
   @impl GenServer

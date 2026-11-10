@@ -39,6 +39,7 @@ defmodule BatesWeb.ProcessController do
 
         %{
           name: name,
+          root: App.root(name),
           status: status,
           services:
             Enum.map(services, fn svc ->

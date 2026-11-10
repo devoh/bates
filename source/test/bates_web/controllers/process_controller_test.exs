@@ -22,6 +22,17 @@ defmodule BatesWeb.ProcessControllerTest do
     assert_eventually(fn -> App.status("testapp") != "starting" end)
   end
 
+  test "status includes each app's expanded root", %{conn: conn} do
+    start_app(single_service_config())
+
+    conn = get(conn, "/status")
+
+    assert %{"processes" => [%{"name" => "testapp", "root" => root}]} =
+             json_response(conn, 200)
+
+    assert root == File.cwd!()
+  end
+
   test "restart returns up after stopping and starting", %{conn: conn} do
     config = single_service_config()
     start_app(config)
