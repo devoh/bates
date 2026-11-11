@@ -2,7 +2,7 @@ defmodule Bates.App do
   use GenServer, restart: :transient
   require Logger
 
-  alias Bates.{Middleware, ProcessInvocation, Service}
+  alias Bates.{DependencyGraph, Middleware, ProcessInvocation, Service}
 
   @timeout 60_000
   @max_log_lines 1_000
@@ -117,6 +117,8 @@ defmodule Bates.App do
        name: name,
        root: root,
        services: service_states,
+       graph:
+         DependencyGraph.new(Map.new(services, &{&1.name, &1.depends_on})),
        pids: %{},
        exports_broadcast: false,
        addons_broadcast: false,
@@ -146,7 +148,7 @@ defmodule Bates.App do
 
       _service_state ->
         state = %{state | paused: false}
-        closure = forward_closure(state.services, service_name)
+        closure = DependencyGraph.requirements(state.graph, service_name)
 
         new_state =
           state
@@ -184,8 +186,8 @@ defmodule Bates.App do
   @impl GenServer
   def handle_call(:down, _from, state) do
     new_state =
-      state
-      |> reverse_topological_order()
+      state.graph
+      |> DependencyGraph.stop_order()
       |> Enum.reduce(state, fn service_name, acc ->
         service_state = Map.fetch!(acc.services, service_name)
 
@@ -213,11 +215,11 @@ defmodule Bates.App do
         {:reply, {:error, :unknown_service}, state}
 
       _service_state ->
-        closure = dependents_closure(state.services, service_name)
+        closure = DependencyGraph.dependents(state.graph, service_name)
 
         ordered =
-          state
-          |> reverse_topological_order()
+          state.graph
+          |> DependencyGraph.stop_order()
           |> Enum.filter(&MapSet.member?(closure, &1))
 
         {new_state, stopped} =
@@ -446,32 +448,6 @@ defmodule Bates.App do
 
   # Helpers
 
-  defp reverse_topological_order(state) do
-    graph = build_dependency_graph(state.services)
-
-    try do
-      :digraph_utils.topsort(graph)
-    after
-      :digraph.delete(graph)
-    end
-  end
-
-  defp build_dependency_graph(services) do
-    graph = :digraph.new()
-
-    Enum.each(services, fn {name, _service} ->
-      :digraph.add_vertex(graph, name)
-    end)
-
-    Enum.each(services, fn {name, %{config: %Service{depends_on: depends_on}}} ->
-      Enum.each(depends_on, fn dependency_name ->
-        :digraph.add_edge(graph, name, dependency_name)
-      end)
-    end)
-
-    graph
-  end
-
   defp start_eligible(state, closure) do
     state.services
     |> Enum.filter(fn {service_name, _} ->
@@ -489,26 +465,6 @@ defmodule Bates.App do
         acc
       end
     end)
-  end
-
-  defp forward_closure(services, service_name) do
-    graph = build_dependency_graph(services)
-
-    try do
-      MapSet.new(:digraph_utils.reachable([service_name], graph))
-    after
-      :digraph.delete(graph)
-    end
-  end
-
-  defp dependents_closure(services, service_name) do
-    graph = build_dependency_graph(services)
-
-    try do
-      MapSet.new(:digraph_utils.reaching([service_name], graph))
-    after
-      :digraph.delete(graph)
-    end
   end
 
   defp eligible_to_start?(%{pid: pid}, _services) when not is_nil(pid),
@@ -899,22 +855,16 @@ defmodule Bates.App do
   end
 
   defp seed_environment(%Service{name: name}, state) do
-    graph = build_dependency_graph(state.services)
+    requirements = DependencyGraph.requirements(state.graph, name)
 
-    try do
-      closure = MapSet.new(:digraph_utils.reachable([name], graph) -- [name])
-
-      graph
-      |> :digraph_utils.topsort()
-      |> Enum.filter(&MapSet.member?(closure, &1))
-      |> Enum.reverse()
-      |> Enum.reduce(%{}, fn dependency_name, acc ->
-        dependency_state = Map.fetch!(state.services, dependency_name)
-        Map.merge(acc, dependency_state.exports)
-      end)
-    after
-      :digraph.delete(graph)
-    end
+    # Merge the deepest dependencies first so nearer ones win on conflict.
+    state.graph
+    |> DependencyGraph.stop_order()
+    |> Enum.filter(&(&1 != name and MapSet.member?(requirements, &1)))
+    |> Enum.reverse()
+    |> Enum.reduce(%{}, fn dependency_name, acc ->
+      Map.merge(acc, Map.fetch!(state.services, dependency_name).exports)
+    end)
   end
 
   defp validate_routable_middleware!(%Service{hostname: nil}), do: :ok
