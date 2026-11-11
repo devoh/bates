@@ -137,6 +137,43 @@ defmodule BatesWeb.LoadingControllerTest do
       assert body =~ "resume=true"
     end
 
+    test "lists services in the same order as the loading page",
+         %{conn: conn} do
+      service = fn name, deps ->
+        %Service{
+          name: name,
+          command: "sleep 999",
+          port: nil,
+          hostname: "#{name}.budget.test",
+          middleware: ["port"],
+          depends_on: deps
+        }
+      end
+
+      config =
+        {"budget", ".",
+         [
+           service.("aaa_worker", []),
+           service.("postgresql", []),
+           service.("web", ["postgresql"])
+         ]}
+
+      start_supervised!({App, config})
+      :ok = App.down("budget")
+
+      conn =
+        conn
+        |> put_req_header("accept", "text/html")
+        |> get("/loading/budget/web")
+
+      names =
+        ~r{class="bates-loading__service">([^<]+)<}
+        |> Regex.scan(html_response(conn, 200), capture: :all_but_first)
+        |> List.flatten()
+
+      assert names == ["postgresql", "web", "aaa_worker"]
+    end
+
     test "non-browser hit on paused app returns 503 JSON", %{conn: conn} do
       config = service_config("myapp", "sleep 999")
       start_supervised!({App, config})

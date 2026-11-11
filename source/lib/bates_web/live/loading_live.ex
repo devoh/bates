@@ -169,9 +169,13 @@ defmodule BatesWeb.LoadingLive do
     )
   end
 
-  # The page waits for the whole app, so it lists every service: the
-  # requested service's chain first, then the rest in their usual order.
-  defp list_services(services, service_name) do
+  @doc """
+  Orders `services` for display: the requested service's dependency
+  chain first, then the rest in their usual order. The page waits for
+  the whole app, so it lists every service. `BatesWeb.PausedLive`
+  shares this order.
+  """
+  def list_services(services, service_name) do
     chain = dependency_chain(services, service_name)
     chain_names = MapSet.new(chain, & &1.name)
     chain ++ Enum.reject(services, &MapSet.member?(chain_names, &1.name))

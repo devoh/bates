@@ -11,6 +11,7 @@ defmodule BatesWeb.PausedLive do
   use BatesWeb, :live_view
 
   alias Bates.App
+  alias BatesWeb.LoadingLive
 
   @impl true
   def mount(
@@ -18,7 +19,10 @@ defmodule BatesWeb.PausedLive do
         %{"app_name" => app_name, "service_name" => service_name},
         socket
       ) do
-    services = safe_services(app_name)
+    services =
+      app_name
+      |> safe_services()
+      |> LoadingLive.list_services(service_name)
 
     socket =
       socket
