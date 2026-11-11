@@ -850,7 +850,16 @@ defmodule Bates.App do
          name: name,
          environment: user_env
        }) do
-    resolved = Bates.Environment.apply(invocation.environment, user_env, name)
+    inherited = Map.merge(System.get_env(), scrub_path())
+
+    resolved =
+      Bates.Environment.apply(
+        invocation.environment,
+        user_env,
+        name,
+        inherited
+      )
+
     %{invocation | environment: resolved}
   end
 
@@ -882,18 +891,14 @@ defmodule Bates.App do
   end
 
   defp build_env(environment, app_name) do
-    user_env =
-      Enum.map(environment, fn {key, value} ->
-        {to_charlist(key), to_charlist(value)}
-      end)
-
     # `BATES_APP` lets `bates env <name>` detect that it's being invoked from
     # inside a service that bates already started for the same app, and
     # short-circuit instead of recursing into the daemon (which would deadlock
     # against the in-flight start).
-    bates_env = [{~c"BATES_APP", to_charlist(app_name)}]
-
-    scrub_path() ++ bates_env ++ user_env
+    scrub_path()
+    |> Map.put("BATES_APP", app_name)
+    |> Map.merge(environment)
+    |> Enum.map(fn {key, value} -> {to_charlist(key), to_charlist(value)} end)
   end
 
   # When `batesd` runs as a Mix release, the launcher prepends
@@ -913,9 +918,9 @@ defmodule Bates.App do
         |> Enum.reject(&path_inside_release?(&1, release_root))
         |> Enum.join(":")
 
-      [{~c"PATH", to_charlist(scrubbed)}]
+      %{"PATH" => scrubbed}
     else
-      _ -> []
+      _ -> %{}
     end
   end
 

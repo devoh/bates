@@ -11,17 +11,24 @@ defmodule Bates.Environment do
   @type token :: {:literal, String.t()} | {:ref, String.t()}
 
   @doc """
-  Returns `env` with `user_env`'s values substituted against `env` and
-  merged in. Existing keys win on conflict.
+  Returns `env` with `user_env`'s values substituted and merged in.
+  Existing keys win on conflict.
+
+  References resolve against `env`, then against `inherited` (the
+  environment the process inherits from the daemon). `inherited` is only
+  read for substitution; none of its keys are added to the result.
 
   Raises `ArgumentError` if a value references an unknown variable.
   """
-  @spec apply(env, env, String.t()) :: env
-  def apply(env, user_env, service_name)
-      when is_map(env) and is_map(user_env) and is_binary(service_name) do
+  @spec apply(env, env, String.t(), env) :: env
+  def apply(env, user_env, service_name, inherited \\ %{})
+      when is_map(env) and is_map(user_env) and is_binary(service_name) and
+             is_map(inherited) do
+    lookup = Map.merge(inherited, env)
+
     Enum.reduce(user_env, env, fn {key, raw}, acc ->
       tokens = tokenize!(raw, service_name, key)
-      resolved = render(tokens, env, service_name, key)
+      resolved = render(tokens, lookup, service_name, key)
       Map.put_new(acc, key, resolved)
     end)
   end

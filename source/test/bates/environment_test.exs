@@ -28,6 +28,18 @@ defmodule Bates.EnvironmentTest do
       assert result["PORT"] == "4000"
     end
 
+    test "falls back to the inherited environment for references" do
+      env = %{"PORT" => "4000"}
+      user = %{"BIN" => "$HOME/bin", "URL" => "http://localhost:$PORT"}
+      inherited = %{"HOME" => "/Users/me", "PORT" => "1"}
+
+      result = Environment.apply(env, user, "web", inherited)
+
+      assert result["BIN"] == "/Users/me/bin"
+      assert result["URL"] == "http://localhost:4000"
+      refute Map.has_key?(result, "HOME")
+    end
+
     test "raises when a reference cannot be resolved" do
       message =
         ~s|service "web" environment variable "URL" references unknown variable "MISSING"|
