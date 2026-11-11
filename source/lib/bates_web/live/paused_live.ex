@@ -10,8 +10,7 @@ defmodule BatesWeb.PausedLive do
   """
   use BatesWeb, :live_view
 
-  alias Bates.App
-  alias BatesWeb.LoadingLive
+  alias BatesWeb.ServiceList
 
   @impl true
   def mount(
@@ -19,16 +18,11 @@ defmodule BatesWeb.PausedLive do
         %{"app_name" => app_name, "service_name" => service_name},
         socket
       ) do
-    services =
-      app_name
-      |> safe_services()
-      |> LoadingLive.list_services(service_name)
-
     socket =
       socket
       |> assign(:app_name, app_name)
       |> assign(:service_name, service_name)
-      |> assign(:services, services)
+      |> assign(:services, ServiceList.fetch(app_name, service_name))
 
     {:ok, socket}
   end
@@ -47,16 +41,7 @@ defmodule BatesWeb.PausedLive do
 
         <h1 class="bates-loading__title">{@app_name} is paused</h1>
 
-        <ul class="bates-loading__chain">
-          <li :for={svc <- @services} class="bates-loading__row">
-            <span
-              class={"bates-lamp bates-lamp--#{lamp_state(svc.status)}"}
-              aria-hidden="true"
-            >
-            </span>
-            <span class="bates-loading__service">{svc.name}</span>
-          </li>
-        </ul>
+        <ServiceList.list services={@services} />
 
         <p>
           <a href="?resume=true" class="bates-btn bates-btn--ghost">Resume</a>
@@ -66,17 +51,5 @@ defmodule BatesWeb.PausedLive do
       </div>
     </main>
     """
-  end
-
-  defp lamp_state("up"), do: "running"
-  defp lamp_state("down"), do: "stopped"
-  defp lamp_state("starting"), do: "starting"
-  defp lamp_state("crashed"), do: "error"
-  defp lamp_state(_), do: "stopped"
-
-  defp safe_services(app_name) do
-    App.services(app_name)
-  catch
-    :exit, _ -> []
   end
 end
