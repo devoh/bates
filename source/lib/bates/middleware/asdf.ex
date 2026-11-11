@@ -3,10 +3,10 @@ defmodule Bates.Middleware.Asdf do
 
   alias Bates.ProcessInvocation
 
-  @source_line "source $(brew --prefix)/opt/asdf/libexec/asdf.sh"
+  @shims_line ~S[export PATH="${ASDF_DATA_DIR:-$HOME/.asdf}/shims:$PATH"]
 
   @impl Bates.Middleware
   def apply(%ProcessInvocation{prologue: prologue} = invocation, _context) do
-    %{invocation | prologue: prologue ++ [@source_line]}
+    %{invocation | prologue: prologue ++ [@shims_line]}
   end
 end

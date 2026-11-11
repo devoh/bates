@@ -359,7 +359,7 @@ cascade) explicit at the call site.
 
 | Middleware | What it does |
 |------------|-------------|
-| `asdf` | Adds `source $(brew --prefix)/opt/asdf/libexec/asdf.sh` to the prologue, enabling asdf-managed runtimes. |
+| `asdf` | Adds `export PATH="${ASDF_DATA_DIR:-$HOME/.asdf}/shims:$PATH"` to the prologue, so asdf shims resolve runtimes from the project's `.tool-versions`. |
 | `direnv` | Adds `eval "$(direnv export bash)"` to the prologue, loading the working directory's `.envrc` into the environment. |
 | `port` | Sets the `PORT` environment variable to the service's assigned port. Applied automatically for services with a hostname; users do not need to list it. |
 | `hostname` | Sets `HOST=<app>.test` in the service's environment and publishes the same value as a static export. Applied automatically when the service's hostname matches the application's primary hostname. |
@@ -542,7 +542,7 @@ Conceptually, the execution is equivalent to:
 PORT=<assigned-port>
 
 # Prologue + exec'd command (single shell invocation)
-source /opt/homebrew/opt/asdf/libexec/asdf.sh; exec bin/rails server
+export PATH="$HOME/.asdf/shims:$PATH"; exec bin/rails server
 ```
 
 OS processes require:
