@@ -23,7 +23,10 @@ defmodule BatesWeb.ServiceList do
     :exit, _ -> []
   end
 
-  @doc "Renders services as rows with a status lamp."
+  @doc """
+  Renders services as rows with a status lamp. The lamp is decorative,
+  so each row also carries its status as hidden text for screen readers.
+  """
   attr(:services, :list, required: true)
 
   def list(assigns) do
@@ -32,6 +35,7 @@ defmodule BatesWeb.ServiceList do
       <li :for={svc <- @services} class="bates-loading__row">
         <Lamp.lamp state={Lamp.state(svc.status)} />
         <span class="bates-loading__service">{svc.name}</span>
+        <span class="bates-visually-hidden">: {svc.status}</span>
       </li>
     </ul>
     """
