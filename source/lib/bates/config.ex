@@ -371,14 +371,35 @@ defmodule Bates.Config do
   defp validate_service_environments(app_name, services) do
     Enum.reduce_while(services, :ok, fn %Service{
                                           name: service_name,
+                                          middleware: middleware,
                                           environment: environment
                                         },
                                         _acc ->
-      case validate_environment_entries(app_name, service_name, environment) do
-        :ok -> {:cont, :ok}
+      with :ok <-
+             validate_reserved_port(
+               app_name,
+               service_name,
+               middleware,
+               environment
+             ),
+           :ok <-
+             validate_environment_entries(app_name, service_name, environment) do
+        {:cont, :ok}
+      else
         {:error, _} = error -> {:halt, error}
       end
     end)
+  end
+
+  # The `port` middleware's `PORT` is what Bates routes and probes for
+  # readiness, so a configured value would silently break both.
+  defp validate_reserved_port(app_name, service_name, middleware, environment) do
+    if "port" in middleware and Map.has_key?(environment, "PORT") do
+      {:error,
+       {:reserved_environment_variable, app_name, service_name, "PORT"}}
+    else
+      :ok
+    end
   end
 
   defp validate_environment_entries(app_name, service_name, environment) do

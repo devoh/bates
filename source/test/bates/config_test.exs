@@ -611,5 +611,13 @@ defmodule Bates.ConfigTest do
                {:error,
                 {:invalid_environment_value, "myapp", "myapp", "PORT_COUNT", 5}}
     end
+
+    test "returns {:error, {:reserved_environment_variable, ...}} for PORT on a routed service" do
+      assert Config.applications(
+               "test/fixtures/reserved_port_environment_config.toml"
+             ) ==
+               {:error,
+                {:reserved_environment_variable, "myapp", "web", "PORT"}}
+    end
   end
 end

@@ -19,13 +19,13 @@ defmodule Bates.EnvironmentTest do
       assert result["PRICE"] == "$5.00"
     end
 
-    test "does not override keys already present in env" do
-      env = %{"PORT" => "4000"}
-      user = %{"PORT" => "9999"}
+    test "overrides keys already present in env" do
+      env = %{"PGHOST" => "127.0.0.1"}
+      user = %{"PGHOST" => "db.internal"}
 
       result = Environment.apply(env, user, "web")
 
-      assert result["PORT"] == "4000"
+      assert result["PGHOST"] == "db.internal"
     end
 
     test "falls back to the inherited environment for references" do

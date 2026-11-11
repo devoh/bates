@@ -1,0 +1,12 @@
+[myapp]
+root = "/tmp/myapp"
+
+[myapp.environment]
+PORT = "3000"
+
+[myapp.services.worker]
+command = "bin/worker"
+
+[myapp.services.web]
+command = "bin/server"
+hostname = true

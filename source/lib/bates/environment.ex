@@ -1,7 +1,7 @@
 defmodule Bates.Environment do
   @moduledoc """
   User-supplied environment variables: substitution against an existing
-  env map and a final merge that does not override existing keys.
+  env map and a final merge in which the user's values win.
 
   Substitution recognises `$NAME` and `${NAME}`. The escape `$$` becomes a
   literal `$`. Unknown references raise.
@@ -12,7 +12,7 @@ defmodule Bates.Environment do
 
   @doc """
   Returns `env` with `user_env`'s values substituted and merged in.
-  Existing keys win on conflict.
+  `user_env` wins on conflict.
 
   References resolve against `env`, then against `inherited` (the
   environment the process inherits from the daemon). `inherited` is only
@@ -29,7 +29,7 @@ defmodule Bates.Environment do
     Enum.reduce(user_env, env, fn {key, raw}, acc ->
       tokens = tokenize!(raw, service_name, key)
       resolved = render(tokens, lookup, service_name, key)
-      Map.put_new(acc, key, resolved)
+      Map.put(acc, key, resolved)
     end)
   end
 
