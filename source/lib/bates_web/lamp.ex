@@ -20,7 +20,7 @@ defmodule BatesWeb.Lamp do
 
   def lamp(assigns) do
     ~H"""
-    <span class={"bates-lamp bates-lamp--#{@state}"} aria-hidden="true"></span>
+    <span class={"bates-lamp bates-state--#{@state}"} aria-hidden="true"></span>
     """
   end
 end

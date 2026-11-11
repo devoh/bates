@@ -110,14 +110,13 @@ defmodule BatesWeb.DashboardLive do
     failed = Enum.count(apps, &(&1.status == "crashed"))
 
     [
-      %{label: "Apps", value: total, lamp: "neutral", tone: "neutral"},
-      %{label: "Running", value: running, lamp: "running", tone: "running"},
-      %{label: "Stopped", value: stopped, lamp: "stopped", tone: "stopped"},
+      %{label: "Apps", value: total, state: "neutral"},
+      %{label: "Running", value: running, state: "running"},
+      %{label: "Stopped", value: stopped, state: "stopped"},
       %{
         label: "Failed",
         value: failed,
-        lamp: if(failed > 0, do: "error", else: "stopped"),
-        tone: if(failed > 0, do: "error", else: "stopped")
+        state: if(failed > 0, do: "error", else: "stopped")
       }
     ]
   end
@@ -179,10 +178,10 @@ defmodule BatesWeb.DashboardLive do
 
   defp stat(assigns) do
     ~H"""
-    <div class={"bates-stat bates-stat--#{@stat.tone}"}>
+    <div class={"bates-stat bates-state--#{@stat.state}"}>
       <div class="bates-stat__row">
         <span class="bates-stat__lamp-slot">
-          <Lamp.lamp state={@stat.lamp} />
+          <Lamp.lamp state={@stat.state} />
         </span>
         <span class="bates-stat__value">{@stat.value}</span>
         <span class="bates-stat__label">{@stat.label}</span>
@@ -282,7 +281,7 @@ defmodule BatesWeb.DashboardLive do
         <% end %>
       </div>
       <div class="bates-services__cell">
-        <span class={"bates-services__status bates-services__status--#{@lamp}"}>
+        <span class={"bates-services__status bates-state--#{@lamp}"}>
           <Lamp.lamp state={@lamp} />
           {@svc.status}{if @svc.status == "starting", do: "…", else: ""}
         </span>
