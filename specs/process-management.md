@@ -58,6 +58,7 @@ This is equivalent to defining a single service with `port = "auto"` and
 | `command` | Yes (if no `services`) | Shorthand for a single routable service. |
 | `middleware` | No | Ordered list of middleware names. Applied to all services in this application at init time. |
 | `addons` | No | List of built-in addon names to attach to the application. Each addon expands into a service that all other services in the application implicitly depend on. See Addons. |
+| `environment` | No | Table of environment variables set on every service in this application. See Environment. |
 
 #### Service fields
 
@@ -68,6 +69,45 @@ This is equivalent to defining a single service with `port = "auto"` and
 | `hostname` | No | `true` to use the application name as the hostname (e.g., `myapp` → `myapp.test`), or a string for a custom hostname (e.g., `"vite.myapp"` → `vite.myapp.test`). Creates a Caddy route. Implies `port = "auto"` unless overridden. |
 | `middleware` | No | Ordered list of middleware names. Applied after the application-level middleware. |
 | `depends_on` | No | List of sibling service names in the same application that must be `up` before this service starts. |
+| `environment` | No | Table of environment variables set on this service. Merged over the application's `environment`. See Environment. |
+
+### Environment
+
+Applications and services can set environment variables with an
+`environment` table:
+
+```toml
+[myapp]
+root = "~/Code/myapp"
+
+[myapp.environment]
+RAILS_ENV = "development"
+
+[myapp.services.web]
+command = "bin/rails server"
+hostname = true
+
+[myapp.services.web.environment]
+VITE_RUBY_PORT = "$PORT"
+BIN_PATH = "$HOME/bin"
+```
+
+- Values must be strings. A non-string value or a malformed reference
+  rejects the config at load time.
+- A service's table is merged over its application's, so the service's
+  value wins for the same key.
+- `$NAME` and `${NAME}` are substituted when the service starts, and
+  `$$` is a literal `$`. References resolve against the variables Bates
+  provides (dependency exports and middleware, such as `PORT`), then
+  against the environment the daemon passes to the process (`HOME`,
+  `PATH`, …). An unknown reference fails the start.
+- Configured values are applied last and win over dependency exports and
+  middleware variables, so `PGHOST = "db.internal"` overrides the
+  `postgresql` addon's export.
+- `PORT` is reserved on services using the `port` middleware (which
+  includes every service with a hostname), because Bates routes to and
+  probes the port it assigned. Setting it rejects the config; use the
+  `port` field to pin a fixed port instead.
 
 ### Hostname and Port Rules
 
@@ -295,7 +335,7 @@ assembled at init time.
 | Field | Source | Description |
 |-------|--------|-------------|
 | `prologue` | Middleware | Ordered list of shell commands that run before `command` to set up the environment. |
-| `environment` | Config + middleware + dependency exports | Map of environment variables set on the OS process by the spawner (not via shell `export`). Seeded from dependency `exports` before middleware runs. |
+| `environment` | Config + middleware + dependency exports | Map of environment variables set on the OS process by the spawner (not via shell `export`). Seeded from dependency `exports` before middleware runs; configured `environment` is applied last and wins. |
 | `exports` | Middleware | Map of environment variables this service publishes to its dependents. Not set on the service's own OS process unless the same middleware also writes `environment`. |
 | `command` | Config | The supervised process. Copied from the service's `command` field. |
 
@@ -326,7 +366,8 @@ closure. The service's own middleware pipeline runs on top of that
 seed, so middleware can reference inherited exports, override them, or
 extend them. If two dependencies export the same key, last-writer-wins
 by traversal order; the consumer's own middleware always wins because
-it runs after the seed.
+it runs after the seed. The consumer's configured `environment` is
+applied after middleware and wins over both (see Environment).
 
 A producer's exports are computed during its own invocation build and
 stored on the application's per-service runtime state alongside
