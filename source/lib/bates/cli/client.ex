@@ -71,8 +71,11 @@ defmodule Bates.CLI.Client do
   """
   def resolve_app_by_cwd do
     case File.cwd() do
-      {:ok, cwd} -> resolve_app(cwd)
-      {:error, reason} -> {:error, "bates: unable to read cwd: #{inspect(reason)}"}
+      {:ok, cwd} ->
+        resolve_app(cwd)
+
+      {:error, reason} ->
+        {:error, "bates: unable to read cwd: #{inspect(reason)}"}
     end
   end
 

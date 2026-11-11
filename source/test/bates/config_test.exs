@@ -470,7 +470,13 @@ defmodule Bates.ConfigTest do
   describe "find_by_path/2" do
     setup do
       tmp = System.tmp_dir!()
-      path = Path.join(tmp, "find_by_path_#{System.unique_integer([:positive])}.toml")
+
+      path =
+        Path.join(
+          tmp,
+          "find_by_path_#{System.unique_integer([:positive])}.toml"
+        )
+
       on_exit(fn -> File.rm(path) end)
       {:ok, fixture_path: path}
     end

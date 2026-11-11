@@ -192,7 +192,9 @@ defmodule Bates.CLITest do
       )
 
       output =
-        capture_io(fn -> assert Bates.CLI.dispatch(["down", ":web"]) == :ok end)
+        capture_io(fn ->
+          assert Bates.CLI.dispatch(["down", ":web"]) == :ok
+        end)
 
       assert output =~ "stopped myapp:web"
     end

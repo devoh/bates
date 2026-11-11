@@ -10,7 +10,10 @@ defmodule Bates.Middleware.Hostname do
       })
       when is_binary(hostname) and is_binary(app_name) do
     if hostname == "#{app_name}.test" do
-      %{invocation | environment: Map.put(invocation.environment, "HOST", hostname)}
+      %{
+        invocation
+        | environment: Map.put(invocation.environment, "HOST", hostname)
+      }
     else
       invocation
     end
