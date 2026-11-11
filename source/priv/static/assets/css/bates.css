@@ -521,12 +521,14 @@ body.bates-page {
 /* ============================================================
    Loading page
    ============================================================ */
+/* Anchored to a fixed offset rather than centered, so the content
+   doesn't shift as its height changes between the paused and loading
+   pages. */
 .bates-loading {
-  min-height: 100vh;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
-  padding: 48px 24px;
+  padding: 20vh 24px 48px;
 }
 
 .bates-loading__inner {
