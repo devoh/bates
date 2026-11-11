@@ -8,6 +8,7 @@ defmodule BatesWeb.ServiceList do
   use Phoenix.Component
 
   alias Bates.App
+  alias BatesWeb.Lamp
 
   @doc """
   Returns the services of `app_name` in display order for a request to
@@ -29,11 +30,7 @@ defmodule BatesWeb.ServiceList do
     ~H"""
     <ul class="bates-loading__chain">
       <li :for={svc <- @services} class="bates-loading__row">
-        <span
-          class={"bates-lamp bates-lamp--#{lamp_state(svc.status)}"}
-          aria-hidden="true"
-        >
-        </span>
+        <Lamp.lamp state={Lamp.state(svc.status)} />
         <span class="bates-loading__service">{svc.name}</span>
       </li>
     </ul>
@@ -70,10 +67,4 @@ defmodule BatesWeb.ServiceList do
         {acc, visited}
     end
   end
-
-  defp lamp_state("up"), do: "running"
-  defp lamp_state("down"), do: "stopped"
-  defp lamp_state("starting"), do: "starting"
-  defp lamp_state("crashed"), do: "error"
-  defp lamp_state(_), do: "stopped"
 end

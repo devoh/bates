@@ -3,6 +3,7 @@ defmodule BatesWeb.DashboardLive do
 
   alias Bates.App
   alias Bates.ProcessSupervisor
+  alias BatesWeb.Lamp
 
   @impl true
   def mount(_params, _session, socket) do
@@ -98,15 +99,8 @@ defmodule BatesWeb.DashboardLive do
     end
   end
 
-  defp lamp_state("up"), do: "running"
-  defp lamp_state("down"), do: "stopped"
-  defp lamp_state("starting"), do: "starting"
-  defp lamp_state("partial"), do: "partial"
-  defp lamp_state("crashed"), do: "error"
-  defp lamp_state(_), do: "stopped"
-
   defp service_error_count(services) do
-    Enum.count(services, fn s -> lamp_state(s.status) == "error" end)
+    Enum.count(services, fn s -> Lamp.state(s.status) == "error" end)
   end
 
   defp summary_stats(apps) do
@@ -188,7 +182,7 @@ defmodule BatesWeb.DashboardLive do
     <div class={"bates-stat bates-stat--#{@stat.tone}"}>
       <div class="bates-stat__row">
         <span class="bates-stat__lamp-slot">
-          <.status_lamp state={@stat.lamp} />
+          <Lamp.lamp state={@stat.lamp} />
         </span>
         <span class="bates-stat__value">{@stat.value}</span>
         <span class="bates-stat__label">{@stat.label}</span>
@@ -197,20 +191,12 @@ defmodule BatesWeb.DashboardLive do
     """
   end
 
-  attr(:state, :string, required: true)
-
-  defp status_lamp(assigns) do
-    ~H"""
-    <span class={"bates-lamp bates-lamp--#{@state}"} aria-hidden="true"></span>
-    """
-  end
-
   attr(:app, :map, required: true)
 
   defp app_card(assigns) do
     assigns =
       assigns
-      |> assign(:lamp, lamp_state(assigns.app.status))
+      |> assign(:lamp, Lamp.state(assigns.app.status))
       |> assign(:error_count, service_error_count(assigns.app.services))
       |> assign(:all_up, assigns.app.status == "up")
       |> assign(:all_down, assigns.app.status == "down")
@@ -219,7 +205,7 @@ defmodule BatesWeb.DashboardLive do
     <article class="bates-app">
       <header class="bates-app__header">
         <div class="bates-app__title-group">
-          <.status_lamp state={@lamp} />
+          <Lamp.lamp state={@lamp} />
           <h2 class="bates-app__title">{@app.name}</h2>
           <a class="bates-app__domain" href={"https://#{@app.hostname}"}>{@app.hostname}</a>
           <%= if @error_count > 0 do %>
@@ -277,7 +263,7 @@ defmodule BatesWeb.DashboardLive do
   attr(:multi_service, :boolean, default: false)
 
   defp service_row(assigns) do
-    lamp = lamp_state(assigns.svc.status)
+    lamp = Lamp.state(assigns.svc.status)
 
     assigns =
       assigns
@@ -297,7 +283,7 @@ defmodule BatesWeb.DashboardLive do
       </div>
       <div class="bates-services__cell">
         <span class={"bates-services__status bates-services__status--#{@lamp}"}>
-          <.status_lamp state={@lamp} />
+          <Lamp.lamp state={@lamp} />
           {@svc.status}{if @svc.status == "starting", do: "…", else: ""}
         </span>
       </div>
