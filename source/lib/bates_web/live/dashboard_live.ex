@@ -100,7 +100,7 @@ defmodule BatesWeb.DashboardLive do
   end
 
   defp service_error_count(services) do
-    Enum.count(services, fn s -> Lamp.state(s.status) == "error" end)
+    Enum.count(services, &(&1.status == "crashed"))
   end
 
   defp summary_stats(apps) do
