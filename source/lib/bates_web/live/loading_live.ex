@@ -26,13 +26,13 @@ defmodule BatesWeb.LoadingLive do
     end
 
     services = safe_services(app_name)
-    chain = dependency_chain(services, service_name)
+    listed = list_services(services, service_name)
 
     if connected?(socket) do
       # Per-service broadcasts don't include the service name in the
-      # payload, so we subscribe to each topic in the chain and just
+      # payload, so we subscribe to every service topic and just
       # re-fetch services on every event below.
-      for svc <- chain do
+      for svc <- listed do
         Phoenix.PubSub.subscribe(
           Bates.PubSub,
           "service:#{app_name}:#{svc.name}"
@@ -51,7 +51,7 @@ defmodule BatesWeb.LoadingLive do
       |> assign(:service_name, service_name)
       |> assign(:hostname, hostname)
       |> assign(:status, status)
-      |> assign(:chain, chain)
+      |> assign(:services, listed)
       |> assign(:error_details, nil)
 
     if status == "up" do
@@ -69,7 +69,7 @@ defmodule BatesWeb.LoadingLive do
          replace_navigate(socket, "https://#{socket.assigns.hostname}")}
 
       _ ->
-        {:noreply, refresh_chain(socket)}
+        {:noreply, refresh_services(socket)}
     end
   end
 
@@ -78,7 +78,7 @@ defmodule BatesWeb.LoadingLive do
     {:noreply,
      socket
      |> assign(status: "crashed", error_details: details)
-     |> refresh_chain()}
+     |> refresh_services()}
   end
 
   @impl true
@@ -86,7 +86,7 @@ defmodule BatesWeb.LoadingLive do
     {:noreply,
      socket
      |> assign(:status, "crashed")
-     |> refresh_chain()}
+     |> refresh_services()}
   end
 
   @impl true
@@ -94,7 +94,7 @@ defmodule BatesWeb.LoadingLive do
     {:noreply,
      socket
      |> assign(:status, status)
-     |> refresh_chain()}
+     |> refresh_services()}
   end
 
   @impl true
@@ -129,7 +129,7 @@ defmodule BatesWeb.LoadingLive do
             <h1 class="bates-loading__title">Starting {@app_name}…</h1>
 
             <ul class="bates-loading__chain">
-              <li :for={svc <- @chain} class="bates-loading__row">
+              <li :for={svc <- @services} class="bates-loading__row">
                 <span class={"bates-lamp bates-lamp--#{lamp_state(svc.status)}"} aria-hidden="true"></span>
                 <span class="bates-loading__service">{svc.name}</span>
               </li>
@@ -159,10 +159,22 @@ defmodule BatesWeb.LoadingLive do
     end
   end
 
-  defp refresh_chain(socket) do
+  defp refresh_services(socket) do
     services = safe_services(socket.assigns.app_name)
-    chain = dependency_chain(services, socket.assigns.service_name)
-    assign(socket, :chain, chain)
+
+    assign(
+      socket,
+      :services,
+      list_services(services, socket.assigns.service_name)
+    )
+  end
+
+  # The page waits for the whole app, so it lists every service: the
+  # requested service's chain first, then the rest in their usual order.
+  defp list_services(services, service_name) do
+    chain = dependency_chain(services, service_name)
+    chain_names = MapSet.new(chain, & &1.name)
+    chain ++ Enum.reject(services, &MapSet.member?(chain_names, &1.name))
   end
 
   # Build the ordered list of services leading up to `service_name`:

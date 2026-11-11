@@ -93,6 +93,15 @@ The flow:
 6. On crash: returns 502 with the application name and error details.
 7. On readiness timeout: returns 504.
 
+Browsers (requests whose `Accept` includes `text/html`) get a LiveView
+instead of the blocking response. It starts the application the same
+way, but redirects only once the whole application is `up`, not just
+the requested service. Because it waits on every service, it lists
+every service with a status lamp: the requested service's dependency
+chain first (dependencies before the service itself), then the rest
+of the application's services. A crash shows the crashed service's
+output in place of the list.
+
 Because the loading page is served from `bates.test` (the control host),
 its connection is not disrupted when Caddy updates the app's route
 upstream on startup.

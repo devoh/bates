@@ -82,6 +82,42 @@ defmodule BatesWeb.LoadingControllerTest do
     assert body =~ "myapp"
   end
 
+  test "lists every service with the requested chain first",
+       %{conn: conn} do
+    service = fn name, deps ->
+      %Service{
+        name: name,
+        command: "sleep 999",
+        port: nil,
+        hostname: "#{name}.budget.test",
+        middleware: ["port"],
+        depends_on: deps
+      }
+    end
+
+    config =
+      {"budget", ".",
+       [
+         service.("aaa_worker", []),
+         service.("postgresql", []),
+         service.("web", ["postgresql"])
+       ]}
+
+    start_supervised!({App, config})
+
+    conn =
+      conn
+      |> put_req_header("accept", "text/html")
+      |> get("/loading/budget/web")
+
+    names =
+      ~r{class="bates-loading__service">([^<]+)<}
+      |> Regex.scan(html_response(conn, 200), capture: :all_but_first)
+      |> List.flatten()
+
+    assert names == ["postgresql", "web", "aaa_worker"]
+  end
+
   describe "paused" do
     test "browser hit on paused app renders the paused LiveView",
          %{conn: conn} do
