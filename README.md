@@ -99,3 +99,7 @@ middleware = ["direnv"]
   [multi_service_app.services.css]
   command = "bin/rails tailwindcss:watch[always]"
 ```
+
+## License
+
+Bates is released under the [MIT License](LICENSE).
