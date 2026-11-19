@@ -1,0 +1,4 @@
+[myapp]
+root = "/tmp/myapp"
+command = "bin/rails server"
+hostnme = "myhost"

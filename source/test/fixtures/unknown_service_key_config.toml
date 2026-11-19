@@ -1,0 +1,9 @@
+[myapp]
+root = "/tmp/myapp"
+
+[myapp.services.web]
+command = "bin/rails server"
+dependson = ["worker"]
+
+[myapp.services.worker]
+command = "bin/sidekiq"

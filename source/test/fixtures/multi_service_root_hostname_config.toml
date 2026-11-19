@@ -1,0 +1,7 @@
+[myapp]
+root = "/tmp/myapp"
+hostname = "myhost"
+
+[myapp.services.web]
+command = "bin/rails server"
+hostname = true

@@ -1,6 +1,10 @@
 defmodule Bates.Config do
   alias Bates.{Addons, Middleware, Service}
 
+  @application_keys ~w(root middleware environment addons)
+  @single_service_keys ~w(command port hostname)
+  @service_keys ~w(command port hostname middleware depends_on environment)
+
   def applications do
     applications(path())
   end
@@ -78,6 +82,12 @@ defmodule Bates.Config do
   end
 
   defp build_application({name, options}) do
+    with :ok <- validate_keys(name, options) do
+      build_application(name, options)
+    end
+  end
+
+  defp build_application(name, options) do
     root = Map.fetch!(options, "root")
     app_middleware = Map.get(options, "middleware", [])
     app_environment = Map.get(options, "environment", %{})
@@ -89,6 +99,33 @@ defmodule Bates.Config do
            expand_addons(name, services, addon_names, app_middleware) do
       {:ok, {name, root, expanded}}
     end
+  end
+
+  defp validate_keys(app_name, %{"services" => services} = options) do
+    service_tables =
+      for {service_name, service_options} <- services do
+        {[app_name, service_name], service_options, @service_keys}
+      end
+
+    find_unknown_key([
+      {[app_name], options, ["services" | @application_keys]}
+      | service_tables
+    ])
+  end
+
+  defp validate_keys(app_name, options) do
+    find_unknown_key([
+      {[app_name], options, @application_keys ++ @single_service_keys}
+    ])
+  end
+
+  defp find_unknown_key(tables) do
+    Enum.find_value(tables, :ok, fn {path, options, allowed} ->
+      case Enum.sort(Map.keys(options) -- allowed) do
+        [] -> nil
+        [key | _] -> {:error, List.to_tuple([:unknown_key | path] ++ [key])}
+      end
+    end)
   end
 
   defp build_services(name, options, app_middleware, app_environment) do

@@ -198,6 +198,26 @@ defmodule Bates.ConfigTest do
     end
   end
 
+  describe "unknown keys" do
+    test "returns {:error, {:unknown_key, app, key}} for an application" do
+      assert Config.applications(
+               "test/fixtures/unknown_application_key_config.toml"
+             ) == {:error, {:unknown_key, "myapp", "hostnme"}}
+    end
+
+    test "rejects service keys at the root of a multi-service application" do
+      assert Config.applications(
+               "test/fixtures/multi_service_root_hostname_config.toml"
+             ) == {:error, {:unknown_key, "myapp", "hostname"}}
+    end
+
+    test "returns {:error, {:unknown_key, app, service, key}} for a service" do
+      assert Config.applications(
+               "test/fixtures/unknown_service_key_config.toml"
+             ) == {:error, {:unknown_key, "myapp", "web", "dependson"}}
+    end
+  end
+
   describe "depends_on" do
     test "parses depends_on as a list of sibling service names" do
       [{_name, _root, services}] =
