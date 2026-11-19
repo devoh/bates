@@ -75,7 +75,7 @@ defmodule Bates.CLI.Logs do
   end
 
   defp usage_error do
-    IO.write(:stderr, "Usage: bates logs [<name>] [--lines <count>]\n")
+    IO.write(:stderr, "Usage: bates logs [<target>] [--lines <count>]\n")
     2
   end
 end
