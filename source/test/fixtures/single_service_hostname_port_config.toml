@@ -1,0 +1,5 @@
+[myapp]
+root = "/tmp/myapp"
+command = "bin/rails server"
+hostname = "myhost"
+port = 4000

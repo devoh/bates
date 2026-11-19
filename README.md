@@ -83,7 +83,8 @@ middleware = ["direnv"]
 
 The command will have the `$PORT` placeholder replaced with a dynamically
 assigned port at startup. A port may be manually specified via the `port` key,
-instead.
+instead. The application is served at `test_server.test`; set `hostname =
+"other"` to serve it at `other.test`.
 
 Multiple services are supported, as well.
 

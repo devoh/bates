@@ -43,6 +43,16 @@ defmodule Bates.ConfigTest do
     assert worker.port == nil
   end
 
+  test "single-service shorthand honors hostname and port" do
+    [{_name, _root, [service]}] =
+      Config.applications(
+        "test/fixtures/single_service_hostname_port_config.toml"
+      )
+
+    assert service.hostname == "myhost.test"
+    assert service.port == 4000
+  end
+
   test "hostname true resolves to app name" do
     [{_name, _root, services}] =
       Config.applications("test/fixtures/multi_service_config.toml")
@@ -100,6 +110,13 @@ defmodule Bates.ConfigTest do
 
       assert queue.port == :auto
       assert queue.hostname == nil
+    end
+
+    test "returns {:error, {:invalid_port, ...}} for single-service shorthand" do
+      assert Config.applications(
+               "test/fixtures/single_service_invalid_port_config.toml"
+             ) ==
+               {:error, {:invalid_port, "myapp", "myapp", "garbage"}}
     end
 
     test "returns {:error, {:invalid_port, app, service, value}} for a non-integer string" do

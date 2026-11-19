@@ -100,10 +100,15 @@ defmodule Bates.Config do
         app_environment
       )
     else
-      {:ok,
-       [
-         build_single_service(name, options, app_middleware, app_environment)
-       ]}
+      with {:ok, service} <-
+             build_single_service(
+               name,
+               options,
+               app_middleware,
+               app_environment
+             ) do
+        {:ok, [service]}
+      end
     end
   end
 
@@ -115,16 +120,23 @@ defmodule Bates.Config do
   end
 
   defp build_single_service(name, options, app_middleware, app_environment) do
-    middleware = merge_middleware(app_middleware, [], "#{name}.test")
+    case resolve_port(options["port"]) do
+      {:ok, port} ->
+        hostname = resolve_hostname(name, Map.get(options, "hostname", true))
 
-    %Service{
-      name: name,
-      command: Map.fetch!(options, "command"),
-      port: nil,
-      hostname: "#{name}.test",
-      middleware: middleware,
-      environment: app_environment
-    }
+        {:ok,
+         %Service{
+           name: name,
+           command: Map.fetch!(options, "command"),
+           port: port,
+           hostname: hostname,
+           middleware: merge_middleware(app_middleware, [], hostname),
+           environment: app_environment
+         }}
+
+      {:error, value} ->
+        {:error, {:invalid_port, name, name, value}}
+    end
   end
 
   defp build_multi_services(
