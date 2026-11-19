@@ -45,7 +45,7 @@ Single-service apps (like `api` above) show one row with no nesting.
 Multi-service apps show the application row with derived status,
 followed by indented service rows.
 
-### `bates up [<name>]`
+### `bates up [<target>]`
 
 Starts an application or a single service within one. Requires the
 server to be running.
@@ -53,7 +53,7 @@ server to be running.
 - `bates up <app>` boots every service in the application.
 - `bates up <app>:<service>` boots the named service plus every
   service it transitively `depends_on`.
-- `bates up` (no name) resolves the application from the current
+- `bates up` (no target) resolves the application from the current
   working directory — see [Working Directory Resolution](#working-directory-resolution).
 - `bates up :<service>` resolves the application from the current
   working directory and boots the named service within it.
@@ -77,11 +77,11 @@ service web exited with status 1
   ** (Mix) Could not start application myapp: ...
 ```
 
-A name with no colon hits the application-level endpoint; a name of
-the form `<app>:<service>` hits the per-service endpoint. Names with
+A target with no colon hits the application-level endpoint; a target of
+the form `<app>:<service>` hits the per-service endpoint. Targets with
 more than one colon are rejected with a usage error and exit code 2.
 
-### `bates down [<name>]`
+### `bates down [<target>]`
 
 Stops an application or a single service within one, and marks the
 application as paused so the loading page intercepts further
@@ -91,7 +91,7 @@ on-demand startup. Requires the server to be running.
 - `bates down <app>:<service>` stops the named service and every
   service that transitively `depends_on` it (reverse-topological
   cascade).
-- `bates down` (no name) resolves the application from the current
+- `bates down` (no target) resolves the application from the current
   working directory — see [Working Directory Resolution](#working-directory-resolution).
 - `bates down :<service>` resolves the application from the current
   working directory and stops the named service within it (with the
@@ -111,7 +111,7 @@ application's paused flag. The flag is cleared by a user-initiated
 application on demand; while paused, browsers see a paused page
 with a Resume button and non-HTML clients get a 503 JSON response.
 
-Same parsing rules as `bates up`: multi-colon names exit with code 2.
+Same parsing rules as `bates up`: multi-colon targets exit with code 2.
 
 ### `bates restart [<name>]`
 
@@ -197,7 +197,7 @@ eval "$(bates env myapp 2>/dev/null || true)"
 exports that changed since the shell loaded the file (for example,
 after a stop/start cycle assigned a fresh `PGPORT`).
 
-### `bates logs [<name>] [--lines <count>]`
+### `bates logs [<target>] [--lines <count>]`
 
 Prints recent output from an application's services, read from each
 service's in-memory ring buffer (see
@@ -206,7 +206,7 @@ server to be running.
 
 - `bates logs <app>` prints every service in the application.
 - `bates logs <app>:<service>` prints one service.
-- `bates logs` (no name) and `bates logs :<service>` resolve the
+- `bates logs` (no target) and `bates logs :<service>` resolve the
   application from the current working directory — see
   [Working Directory Resolution](#working-directory-resolution).
 

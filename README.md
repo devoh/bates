@@ -65,6 +65,7 @@ With `bates` and `batesd` both on `$PATH`:
 ```bash
 bates status
 bates env myapp
+bates up myapp:web              # one service and its dependencies
 ```
 
 ## Configuration
