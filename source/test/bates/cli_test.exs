@@ -11,10 +11,11 @@ defmodule Bates.CLITest do
       assert output =~ "Usage:"
       assert output =~ "bates setup"
       assert output =~ "bates status"
-      assert output =~ "bates up [<name>]"
-      assert output =~ "bates down [<name>]"
+      assert output =~ "bates up [<target>]"
+      assert output =~ "bates down [<target>]"
       assert output =~ "bates restart [<name>]"
       assert output =~ "bates env [<name>]"
+      assert output =~ "<app>:<service>"
     end
 
     test "unknown subcommand writes usage and returns exit code 2" do

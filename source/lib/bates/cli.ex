@@ -40,15 +40,20 @@ defmodule Bates.CLI do
     Usage:
       bates setup
       bates status
-      bates up [<name>]
-      bates down [<name>]
+      bates up [<target>]
+      bates down [<target>]
       bates restart [<name>]
       bates env [<name>]
-      bates logs [<name>] [--lines <count>]
+      bates logs [<target>] [--lines <count>]
       bates info [<name>]
 
-    When <name> is omitted, the application is resolved from the
-    current working directory using each application's configured root.
+    When <name> or <target> is omitted, the application is resolved
+    from the current working directory using each application's
+    configured root.
+
+    A <target> is an application name, <app>:<service> for a single
+    service, or :<service> for a service of the current directory's
+    application.
     """)
 
     2
